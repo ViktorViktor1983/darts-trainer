@@ -22,7 +22,8 @@ import com.lodkin.dartstrainer.theme.TileBgDark
 @Composable
 fun MainMenuScreen(
     onTraining: () -> Unit,
-    onFreePlay: () -> Unit
+    onFreePlay: () -> Unit,
+    onStatsClick: () -> Unit
 ) {
     Column(
         modifier = Modifier
@@ -30,45 +31,42 @@ fun MainMenuScreen(
             .padding(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // Заголовок
         Text(
             text = "Darts Trainer",
-            fontSize = 30.sp,
+            fontSize = 28.sp,
             fontWeight = FontWeight.Bold,
             color = GoldAccent,
             letterSpacing = 2.sp,
             textAlign = TextAlign.Center,
-            modifier = Modifier.padding(top = 8.dp, bottom = 16.dp)
+            modifier = Modifier.padding(bottom = 12.dp)
         )
 
-        // Кнопка «Тренировка»
         BigButton(
             title = "Тренировка",
             subtitle = "По программе тренера",
             modifier = Modifier
                 .fillMaxWidth()
-                .height(100.dp),
+                .weight(40f),
             onClick = onTraining
         )
 
-        Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.height(12.dp))
 
-        // Блок статистики (посередине)
         StatsBlock(
             modifier = Modifier
                 .fillMaxWidth()
-                .weight(1f)
+                .weight(20f),
+            onClick = onStatsClick
         )
 
-        Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.height(12.dp))
 
-        // Кнопка «Просто поиграть»
         BigButton(
             title = "Просто поиграть",
             subtitle = "Свободная игра",
             modifier = Modifier
                 .fillMaxWidth()
-                .height(100.dp),
+                .weight(40f),
             onClick = onFreePlay
         )
     }
@@ -94,7 +92,7 @@ fun BigButton(
         ) {
             Text(
                 text = title,
-                fontSize = 24.sp,
+                fontSize = 26.sp,
                 fontWeight = FontWeight.Bold,
                 color = Color.White,
                 textAlign = TextAlign.Center
@@ -110,48 +108,43 @@ fun BigButton(
 }
 
 @Composable
-fun StatsBlock(modifier: Modifier) {
+fun StatsBlock(
+    modifier: Modifier,
+    onClick: () -> Unit
+) {
     Box(
         modifier = modifier
-            .clip(RoundedCornerShape(20.dp))
+            .clip(RoundedCornerShape(16.dp))
             .background(TileBgDark)
-            .padding(20.dp),
+            .clickable { onClick() }
+            .padding(horizontal = 16.dp, vertical = 10.dp),
         contentAlignment = Alignment.Center
     ) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            verticalArrangement = Arrangement.Center
         ) {
             Text(
                 text = "ТВОЙ УРОВЕНЬ",
-                fontSize = 13.sp,
+                fontSize = 11.sp,
                 fontWeight = FontWeight.Medium,
                 color = Accent,
                 letterSpacing = 3.sp
             )
-
+            Spacer(Modifier.height(4.dp))
             Text(
-                text = "—",
-                fontSize = 48.sp,
+                text = "Не определён",
+                fontSize = 18.sp,
                 fontWeight = FontWeight.Bold,
-                color = Color.White
-            )
-
-            Text(
-                text = "Уровень пока не определён",
-                fontSize = 14.sp,
                 color = Color.White,
                 textAlign = TextAlign.Center
             )
-
-            Spacer(Modifier.height(8.dp))
-
+            Spacer(Modifier.height(2.dp))
             Text(
-                text = "Пройди первую тренировку,\nчтобы увидеть статистику",
-                fontSize = 13.sp,
+                text = "Нажми, чтобы посмотреть статистику",
+                fontSize = 10.sp,
                 color = Accent,
-                textAlign = TextAlign.Center,
-                lineHeight = 18.sp
+                textAlign = TextAlign.Center
             )
         }
     }
