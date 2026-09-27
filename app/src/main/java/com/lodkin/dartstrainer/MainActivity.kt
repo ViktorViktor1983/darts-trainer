@@ -12,10 +12,10 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import com.lodkin.dartstrainer.theme.Accent
 import com.lodkin.dartstrainer.theme.DarkBg
 import com.lodkin.dartstrainer.ui.MainMenuScreen
+import com.lodkin.dartstrainer.ui.StatsScreen
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -37,8 +37,10 @@ fun DartsTrainerApp() {
     when (screen) {
         "main" -> MainMenuScreen(
             onTraining = { screen = "training" },
-            onFreePlay = { screen = "free" }
+            onFreePlay = { screen = "free" },
+            onStatsClick = { screen = "stats" }
         )
+        "stats" -> StatsScreen(onBack = { screen = "main" })
         "training" -> PlaceholderScreen(
             title = "Тренировка",
             onBack = { screen = "main" }
