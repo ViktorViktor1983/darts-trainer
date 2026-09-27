@@ -28,29 +28,47 @@ fun MainMenuScreen(
         modifier = Modifier
             .fillMaxSize()
             .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
+        // Заголовок
         Text(
             text = "Darts Trainer",
-            fontSize = 32.sp,
+            fontSize = 30.sp,
             fontWeight = FontWeight.Bold,
             color = GoldAccent,
             letterSpacing = 2.sp,
             textAlign = TextAlign.Center,
-            modifier = Modifier.fillMaxWidth().padding(top = 24.dp, bottom = 16.dp)
+            modifier = Modifier.padding(top = 8.dp, bottom = 16.dp)
         )
 
+        // Кнопка «Тренировка»
         BigButton(
             title = "Тренировка",
             subtitle = "По программе тренера",
-            modifier = Modifier.weight(1f).fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(100.dp),
             onClick = onTraining
         )
 
+        Spacer(Modifier.height(16.dp))
+
+        // Блок статистики (посередине)
+        StatsBlock(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f)
+        )
+
+        Spacer(Modifier.height(16.dp))
+
+        // Кнопка «Просто поиграть»
         BigButton(
             title = "Просто поиграть",
             subtitle = "Свободная игра",
-            modifier = Modifier.weight(1f).fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(100.dp),
             onClick = onFreePlay
         )
     }
@@ -65,28 +83,75 @@ fun BigButton(
 ) {
     Box(
         modifier = modifier
-            .clip(RoundedCornerShape(24.dp))
+            .clip(RoundedCornerShape(20.dp))
             .background(TileBg)
             .clickable { onClick() },
         contentAlignment = Alignment.Center
     ) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             Text(
                 text = title,
-                fontSize = 32.sp,
+                fontSize = 24.sp,
                 fontWeight = FontWeight.Bold,
                 color = Color.White,
                 textAlign = TextAlign.Center
             )
             Text(
                 text = subtitle,
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Normal,
+                fontSize = 14.sp,
                 color = Accent,
                 textAlign = TextAlign.Center
+            )
+        }
+    }
+}
+
+@Composable
+fun StatsBlock(modifier: Modifier) {
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(20.dp))
+            .background(TileBgDark)
+            .padding(20.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text(
+                text = "ТВОЙ УРОВЕНЬ",
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Medium,
+                color = Accent,
+                letterSpacing = 3.sp
+            )
+
+            Text(
+                text = "—",
+                fontSize = 48.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color.White
+            )
+
+            Text(
+                text = "Уровень пока не определён",
+                fontSize = 14.sp,
+                color = Color.White,
+                textAlign = TextAlign.Center
+            )
+
+            Spacer(Modifier.height(8.dp))
+
+            Text(
+                text = "Пройди первую тренировку,\nчтобы увидеть статистику",
+                fontSize = 13.sp,
+                color = Accent,
+                textAlign = TextAlign.Center,
+                lineHeight = 18.sp
             )
         }
     }
