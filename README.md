@@ -1,2 +1,2 @@
-# super-octo-doodle
+# darts-trainer
 Персональный тренер по дартсу
