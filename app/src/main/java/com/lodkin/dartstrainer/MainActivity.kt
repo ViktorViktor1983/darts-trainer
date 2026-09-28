@@ -16,10 +16,13 @@ import androidx.compose.ui.platform.LocalContext
 import com.lodkin.dartstrainer.data.SettingsStorage
 import com.lodkin.dartstrainer.theme.Accent
 import com.lodkin.dartstrainer.theme.DarkBg
+import com.lodkin.dartstrainer.ui.LoadingScreen
 import com.lodkin.dartstrainer.ui.MainMenuScreen
 import com.lodkin.dartstrainer.ui.OnboardingResult
 import com.lodkin.dartstrainer.ui.OnboardingScreen
 import com.lodkin.dartstrainer.ui.StatsScreen
+import com.lodkin.dartstrainer.ui.WelcomeScreen
+import kotlinx.coroutines.delay
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -38,16 +41,32 @@ class MainActivity : ComponentActivity() {
 fun DartsTrainerApp() {
     val context = LocalContext.current
 
-    // Проверяем, пройдена ли анкета
+    // Пройдена ли анкета
     var onboardingDone by remember {
         mutableStateOf(SettingsStorage.isOnboardingDone(context))
     }
 
+    // Этап: "welcome" → "loading" → "main"
+    // Если анкета НЕ пройдена → сначала "welcome" (приветствие), затем "onboarding"
+    // Если анкета пройдена → "loading" (3 сек) → "main"
+    var stage by remember {
+        mutableStateOf(if (onboardingDone) "loading" else "welcome")
+    }
+
     var screen by remember { mutableStateOf("main") }
 
-    if (!onboardingDone) {
-        // Показываем анкету
-        OnboardingScreen(onFinish = { result: OnboardingResult ->
+    // Переход с "loading" на "main" через 3 секунды
+    if (stage == "loading") {
+        LaunchedEffect(Unit) {
+            delay(3000)
+            stage = "main"
+        }
+    }
+
+    when (stage) {
+        "welcome" -> WelcomeScreen(onStart = { stage = "onboarding" })
+
+        "onboarding" -> OnboardingScreen(onFinish = { result: OnboardingResult ->
             SettingsStorage.setPlayerName(context, result.name)
             SettingsStorage.setTrainingMinutes(context, result.trainingMinutes)
             SettingsStorage.setTrainingsPerWeek(context, result.trainingsPerWeek)
@@ -55,10 +74,12 @@ fun DartsTrainerApp() {
             SettingsStorage.setStartMode(context, result.startMode)
             SettingsStorage.setOnboardingDone(context)
             onboardingDone = true
+            stage = "main"
         })
-    } else {
-        // Основное приложение
-        when (screen) {
+
+        "loading" -> LoadingScreen()
+
+        "main" -> when (screen) {
             "main" -> MainMenuScreen(
                 onTraining = { screen = "training" },
                 onFreePlay = { screen = "free" },
