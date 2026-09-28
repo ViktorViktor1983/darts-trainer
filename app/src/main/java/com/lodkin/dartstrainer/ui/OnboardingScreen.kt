@@ -25,11 +25,6 @@ import com.lodkin.dartstrainer.theme.GoldAccent
 import com.lodkin.dartstrainer.theme.TileBg
 import com.lodkin.dartstrainer.theme.TileBgDark
 
-// Специальные значения trainingMinutes:
-// 30, 45, 60, 80, 100, 120 — фиксированное время
-// 150 — «Более 2 часов»
-// 0   — «Всегда разное время»
-
 data class OnboardingResult(
     val name: String,
     val trainingMinutes: Int,
@@ -69,18 +64,54 @@ fun OnboardingScreen(onFinish: (OnboardingResult) -> Unit) {
             modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)
         )
 
-        Column(
+        // Область с прокруткой + подсказка
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f)
-                .verticalScroll(rememberScrollState())
         ) {
-            when (step) {
-                1 -> StepName(name) { name = it }
-                2 -> StepTime(trainingMinutes) { trainingMinutes = it }
-                3 -> StepWeek(trainingsPerWeek) { trainingsPerWeek = it }
-                4 -> StepMode(trainingMode) { trainingMode = it }
-                5 -> StepStart(startMode) { startMode = it }
+            val scrollState = rememberScrollState()
+            val atBottom by remember {
+                derivedStateOf {
+                    scrollState.maxValue == 0 ||
+                    scrollState.value >= scrollState.maxValue - 10
+                }
+            }
+
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(scrollState)
+            ) {
+                when (step) {
+                    1 -> StepName(name) { name = it }
+                    2 -> StepTime(trainingMinutes) { trainingMinutes = it }
+                    3 -> StepWeek(trainingsPerWeek) { trainingsPerWeek = it }
+                    4 -> StepMode(trainingMode) { trainingMode = it }
+                    5 -> StepStart(startMode) { startMode = it }
+                }
+                Spacer(Modifier.height(20.dp))
+            }
+
+            // Подсказка «прокрутите вниз» — исчезает, когда доскроллили
+            if (!atBottom) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                        .padding(horizontal = 8.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(Accent.copy(alpha = 0.9f))
+                        .padding(vertical = 10.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        "↓  Листайте, чтобы увидеть все варианты",
+                        color = Color(0xFF121212),
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
             }
         }
 
@@ -189,87 +220,24 @@ private fun StepTime(current: Int, onChange: (Int) -> Unit) {
         fontSize = 14.sp,
         color = Accent,
         lineHeight = 18.sp,
-        modifier = Modifier.padding(bottom = 20.dp)
+        modifier = Modifier.padding(bottom = 16.dp)
     )
 
-    TimeOption(
-        label = "30 минут",
-        value = 30,
-        pros = "Быстро, легко вписать в день",
-        cons = "Успеешь только 1 блок",
-        selected = current == 30,
-        onClick = onChange
-    )
-    Spacer(Modifier.height(10.dp))
-
-    TimeOption(
-        label = "45 минут",
-        value = 45,
-        pros = "Оптимально для занятого дня",
-        cons = "Мало на полный цикл",
-        selected = current == 45,
-        onClick = onChange
-    )
-    Spacer(Modifier.height(10.dp))
-
-    TimeOption(
-        label = "1 час",
-        value = 60,
-        pros = "Разминка + 2 блока + силовые",
-        cons = "Хватает не на всё",
-        selected = current == 60,
-        onClick = onChange
-    )
-    Spacer(Modifier.height(10.dp))
-
-    TimeOption(
-        label = "1 час 20 минут",
-        value = 80,
-        pros = "Полноценная тренировка",
-        cons = "Нужно свободное время",
-        selected = current == 80,
-        onClick = onChange
-    )
-    Spacer(Modifier.height(10.dp))
-
-    TimeOption(
-        label = "1 час 40 минут",
-        value = 100,
-        pros = "3 блока + игра",
-        cons = "Не каждый день получится",
-        selected = current == 100,
-        onClick = onChange
-    )
-    Spacer(Modifier.height(10.dp))
-
-    TimeOption(
-        label = "2 часа",
-        value = 120,
-        pros = "Полный цикл, глубоко",
-        cons = "Требует отдачи",
-        selected = current == 120,
-        onClick = onChange
-    )
-    Spacer(Modifier.height(10.dp))
-
-    TimeOption(
-        label = "Более 2 часов",
-        value = 150,
-        pros = "Для подготовки к турнирам",
-        cons = "Долго, для серьёзных спортсменов",
-        selected = current == 150,
-        onClick = onChange
-    )
-    Spacer(Modifier.height(10.dp))
-
-    TimeOption(
-        label = "Всегда разное время",
-        value = 0,
-        pros = "Свобода, под реальную жизнь",
-        cons = "Нужно каждый раз выбирать",
-        selected = current == 0,
-        onClick = onChange
-    )
+    TimeOption("30 минут", 30, "Быстро, легко вписать в день", "Только 1 блок", current, onChange)
+    Spacer(Modifier.height(8.dp))
+    TimeOption("45 минут", 45, "Оптимально для занятого дня", "Мало на полный цикл", current, onChange)
+    Spacer(Modifier.height(8.dp))
+    TimeOption("1 час", 60, "Разминка + 2 блока + силовые", "Хватает не на всё", current, onChange)
+    Spacer(Modifier.height(8.dp))
+    TimeOption("1 час 20 минут", 80, "Полноценная тренировка", "Мало на игру в конце", current, onChange)
+    Spacer(Modifier.height(8.dp))
+    TimeOption("1 час 40 минут", 100, "3 блока + игра", "Нужно время", current, onChange)
+    Spacer(Modifier.height(8.dp))
+    TimeOption("2 часа", 120, "Полный цикл, глубоко", "Требует отдачи", current, onChange)
+    Spacer(Modifier.height(8.dp))
+    TimeOption("Более 2 часов", 150, "Для подготовки к турнирам", "Для серьёзных спортсменов", current, onChange)
+    Spacer(Modifier.height(8.dp))
+    TimeOption("Всегда разное время", 0, "Свобода, под реальную жизнь", "Нужно каждый раз выбирать", current, onChange)
 }
 
 @Composable
@@ -278,42 +246,45 @@ private fun TimeOption(
     value: Int,
     pros: String,
     cons: String,
-    selected: Boolean,
-    onClick: (Int) -> Unit
+    current: Int,
+    onChange: (Int) -> Unit
 ) {
+    val selected = current == value
     val bg = if (selected) Color(0xFF1A2A33) else TileBgDark
     val borderColor = if (selected) Accent else TileBg
-    Column(
+
+    Row(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(14.dp))
             .background(bg)
-            .clickable { onClick(value) }
-            .padding(14.dp)
+            .clickable { onChange(value) }
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(
-                modifier = Modifier
-                    .size(20.dp)
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(borderColor),
-                contentAlignment = Alignment.Center
-            ) {
-                if (selected) {
-                    Text("✓", color = Color(0xFF121212), fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                }
+        Box(
+            modifier = Modifier
+                .size(20.dp)
+                .clip(RoundedCornerShape(10.dp))
+                .background(borderColor),
+            contentAlignment = Alignment.Center
+        ) {
+            if (selected) {
+                Text("✓", color = Color(0xFF121212), fontSize = 14.sp, fontWeight = FontWeight.Bold)
             }
-            Spacer(Modifier.width(10.dp))
+        }
+        Spacer(Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f)) {
             Text(
                 label,
                 fontSize = 16.sp,
                 fontWeight = FontWeight.Bold,
                 color = if (selected) Accent else Color.White
             )
+            Spacer(Modifier.height(3.dp))
+            Text("+ $pros", fontSize = 11.sp, color = Accent, lineHeight = 14.sp)
+            Text("− $cons", fontSize = 11.sp, color = Color(0xFFB39DDB), lineHeight = 14.sp)
         }
-        Spacer(Modifier.height(6.dp))
-        Text("+ $pros", fontSize = 12.sp, color = Accent)
-        Text("− $cons", fontSize = 12.sp, color = Color(0xFFB39DDB))
     }
 }
 
