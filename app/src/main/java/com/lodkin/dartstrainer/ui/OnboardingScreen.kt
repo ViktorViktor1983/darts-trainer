@@ -25,6 +25,11 @@ import com.lodkin.dartstrainer.theme.GoldAccent
 import com.lodkin.dartstrainer.theme.TileBg
 import com.lodkin.dartstrainer.theme.TileBgDark
 
+// Специальные значения trainingMinutes:
+// 30, 45, 60, 80, 100, 120 — фиксированное время
+// 150 — «Более 2 часов»
+// 0   — «Всегда разное время»
+
 data class OnboardingResult(
     val name: String,
     val trainingMinutes: Int,
@@ -47,7 +52,6 @@ fun OnboardingScreen(onFinish: (OnboardingResult) -> Unit) {
             .fillMaxSize()
             .padding(16.dp)
     ) {
-        // Заголовок
         Text(
             text = "Darts Trainer",
             fontSize = 26.sp,
@@ -82,7 +86,6 @@ fun OnboardingScreen(onFinish: (OnboardingResult) -> Unit) {
 
         Spacer(Modifier.height(16.dp))
 
-        // Кнопки
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -182,26 +185,135 @@ private fun StepTime(current: Int, onChange: (Int) -> Unit) {
         modifier = Modifier.padding(bottom = 8.dp)
     )
     Text(
-        "Программа будет строиться под это время.",
+        "Программа будет строиться под это время. Можно выбрать «всегда разное» — тогда при старте каждой тренировки приложение спросит, сколько у вас сегодня.",
         fontSize = 14.sp,
         color = Accent,
+        lineHeight = 18.sp,
         modifier = Modifier.padding(bottom = 20.dp)
     )
-    val options = listOf(
-        "30 минут" to 30,
-        "45 минут" to 45,
-        "1 час" to 60,
-        "1:20" to 80,
-        "1:40" to 100,
-        "2 часа" to 120
+
+    TimeOption(
+        label = "30 минут",
+        value = 30,
+        pros = "Быстро, легко вписать в день",
+        cons = "Успеешь только 1 блок",
+        selected = current == 30,
+        onClick = onChange
     )
-    options.forEach { (label, value) ->
-        SelectRow(
-            label = label,
-            selected = current == value,
-            onClick = { onChange(value) }
-        )
-        Spacer(Modifier.height(10.dp))
+    Spacer(Modifier.height(10.dp))
+
+    TimeOption(
+        label = "45 минут",
+        value = 45,
+        pros = "Оптимально для занятого дня",
+        cons = "Мало на полный цикл",
+        selected = current == 45,
+        onClick = onChange
+    )
+    Spacer(Modifier.height(10.dp))
+
+    TimeOption(
+        label = "1 час",
+        value = 60,
+        pros = "Разминка + 2 блока + силовые",
+        cons = "Хватает не на всё",
+        selected = current == 60,
+        onClick = onChange
+    )
+    Spacer(Modifier.height(10.dp))
+
+    TimeOption(
+        label = "1 час 20 минут",
+        value = 80,
+        pros = "Полноценная тренировка",
+        cons = "Нужно свободное время",
+        selected = current == 80,
+        onClick = onChange
+    )
+    Spacer(Modifier.height(10.dp))
+
+    TimeOption(
+        label = "1 час 40 минут",
+        value = 100,
+        pros = "3 блока + игра",
+        cons = "Не каждый день получится",
+        selected = current == 100,
+        onClick = onChange
+    )
+    Spacer(Modifier.height(10.dp))
+
+    TimeOption(
+        label = "2 часа",
+        value = 120,
+        pros = "Полный цикл, глубоко",
+        cons = "Требует отдачи",
+        selected = current == 120,
+        onClick = onChange
+    )
+    Spacer(Modifier.height(10.dp))
+
+    TimeOption(
+        label = "Более 2 часов",
+        value = 150,
+        pros = "Для подготовки к турнирам",
+        cons = "Долго, для серьёзных спортсменов",
+        selected = current == 150,
+        onClick = onChange
+    )
+    Spacer(Modifier.height(10.dp))
+
+    TimeOption(
+        label = "Всегда разное время",
+        value = 0,
+        pros = "Свобода, под реальную жизнь",
+        cons = "Нужно каждый раз выбирать",
+        selected = current == 0,
+        onClick = onChange
+    )
+}
+
+@Composable
+private fun TimeOption(
+    label: String,
+    value: Int,
+    pros: String,
+    cons: String,
+    selected: Boolean,
+    onClick: (Int) -> Unit
+) {
+    val bg = if (selected) Color(0xFF1A2A33) else TileBgDark
+    val borderColor = if (selected) Accent else TileBg
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(bg)
+            .clickable { onClick(value) }
+            .padding(14.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                modifier = Modifier
+                    .size(20.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(borderColor),
+                contentAlignment = Alignment.Center
+            ) {
+                if (selected) {
+                    Text("✓", color = Color(0xFF121212), fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+            Spacer(Modifier.width(10.dp))
+            Text(
+                label,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold,
+                color = if (selected) Accent else Color.White
+            )
+        }
+        Spacer(Modifier.height(6.dp))
+        Text("+ $pros", fontSize = 12.sp, color = Accent)
+        Text("− $cons", fontSize = 12.sp, color = Color(0xFFB39DDB))
     }
 }
 
