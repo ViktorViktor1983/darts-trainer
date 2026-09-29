@@ -2,32 +2,36 @@ package com.lodkin.dartstrainer.data.cricket
 
 import android.content.Context
 
-// 16 ботов с именами и уровнями
+// 16 ботов с уровнями для крикета
+// averageMin/Max теперь = среднее количество МЕТОК за подход (0..9)
 data class CricketBot(
     val id: Int,
     val name: String,
     val description: String,
-    val averageMin: Int,
-    val averageMax: Int
-)
+    val averageMin: Int,      // десятые доли меток (например 8 = 0.8)
+    val averageMax: Int       // десятые доли меток (например 12 = 1.2)
+) {
+    val averageMinLabel: String get() = "${averageMin / 10}.${averageMin % 10}"
+    val averageMaxLabel: String get() = "${averageMax / 10}.${averageMax % 10}"
+}
 
 val CRICKET_BOTS: List<CricketBot> = listOf(
-    CricketBot(1, "Новичок", "Начинающий игрок", 15, 20),
-    CricketBot(2, "Ученик", "Осваивается", 18, 22),
-    CricketBot(3, "Любитель", "Играет для себя", 20, 25),
-    CricketBot(4, "Уверенный", "Стабильный любитель", 22, 28),
-    CricketBot(5, "Опытный", "Опытный любитель", 25, 30),
-    CricketBot(6, "Практик", "Много тренируется", 27, 33),
-    CricketBot(7, "Разрядник", "III разряд", 30, 36),
-    CricketBot(8, "Турнирный", "II разряд", 33, 40),
-    CricketBot(9, "Сильный", "I разряд", 36, 44),
-    CricketBot(10, "Крепкий", "Уверенный I разряд", 40, 48),
-    CricketBot(11, "КМС", "Кандидат в мастера", 45, 55),
-    CricketBot(12, "Почти мастер", "На подступах к МС", 50, 60),
-    CricketBot(13, "Мастер", "Мастер спорта", 55, 70),
-    CricketBot(14, "Чемпион", "Победитель турниров", 60, 80),
-    CricketBot(15, "Профи", "Высокий уровень", 70, 90),
-    CricketBot(16, "Легенда", "Мировой уровень", 85, 110)
+    CricketBot(1, "Новичок", "Начинающий", 8, 12),
+    CricketBot(2, "Ученик", "Осваивается", 12, 16),
+    CricketBot(3, "Любитель", "Играет для себя", 16, 20),
+    CricketBot(4, "Уверенный", "Стабильный любитель", 20, 24),
+    CricketBot(5, "Опытный", "Опытный любитель", 24, 28),
+    CricketBot(6, "Практик", "Много тренируется", 28, 31),
+    CricketBot(7, "Разрядник", "III разряд", 31, 34),
+    CricketBot(8, "Турнирный", "II разряд", 34, 37),
+    CricketBot(9, "Сильный", "I разряд", 37, 40),
+    CricketBot(10, "Крепкий", "Уверенный I разряд", 40, 43),
+    CricketBot(11, "КМС", "Кандидат в мастера", 43, 46),
+    CricketBot(12, "Почти мастер", "На подступах к МС", 46, 48),
+    CricketBot(13, "Мастер", "Мастер спорта", 48, 50),
+    CricketBot(14, "Чемпион", "Победитель турниров", 50, 53),
+    CricketBot(15, "Профи", "Высокий уровень", 53, 57),
+    CricketBot(16, "Легенда", "Мировой уровень", 57, 70)
 )
 
 // Хранилище имён игроков
@@ -49,11 +53,8 @@ object PlayerNamesStorage {
         if (name.isBlank()) return
         val trimmed = name.trim()
         val current = getSavedNames(context).toMutableList()
-        // Убираем дубликат
         current.removeAll { it.equals(trimmed, ignoreCase = true) }
-        // Добавляем в начало
         current.add(0, trimmed)
-        // Ограничиваем 20 именами
         val limited = current.take(20)
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .edit().putString(KEY_NAMES, limited.joinToString(SEPARATOR)).apply()
