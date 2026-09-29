@@ -18,12 +18,10 @@ object CricketLogic {
         ThrowResult.MISS -> 0
     }
 
-    // Закрыт ли сектор у ОДНОГО игрока (личная статистика)
     fun isClosed(player: CricketPlayer, sector: CricketSector): Boolean {
         return (player.hits[sector] ?: 0) >= 3
     }
 
-    // Закрыт ли сектор у КОМАНДЫ (сумма меток всех игроков команды >= 3)
     fun isClosedByTeam(game: CricketGame, team: Int, sector: CricketSector): Boolean {
         val totalHits = game.playersOfTeam(team).sumOf { it.hits[sector] ?: 0 }
         return totalHits >= 3
@@ -33,28 +31,24 @@ object CricketLogic {
         return (0 until game.teamCount).all { isClosedByTeam(game, it, sector) }
     }
 
-    // Все ли сектора закрыты у команды
     fun hasClosedAllTeam(game: CricketGame, team: Int): Boolean {
         return CricketSector.ALL.all { isClosedByTeam(game, team, it) }
     }
 
-    // Сумма очков команды в ТЕКУЩЕМ леге
     fun teamTotalScore(game: CricketGame, team: Int): Int {
         return game.playersOfTeam(team).sumOf { it.totalScore }
     }
 
-    // Сумма очков команды за ВЕСЬ МАТЧ
     fun teamMatchScore(game: CricketGame, team: Int): Int {
         return game.playersOfTeam(team).sumOf { it.matchTotalScore }
     }
 
-    // Сброс состояния игрока для нового лега.
-    // Накопительные match* поля НЕ сбрасываются.
     private fun resetPlayerForNewLeg(player: CricketPlayer): CricketPlayer {
         return player.copy(
             hits = CricketSector.ALL.associateWith { 0 }.toMutableMap(),
             scores = CricketSector.ALL.associateWith { 0 }.toMutableMap(),
-            totalScore = 0
+            totalScore = 0,
+            dartsThrown = 0
         )
     }
 
@@ -70,7 +64,8 @@ object CricketLogic {
             val player = updatedPlayers[playerIndex]
             updatedPlayers[playerIndex] = player.copy(
                 dartsThrown = player.dartsThrown + 1,
-                matchDartsThrown = player.matchDartsThrown + 1
+                matchDartsThrown = player.matchDartsThrown + 1,
+                matchMissesThrown = player.matchMissesThrown + 1
             )
             return game.copy(
                 players = updatedPlayers,
@@ -82,21 +77,16 @@ object CricketLogic {
         val updatedPlayers = game.players.toMutableList()
         val player = updatedPlayers[playerIndex]
 
-        // Командные метки в этом секторе ДО броска
         val teamHitsBefore = game.playersOfTeam(player.teamIndex)
             .sumOf { it.hits[sector] ?: 0 }
         val teamAlreadyClosed = teamHitsBefore >= 3
 
-        // Избыток в очки — считаем от КОМАНДНЫХ меток.
-        // Если сектор уже закрыт командой — весь бросок в очки.
-        // Если ещё не закрыт — в очки идёт всё, что сверх 3 командных меток.
         val overflow: Int = if (teamAlreadyClosed) {
             multiplier
         } else {
             maxOf(0, teamHitsBefore + multiplier - 3)
         }
 
-        // Личные hits — только для визуализации, обрезаем до 3
         val currentHits = player.hits[sector] ?: 0
         val newHits = minOf(currentHits + multiplier, 3)
 
@@ -107,7 +97,6 @@ object CricketLogic {
         var scoreGained = 0
 
         if (game.type == CricketType.AMERICAN && overflow > 0) {
-            // Очки начисляются, если сектор ещё не закрыт у ДРУГОЙ команды
             val myTeam = player.teamIndex
             val otherTeams = (0 until game.teamCount).filter { it != myTeam }
             val anyOtherTeamClosed = otherTeams.any { isClosedByTeam(game, it, sector) }
@@ -119,7 +108,6 @@ object CricketLogic {
             }
         }
 
-        // Накопительные данные за матч — пишем ВСЕ попадания (multiplier)
         val newMatchHits = player.matchHits.toMutableMap()
         newMatchHits[sector] = (newMatchHits[sector] ?: 0) + multiplier
 
@@ -127,6 +115,8 @@ object CricketLogic {
         if (scoreGained > 0) {
             newMatchScores[sector] = (newMatchScores[sector] ?: 0) + scoreGained
         }
+
+        val isTriple = result == ThrowResult.TRIPLE
 
         updatedPlayers[playerIndex] = player.copy(
             hits = newHitsMap,
@@ -136,7 +126,8 @@ object CricketLogic {
             matchHits = newMatchHits,
             matchScores = newMatchScores,
             matchTotalScore = player.matchTotalScore + scoreGained,
-            matchDartsThrown = player.matchDartsThrown + 1
+            matchDartsThrown = player.matchDartsThrown + 1,
+            matchTriplesHit = if (isTriple) player.matchTriplesHit + 1 else player.matchTriplesHit
         )
 
         val updatedGame = game.copy(
@@ -144,7 +135,6 @@ object CricketLogic {
             currentTurnDarts = game.currentTurnDarts + 1
         )
 
-        // Проверка победы в ЛЕГЕ (по командам)
         val legWinnerTeam = checkLegWinner(updatedGame)
         if (legWinnerTeam != null) {
             return awardLegWin(updatedGame, legWinnerTeam)
@@ -153,51 +143,51 @@ object CricketLogic {
         return updatedGame
     }
 
-    // Определение команды-победителя ЛЕГА (возвращает teamIndex или null)
+    // Завершение хода кнопкой OK: добавляем промахи за недостающие дротики
+    fun finishTurn(game: CricketGame): CricketGame {
+        if (game.isFinished) return game
+        val missing = (3 - game.currentTurnDarts).coerceAtLeast(0)
+        val updatedPlayers = game.players.toMutableList()
+        val playerIndex = game.currentPlayerIndex
+        val player = updatedPlayers[playerIndex]
+
+        if (missing > 0) {
+            updatedPlayers[playerIndex] = player.copy(
+                dartsThrown = player.dartsThrown + missing,
+                matchDartsThrown = player.matchDartsThrown + missing,
+                matchMissesThrown = player.matchMissesThrown + missing
+            )
+        }
+
+        return nextPlayer(game.copy(players = updatedPlayers))
+    }
+
     fun checkLegWinner(game: CricketGame): Int? {
         if (game.players.isEmpty()) return null
-
-        val closedAllTeams = (0 until game.teamCount).filter { team ->
-            hasClosedAllTeam(game, team)
-        }
-
+        val closedAllTeams = (0 until game.teamCount).filter { hasClosedAllTeam(game, it) }
         if (closedAllTeams.isEmpty()) return null
-
-        if (game.type == CricketType.NO_SCORE) {
-            return closedAllTeams.first()
-        }
-
-        // American: побеждает команда с максимальным счётом
+        if (game.type == CricketType.NO_SCORE) return closedAllTeams.first()
         val maxScore = closedAllTeams.maxOf { teamTotalScore(game, it) }
         return closedAllTeams.firstOrNull { teamTotalScore(game, it) == maxScore }
     }
 
-    // Присуждение победы в леге и продвижение по сетам/матчу
     fun awardLegWin(game: CricketGame, winningTeam: Int): CricketGame {
         val updatedPlayers = game.players.toMutableList()
-
-        val currentLegs = updatedPlayers
-            .first { it.teamIndex == winningTeam }
-            .legsInCurrentSet
+        val currentLegs = updatedPlayers.first { it.teamIndex == winningTeam }.legsInCurrentSet
         val newLegsInCurrentSet = currentLegs + 1
         val setWon = newLegsInCurrentSet >= game.legsPerSet
 
         if (setWon) {
-            val currentSets = updatedPlayers
-                .first { it.teamIndex == winningTeam }
-                .setsWon
+            val currentSets = updatedPlayers.first { it.teamIndex == winningTeam }.setsWon
             val newSetsWon = currentSets + 1
-
             for (i in updatedPlayers.indices) {
-                val p = updatedPlayers[i]
-                if (p.teamIndex == winningTeam) {
-                    updatedPlayers[i] = p.copy(
+                if (updatedPlayers[i].teamIndex == winningTeam) {
+                    updatedPlayers[i] = updatedPlayers[i].copy(
                         legsInCurrentSet = newLegsInCurrentSet,
                         setsWon = newSetsWon
                     )
                 }
             }
-
             if (newSetsWon >= game.setsPerMatch) {
                 return game.copy(
                     players = updatedPlayers,
@@ -207,7 +197,6 @@ object CricketLogic {
                     lastSetWinnerIndex = winningTeam
                 )
             }
-
             val resetPlayers = updatedPlayers.map { p ->
                 resetPlayerForNewLeg(p).copy(legsInCurrentSet = 0)
             }
@@ -223,12 +212,10 @@ object CricketLogic {
         }
 
         for (i in updatedPlayers.indices) {
-            val p = updatedPlayers[i]
-            if (p.teamIndex == winningTeam) {
-                updatedPlayers[i] = p.copy(legsInCurrentSet = newLegsInCurrentSet)
+            if (updatedPlayers[i].teamIndex == winningTeam) {
+                updatedPlayers[i] = updatedPlayers[i].copy(legsInCurrentSet = newLegsInCurrentSet)
             }
         }
-
         val resetPlayers = updatedPlayers.map { resetPlayerForNewLeg(it) }
         return game.copy(
             players = resetPlayers,
@@ -242,10 +229,7 @@ object CricketLogic {
 
     fun nextPlayer(game: CricketGame): CricketGame {
         val next = (game.currentPlayerIndex + 1) % game.players.size
-        return game.copy(
-            currentPlayerIndex = next,
-            currentTurnDarts = 0
-        )
+        return game.copy(currentPlayerIndex = next, currentTurnDarts = 0)
     }
 
     fun newGame(
