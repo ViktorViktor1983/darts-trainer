@@ -31,6 +31,15 @@ object CricketLogic {
         return CricketSector.ALL.all { isClosed(player, it) }
     }
 
+    // Сброс состояния игрока для нового лега (хиты, очки)
+    private fun resetPlayerForNewLeg(player: CricketPlayer): CricketPlayer {
+        return player.copy(
+            hits = CricketSector.ALL.associateWith { 0 }.toMutableMap(),
+            scores = CricketSector.ALL.associateWith { 0 }.toMutableMap(),
+            totalScore = 0
+        )
+    }
+
     // Обработка одного броска
     fun applyThrow(
         game: CricketGame,
@@ -62,7 +71,7 @@ object CricketLogic {
         val newHitsMap = player.hits.toMutableMap()
         newHitsMap[sector] = newHits
 
-        var newScores = player.scores.toMutableMap()
+        val newScores = player.scores.toMutableMap()
         var scoreGained = 0
 
         // Начисляем очки только в American, и только если есть overflow
@@ -90,20 +99,17 @@ object CricketLogic {
             currentTurnDarts = game.currentTurnDarts + 1
         )
 
-        // Проверка победы
-        val winner = checkWinner(updatedPlayers, game.type)
-        if (winner != null) {
-            return updatedGame.copy(
-                isFinished = true,
-                winnerIndex = winner
-            )
+        // Проверка победы в ЛЕГЕ
+        val legWinner = checkLegWinner(updatedPlayers, game.type)
+        if (legWinner != null) {
+            return awardLegWin(updatedGame, legWinner)
         }
 
         return updatedGame
     }
 
-    // Определение победителя
-    fun checkWinner(players: List<CricketPlayer>, type: CricketType): Int? {
+    // Определение победителя ЛЕГА
+    fun checkLegWinner(players: List<CricketPlayer>, type: CricketType): Int? {
         if (players.isEmpty()) return null
 
         val closedAllIndices = players.indices.filter { i ->
@@ -119,13 +125,62 @@ object CricketLogic {
 
         // American: побеждает тот, кто закрыл всё И имеет больше всех очков
         val maxScore = players.maxOf { it.totalScore }
-
-        // Ищем игрока, который закрыл всё И имеет максимальный счёт
         val winner = closedAllIndices.firstOrNull { i ->
             players[i].totalScore == maxScore
         }
 
         return winner
+    }
+
+    // Присуждение победы в леге и продвижение по сетам/матчу
+    fun awardLegWin(game: CricketGame, legWinnerIndex: Int): CricketGame {
+        val updatedPlayers = game.players.toMutableList()
+        val winner = updatedPlayers[legWinnerIndex]
+
+        val newLegsInCurrentSet = winner.legsInCurrentSet + 1
+        val setWon = newLegsInCurrentSet >= game.legsPerSet
+
+        updatedPlayers[legWinnerIndex] = winner.copy(
+            legsInCurrentSet = newLegsInCurrentSet
+        )
+
+        if (setWon) {
+            // Победа в СЕТЕ
+            val newSetsWon = updatedPlayers[legWinnerIndex].setsWon + 1
+            updatedPlayers[legWinnerIndex] = updatedPlayers[legWinnerIndex].copy(
+                setsWon = newSetsWon
+            )
+
+            if (newSetsWon >= game.setsPerMatch) {
+                // Победа в МАТЧЕ
+                return game.copy(
+                    players = updatedPlayers,
+                    isFinished = true,
+                    winnerIndex = legWinnerIndex
+                )
+            }
+
+            // Новый сет: сброс легов в сете у ВСЕХ + сброс хитов/очков
+            val resetPlayers = updatedPlayers.map { p ->
+                resetPlayerForNewLeg(p).copy(legsInCurrentSet = 0)
+            }
+            return game.copy(
+                players = resetPlayers,
+                currentPlayerIndex = 0,
+                currentTurnDarts = 0,
+                currentLegNumber = 1,
+                currentSetNumber = game.currentSetNumber + 1
+            )
+        }
+
+        // Победа в ЛЕГЕ, но сет не закончен: новый лег
+        val resetPlayers = updatedPlayers.map { p -> resetPlayerForNewLeg(p) }
+        return game.copy(
+            players = resetPlayers,
+            currentPlayerIndex = 0,
+            currentTurnDarts = 0,
+            currentLegNumber = game.currentLegNumber + 1
+        )
     }
 
     fun nextPlayer(game: CricketGame): CricketGame {
@@ -136,14 +191,23 @@ object CricketLogic {
         )
     }
 
-    fun newGame(type: CricketType, players: List<CricketPlayer>): CricketGame {
+    fun newGame(
+        type: CricketType,
+        players: List<CricketPlayer>,
+        legsPerSet: Int = 1,
+        setsPerMatch: Int = 1
+    ): CricketGame {
         return CricketGame(
             type = type,
             players = players,
             currentPlayerIndex = 0,
             isFinished = false,
             winnerIndex = null,
-            currentTurnDarts = 0
+            currentTurnDarts = 0,
+            legsPerSet = legsPerSet,
+            setsPerMatch = setsPerMatch,
+            currentLegNumber = 1,
+            currentSetNumber = 1
         )
     }
 }
