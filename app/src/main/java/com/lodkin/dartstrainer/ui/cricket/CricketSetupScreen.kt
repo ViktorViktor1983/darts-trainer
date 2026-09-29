@@ -32,7 +32,6 @@ import com.lodkin.dartstrainer.data.cricket.CricketType
 import com.lodkin.dartstrainer.data.cricket.PlayerNamesStorage
 import com.lodkin.dartstrainer.theme.Accent
 import com.lodkin.dartstrainer.theme.DarkBg
-import com.lodkin.dartstrainer.theme.GoldAccent
 import com.lodkin.dartstrainer.theme.TileBg
 import com.lodkin.dartstrainer.theme.TileBgDark
 
@@ -114,13 +113,12 @@ fun CricketSetupScreen(
             )
             Spacer(Modifier.height(10.dp))
 
-            // Первый ряд игроков (или пара 1)
+            // Первый ряд
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.Top
             ) {
-                // Игрок 1
                 PlayerCell(
                     number = 1,
                     name = player1Name,
@@ -129,12 +127,10 @@ fun CricketSetupScreen(
                     isBot = false,
                     bot = CRICKET_BOTS[2],
                     onBotChange = {},
-                    onBotToggle = null,
                     context = context,
                     modifier = Modifier.weight(1f)
                 )
 
-                // Игрок 2 (или бот)
                 PlayerCell(
                     number = 2,
                     name = if (playWithBot) bot2.name else player2Name,
@@ -143,7 +139,6 @@ fun CricketSetupScreen(
                     isBot = playWithBot,
                     bot = bot2,
                     onBotChange = { bot2 = it },
-                    onBotToggle = { playWithBot = it },
                     context = context,
                     modifier = Modifier.weight(1f)
                 )
@@ -155,7 +150,7 @@ fun CricketSetupScreen(
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalAlignment = Alignment.Top
                 ) {
                     PlayerCell(
                         number = 3,
@@ -165,7 +160,6 @@ fun CricketSetupScreen(
                         isBot = playWithBot,
                         bot = bot3,
                         onBotChange = { bot3 = it },
-                        onBotToggle = null,
                         context = context,
                         modifier = Modifier.weight(1f)
                     )
@@ -177,7 +171,6 @@ fun CricketSetupScreen(
                         isBot = playWithBot,
                         bot = bot4,
                         onBotChange = { bot4 = it },
-                        onBotToggle = null,
                         context = context,
                         modifier = Modifier.weight(1f)
                     )
@@ -186,12 +179,24 @@ fun CricketSetupScreen(
 
             Spacer(Modifier.height(16.dp))
 
-            // Парная игра
-            SettingRow(
-                label = "Парная игра (2 на 2)",
-                checked = isPairGame,
-                onCheckedChange = { isPairGame = it }
-            )
+            // ── Парная игра + Бот в одной строке ──
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                HalfSetting(
+                    label = "Парная игра",
+                    checked = isPairGame,
+                    onCheckedChange = { isPairGame = it },
+                    modifier = Modifier.weight(1f)
+                )
+                HalfSetting(
+                    label = "Бот",
+                    checked = playWithBot,
+                    onCheckedChange = { playWithBot = it },
+                    modifier = Modifier.weight(1f)
+                )
+            }
 
             Spacer(Modifier.height(24.dp))
 
@@ -320,7 +325,7 @@ fun CricketSetupScreen(
 }
 
 // ─────────────────────────────────────────────
-// Ячейка игрока (одна колонка)
+// Ячейка игрока (одна колонка) — БЕЗ тумблера бота
 // ─────────────────────────────────────────────
 @Composable
 private fun PlayerCell(
@@ -331,7 +336,6 @@ private fun PlayerCell(
     isBot: Boolean,
     bot: CricketBot,
     onBotChange: (CricketBot) -> Unit,
-    onBotToggle: ((Boolean) -> Unit)?,
     context: android.content.Context,
     modifier: Modifier
 ) {
@@ -341,7 +345,7 @@ private fun PlayerCell(
             .background(TileBgDark)
             .padding(8.dp)
     ) {
-        // Верхняя строка: номер + тумблер «Бот»
+        // Верхняя строка: номер
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
@@ -358,29 +362,6 @@ private fun PlayerCell(
                     color = Accent,
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Bold
-                )
-            }
-
-            Spacer(Modifier.weight(1f))
-
-            if (onBotToggle != null) {
-                Switch(
-                    checked = isBot,
-                    onCheckedChange = onBotToggle,
-                    modifier = Modifier.height(24.dp),
-                    colors = SwitchDefaults.colors(
-                        checkedThumbColor = Accent,
-                        checkedTrackColor = Accent.copy(alpha = 0.5f),
-                        uncheckedThumbColor = Color.White,
-                        uncheckedTrackColor = TileBg
-                    )
-                )
-                Spacer(Modifier.width(4.dp))
-                Text(
-                    "Бот",
-                    color = if (isBot) Accent else Color.White.copy(alpha = 0.6f),
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Medium
                 )
             }
         }
@@ -567,27 +548,31 @@ private fun BotSelector(
     }
 }
 
+// Половина строки: тумблер + подпись
 @Composable
-private fun SettingRow(
+private fun HalfSetting(
     label: String,
     checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit
+    onCheckedChange: (Boolean) -> Unit,
+    modifier: Modifier
 ) {
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
+        modifier = modifier
             .clip(RoundedCornerShape(12.dp))
             .background(TileBgDark)
             .clickable { onCheckedChange(!checked) }
-            .padding(horizontal = 16.dp, vertical = 12.dp),
+            .padding(horizontal = 12.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
             label,
             color = Color.White,
-            fontSize = 15.sp,
-            modifier = Modifier.weight(1f)
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Medium,
+            modifier = Modifier.weight(1f),
+            maxLines = 2
         )
+        Spacer(Modifier.width(6.dp))
         Switch(
             checked = checked,
             onCheckedChange = onCheckedChange,
