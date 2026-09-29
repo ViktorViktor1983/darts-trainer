@@ -17,6 +17,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.lodkin.dartstrainer.data.cricket.*
@@ -37,18 +38,18 @@ fun CricketGameScreen(
     var showWinDialog by remember { mutableStateOf(false) }
     var showBackConfirm by remember { mutableStateOf(false) }
 
-    // Диалоги лега и сета
+    // Диалоги лега и сета (храним имя выигравшей команды)
     var showLegWonDialog by remember { mutableStateOf(false) }
     var showSetWonDialog by remember { mutableStateOf(false) }
-    var legWinnerName by remember { mutableStateOf("") }
-    var setWinnerName by remember { mutableStateOf("") }
+    var legWinnerLabel by remember { mutableStateOf("") }
+    var setWinnerLabel by remember { mutableStateOf("") }
 
     // История для отката
     val history = remember { mutableStateListOf<CricketGame>() }
 
     fun saveHistory() {
         history.add(game)
-        if (history.size > 200) history.removeAt(0)
+        if (history.size > 300) history.removeAt(0)
     }
 
     fun undo() {
@@ -70,8 +71,8 @@ fun CricketGameScreen(
         if (showLegWonDialog || showSetWonDialog || showWinDialog) return@LaunchedEffect
         if (!currentPlayer.isBot) return@LaunchedEffect
 
-        // Пауза перед ходом бота, чтобы было видно
         delay(700L)
+
         if (game.isFinished) return@LaunchedEffect
         if (showLegWonDialog || showSetWonDialog || showWinDialog) return@LaunchedEffect
         if (game.players.getOrNull(game.currentPlayerIndex)?.isBot != true) return@LaunchedEffect
@@ -82,18 +83,18 @@ fun CricketGameScreen(
 
     // Реакция на завершение лега
     LaunchedEffect(game.lastLegWinnerIndex) {
-        val idx = game.lastLegWinnerIndex
-        if (idx != null && !game.isFinished) {
-            legWinnerName = game.players.getOrNull(idx)?.name ?: ""
+        val teamIdx = game.lastLegWinnerIndex
+        if (teamIdx != null && !game.isFinished) {
+            legWinnerLabel = teamName(game, teamIdx)
             showLegWonDialog = true
         }
     }
 
     // Реакция на завершение сета
     LaunchedEffect(game.lastSetWinnerIndex) {
-        val idx = game.lastSetWinnerIndex
-        if (idx != null && !game.isFinished) {
-            setWinnerName = game.players.getOrNull(idx)?.name ?: ""
+        val teamIdx = game.lastSetWinnerIndex
+        if (teamIdx != null && !game.isFinished) {
+            setWinnerLabel = teamName(game, teamIdx)
             showSetWonDialog = true
         }
     }
@@ -185,7 +186,7 @@ fun CricketGameScreen(
                 Column {
                     Text("Победитель лега:", color = Color.White, fontSize = 14.sp)
                     Text(
-                        legWinnerName,
+                        legWinnerLabel,
                         color = GoldAccent,
                         fontSize = 20.sp,
                         fontWeight = FontWeight.Bold
@@ -193,13 +194,7 @@ fun CricketGameScreen(
                     Spacer(Modifier.height(12.dp))
                     Text("Счёт по легам в сете:", color = Color.White, fontSize = 14.sp)
                     Spacer(Modifier.height(4.dp))
-                    game.players.forEach { p ->
-                        Text(
-                            "${p.name}: ${p.legsInCurrentSet}",
-                            color = Color.White,
-                            fontSize = 13.sp
-                        )
-                    }
+                    TeamScoresList(game, showLegs = true)
                 }
             }
         )
@@ -229,7 +224,7 @@ fun CricketGameScreen(
                 Column {
                     Text("Победитель сета:", color = Color.White, fontSize = 14.sp)
                     Text(
-                        setWinnerName,
+                        setWinnerLabel,
                         color = GoldAccent,
                         fontSize = 20.sp,
                         fontWeight = FontWeight.Bold
@@ -237,13 +232,7 @@ fun CricketGameScreen(
                     Spacer(Modifier.height(12.dp))
                     Text("Счёт по сетам:", color = Color.White, fontSize = 14.sp)
                     Spacer(Modifier.height(4.dp))
-                    game.players.forEach { p ->
-                        Text(
-                            "${p.name}: ${p.setsWon}",
-                            color = Color.White,
-                            fontSize = 13.sp
-                        )
-                    }
+                    TeamScoresList(game, showLegs = false)
                 }
             }
         )
@@ -284,6 +273,23 @@ fun CricketGameScreen(
     }
 }
 
+// Собираем имя команды (join через " + ")
+private fun teamName(game: CricketGame, teamIdx: Int): String {
+    return game.playersOfTeam(teamIdx).joinToString(" + ") { it.name }
+}
+
+@Composable
+private fun TeamScoresList(game: CricketGame, showLegs: Boolean) {
+    game.players.forEach { p ->
+        val value = if (showLegs) p.legsInCurrentSet else p.setsWon
+        Text(
+            "${p.name}: $value",
+            color = Color.White,
+            fontSize = 13.sp
+        )
+    }
+}
+
 @Composable
 private fun CricketTopBar(game: CricketGame, onBack: () -> Unit) {
     Column(
@@ -310,7 +316,7 @@ private fun CricketTopBar(game: CricketGame, onBack: () -> Unit) {
             Spacer(Modifier.width(8.dp))
 
             Text(
-                "Крикет",
+                if (game.isPairGame) "Крикет (2×2)" else "Крикет",
                 color = Color.White,
                 fontSize = 16.sp,
                 fontWeight = FontWeight.Bold,
@@ -339,13 +345,14 @@ private fun CricketTopBar(game: CricketGame, onBack: () -> Unit) {
 
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             game.players.forEachIndexed { index, player ->
                 val isActive = index == game.currentPlayerIndex
                 PlayerHeader(
                     player = player,
                     isActive = isActive,
+                    isPairGame = game.isPairGame,
                     modifier = Modifier.weight(1f)
                 )
             }
@@ -357,37 +364,52 @@ private fun CricketTopBar(game: CricketGame, onBack: () -> Unit) {
 private fun PlayerHeader(
     player: CricketPlayer,
     isActive: Boolean,
+    isPairGame: Boolean,
     modifier: Modifier
 ) {
     val bg = if (isActive) Accent else TileBg
     val fg = if (isActive) Color(0xFF121212) else Color.White
 
+    // MPR (marks per round) — среднее меток за подход
+    val mpr: Double = if (player.matchDartsThrown > 0) {
+        val totalMarks = player.matchHits.values.sum()
+        val rounds = player.matchDartsThrown / 3.0
+        totalMarks / rounds
+    } else 0.0
+
     Column(
         modifier = modifier
             .clip(RoundedCornerShape(8.dp))
             .background(bg)
-            .padding(horizontal = 6.dp, vertical = 6.dp),
+            .padding(horizontal = 4.dp, vertical = 6.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Text(
             player.name,
             color = fg,
-            fontSize = 11.sp,
+            fontSize = if (isPairGame) 9.sp else 11.sp,
             fontWeight = FontWeight.Bold,
             maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
             textAlign = TextAlign.Center
         )
         Text(
             player.totalScore.toString(),
             color = if (isActive) Color(0xFF121212) else GoldAccent,
-            fontSize = 18.sp,
+            fontSize = if (isPairGame) 14.sp else 18.sp,
             fontWeight = FontWeight.Bold
         )
         Text(
             "S${player.setsWon} L${player.legsInCurrentSet}",
             color = if (isActive) Color(0xFF121212).copy(alpha = 0.7f) else Accent,
-            fontSize = 9.sp,
+            fontSize = 8.sp,
             fontWeight = FontWeight.Medium
+        )
+        // Отладочный MPR (потом отключим)
+        Text(
+            "MPR %.2f".format(mpr),
+            color = if (isActive) Color(0xFF121212).copy(alpha = 0.6f) else Color.White.copy(alpha = 0.5f),
+            fontSize = 8.sp
         )
     }
 }
@@ -416,7 +438,7 @@ private fun SectorRow(
                 modifier = Modifier.weight(1f)
             )
             if (index < game.players.size - 1) {
-                Spacer(Modifier.width(4.dp))
+                Spacer(Modifier.width(3.dp))
             }
         }
     }
@@ -434,56 +456,54 @@ private fun PlayerSectorCell(
 ) {
     val hits = player.hits[sector] ?: 0
     val score = player.scores[sector] ?: 0
-    val isClosed = hits >= 3
+
+    val teamClosed = CricketLogic.isClosedByTeam(game, player.teamIndex, sector)
+    val allTeamsClosed = CricketLogic.isClosedByAllTeams(game, sector)
 
     val canScore = if (game.type == CricketType.AMERICAN) {
-        val others = game.players.filterIndexed { i, _ -> i != playerIndex }
-        val anyOtherNotClosed = others.any { (it.hits[sector] ?: 0) < 3 }
-        isClosed && anyOtherNotClosed
-    } else {
-        false
-    }
+        val myTeam = player.teamIndex
+        val otherTeams = (0 until game.teamCount).filter { it != myTeam }
+        val anyOtherNotClosed = otherTeams.any { !CricketLogic.isClosedByTeam(game, it, sector) }
+        teamClosed && anyOtherNotClosed
+    } else false
 
-    // Кнопки показываем только человеку (не боту)
-    val showButtons = isActive && !player.isBot && (!isClosed || canScore)
-
-    val closedByAll = game.players.all { (it.hits[sector] ?: 0) >= 3 }
+    val showButtons = isActive && !player.isBot && (!teamClosed || canScore)
 
     Column(
         modifier = modifier
             .clip(RoundedCornerShape(10.dp))
             .background(
                 when {
-                    closedByAll -> Color(0xFF2A2A2A)
-                    isClosed -> Color(0xFF2A3F2A)
+                    allTeamsClosed -> Color(0xFF2A2A2A)
+                    teamClosed -> Color(0xFF2A3F2A)
                     else -> TileBg
                 }
             )
-            .padding(6.dp),
+            .padding(4.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Text(
             sector.label,
-            color = if (isClosed) Accent else Color.White,
-            fontSize = 14.sp,
+            color = if (teamClosed) Accent else Color.White,
+            fontSize = 13.sp,
             fontWeight = FontWeight.Bold
         )
 
-        Spacer(Modifier.height(4.dp))
+        Spacer(Modifier.height(3.dp))
 
         HitsVisualization(hits = hits)
 
-        Spacer(Modifier.height(4.dp))
+        Spacer(Modifier.height(3.dp))
 
         if (score > 0) {
             Text(
                 "+$score",
                 color = GoldAccent,
-                fontSize = 11.sp,
+                fontSize = 10.sp,
                 fontWeight = FontWeight.Bold
             )
         } else {
-            Spacer(Modifier.height(14.dp))
+            Spacer(Modifier.height(12.dp))
         }
 
         if (showButtons) {
@@ -512,7 +532,7 @@ private fun HitsVisualization(hits: Int) {
             val filled = index < hits
             Box(
                 modifier = Modifier
-                    .size(10.dp)
+                    .size(9.dp)
                     .clip(CircleShape)
                     .background(if (filled) Accent else TileBgDark)
             )
@@ -617,7 +637,20 @@ private fun WinDialog(
     onUndo: () -> Unit,
     onContinue: () -> Unit
 ) {
-    val winner = game.winnerIndex?.let { game.players.getOrNull(it) }
+    val winnerTeam = game.winnerIndex
+    val winnerName = if (winnerTeam != null) teamName(game, winnerTeam) else "—"
+
+    val teamMatchScore = if (winnerTeam != null) {
+        CricketLogic.teamMatchScore(game, winnerTeam)
+    } else 0
+
+    val teamDarts = if (winnerTeam != null) {
+        game.playersOfTeam(winnerTeam).sumOf { it.matchDartsThrown }
+    } else 0
+
+    val teamSets = if (winnerTeam != null) {
+        game.playersOfTeam(winnerTeam).firstOrNull()?.setsWon ?: 0
+    } else 0
 
     AlertDialog(
         onDismissRequest = { },
@@ -642,24 +675,24 @@ private fun WinDialog(
         text = {
             Column {
                 Text(
-                    winner?.name ?: "—",
+                    winnerName,
                     color = GoldAccent,
                     fontSize = 20.sp,
                     fontWeight = FontWeight.Bold
                 )
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    "Сеты: ${winner?.setsWon ?: 0} из ${game.setsPerMatch}",
+                    "Сеты: $teamSets из ${game.setsPerMatch}",
                     color = Color.White,
                     fontSize = 14.sp
                 )
                 Text(
-                    "Очки за матч: ${winner?.matchTotalScore ?: 0}",
+                    "Очки за матч: $teamMatchScore",
                     color = Color.White,
                     fontSize = 14.sp
                 )
                 Text(
-                    "Бросков: ${winner?.matchDartsThrown ?: 0}",
+                    "Бросков: $teamDarts",
                     color = Color.White,
                     fontSize = 14.sp
                 )
