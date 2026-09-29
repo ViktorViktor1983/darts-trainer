@@ -11,7 +11,6 @@ enum class ThrowResult {
 // Логика крикета — чистые функции без UI
 object CricketLogic {
 
-    // Сколько раз засчитывается попадание
     fun multiplierOf(result: ThrowResult): Int = when (result) {
         ThrowResult.SINGLE -> 1
         ThrowResult.DOUBLE -> 2
@@ -19,25 +18,20 @@ object CricketLogic {
         ThrowResult.MISS -> 0
     }
 
-    // Проверка: закрыт ли сектор у игрока
     fun isClosed(player: CricketPlayer, sector: CricketSector): Boolean {
         return (player.hits[sector] ?: 0) >= 3
     }
 
-    // Проверка: закрыт ли сектор у всех игроков
     fun isClosedByAll(players: List<CricketPlayer>, sector: CricketSector): Boolean {
         return players.all { isClosed(it, sector) }
     }
 
-    // Проверка: закрыты ли все сектора у всех игроков
-    fun isGameFinished(players: List<CricketPlayer>): Boolean {
-        return CricketSector.ALL.all { sector ->
-            players.all { isClosed(it, sector) }
-        }
+    // Все ли сектора закрыты у одного игрока
+    fun hasClosedAll(player: CricketPlayer): Boolean {
+        return CricketSector.ALL.all { isClosed(player, it) }
     }
 
     // Обработка одного броска
-    // Возвращает новое состояние игрока после броска
     fun applyThrow(
         game: CricketGame,
         sector: CricketSector,
@@ -45,7 +39,6 @@ object CricketLogic {
         playerIndex: Int
     ): CricketGame {
         if (result == ThrowResult.MISS) {
-            // Просто увеличиваем счётчик бросков
             val updatedPlayers = game.players.toMutableList()
             val player = updatedPlayers[playerIndex]
             updatedPlayers[playerIndex] = player.copy(
@@ -61,30 +54,24 @@ object CricketLogic {
         val updatedPlayers = game.players.toMutableList()
         val player = updatedPlayers[playerIndex]
 
-        // Текущее количество попаданий в сектор
         val currentHits = player.hits[sector] ?: 0
-        // Сколько попаданий добавляем (не больше 3 всего)
         val hitsToAdd = minOf(multiplier, 3 - currentHits)
         val newHits = currentHits + hitsToAdd
-
-        // Сколько попаданий "перешло" в очки (сверх 3)
         val overflow = multiplier - hitsToAdd
 
-        // Обновляем попадания
         val newHitsMap = player.hits.toMutableMap()
         newHitsMap[sector] = newHits
 
-        // Считаем очки
         var newScores = player.scores.toMutableMap()
         var scoreGained = 0
 
+        // Начисляем очки только в American, и только если есть overflow
         if (game.type == CricketType.AMERICAN && overflow > 0) {
-            // Проверяем: закрыт ли сектор у соперника
+            // Проверяем: сектор закрыт у соперника?
             val otherPlayers = updatedPlayers.filterIndexed { i, _ -> i != playerIndex }
             val anyOtherClosed = otherPlayers.any { isClosed(it, sector) }
 
             if (!anyOtherClosed) {
-                // Начисляем очки
                 val sectorValue = if (sector == CricketSector.BULL) 25 else sector.number
                 scoreGained = overflow * sectorValue
                 newScores[sector] = (newScores[sector] ?: 0) + scoreGained
@@ -103,10 +90,9 @@ object CricketLogic {
             currentTurnDarts = game.currentTurnDarts + 1
         )
 
-        // Проверка: игра закончена?
-        if (isGameFinished(updatedPlayers)) {
-            // Побеждает тот, у кого больше очков
-            val winner = updatedPlayers.indices.maxByOrNull { updatedPlayers[it].totalScore }
+        // Проверка победы
+        val winner = checkWinner(updatedPlayers, game.type)
+        if (winner != null) {
             return updatedGame.copy(
                 isFinished = true,
                 winnerIndex = winner
@@ -116,7 +102,32 @@ object CricketLogic {
         return updatedGame
     }
 
-    // Передать ход следующему игроку
+    // Определение победителя
+    fun checkWinner(players: List<CricketPlayer>, type: CricketType): Int? {
+        if (players.isEmpty()) return null
+
+        val closedAllIndices = players.indices.filter { i ->
+            hasClosedAll(players[i])
+        }
+
+        if (closedAllIndices.isEmpty()) return null
+
+        if (type == CricketType.NO_SCORE) {
+            // Без очков: побеждает первый, кто закрыл всё
+            return closedAllIndices.first()
+        }
+
+        // American: побеждает тот, кто закрыл всё И имеет больше всех очков
+        val maxScore = players.maxOf { it.totalScore }
+
+        // Ищем игрока, который закрыл всё И имеет максимальный счёт
+        val winner = closedAllIndices.firstOrNull { i ->
+            players[i].totalScore == maxScore
+        }
+
+        return winner
+    }
+
     fun nextPlayer(game: CricketGame): CricketGame {
         val next = (game.currentPlayerIndex + 1) % game.players.size
         return game.copy(
@@ -125,11 +136,7 @@ object CricketLogic {
         )
     }
 
-    // Начать новую игру
-    fun newGame(
-        type: CricketType,
-        players: List<CricketPlayer>
-    ): CricketGame {
+    fun newGame(type: CricketType, players: List<CricketPlayer>): CricketGame {
         return CricketGame(
             type = type,
             players = players,
