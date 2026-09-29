@@ -30,6 +30,11 @@ data class CricketPlayer(
     val name: String,
     val isBot: Boolean = false,
     val botLevel: Int = 0,
+    // К какой команде относится игрок: 0 или 1.
+    // В одиночной игре у обоих игроков teamIndex = 0 и 1 соответственно.
+    // В парной игре: игроки 1 и 3 → teamIndex 0, игроки 2 и 4 → teamIndex 1.
+    val teamIndex: Int = 0,
+
     // для каждого сектора: сколько попаданий (0..3) в текущем леге
     val hits: MutableMap<CricketSector, Int> = CricketSector.ALL.associateWith { 0 }.toMutableMap(),
     // для каждого сектора: сколько очков набрал в текущем леге
@@ -44,13 +49,9 @@ data class CricketPlayer(
     var setsWon: Int = 0,
 
     // ── Накопительные данные за ВЕСЬ МАТЧ (не сбрасываются при новом леге) ──
-    // Общая сумма очков за матч
     var matchTotalScore: Int = 0,
-    // Общее количество бросков за матч
     var matchDartsThrown: Int = 0,
-    // Сумма попаданий по секторам за матч
     val matchHits: MutableMap<CricketSector, Int> = CricketSector.ALL.associateWith { 0 }.toMutableMap(),
-    // Сумма очков по секторам за матч
     val matchScores: MutableMap<CricketSector, Int> = CricketSector.ALL.associateWith { 0 }.toMutableMap()
 )
 
@@ -75,8 +76,20 @@ data class CricketGame(
     // Кто выиграл последний лег (для показа диалога)
     val lastLegWinnerIndex: Int? = null,
     // Кто выиграл последний сет (для показа диалога)
-    val lastSetWinnerIndex: Int? = null
+    val lastSetWinnerIndex: Int? = null,
+
+    // ── Парная игра ──
+    // true — парная игра (2 команды по 2 игрока), false — одиночная (2 игрока)
+    val isPairGame: Boolean = false,
+    // Количество команд (всегда 2)
+    val teamCount: Int = 2,
+    // Сколько игроков в каждой команде (1 для одиночной, 2 для парной)
+    val playersPerTeam: Int = 1
 ) {
     val currentPlayer: CricketPlayer?
         get() = players.getOrNull(currentPlayerIndex)
+
+    // Утилита: получить список игроков указанной команды
+    fun playersOfTeam(team: Int): List<CricketPlayer> =
+        players.filter { it.teamIndex == team }
 }
