@@ -1,5 +1,6 @@
 package com.lodkin.dartstrainer.ui.cricket
 
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -21,6 +22,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -353,6 +357,7 @@ private fun PlayerCell(
     var expanded by remember { mutableStateOf(false) }
     var showAddDialog by remember { mutableStateOf(false) }
     var newNameInput by remember { mutableStateOf("") }
+    val menuScrollState = rememberScrollState()
 
     Column(
         modifier = modifier
@@ -408,20 +413,52 @@ private fun PlayerCell(
             DropdownMenu(
                 expanded = expanded,
                 onDismissRequest = { expanded = false },
+                scrollState = menuScrollState,
                 modifier = Modifier
                     .heightIn(max = 480.dp)
                     .background(DarkBg)
                     .drawWithContent {
                         drawContent()
-                        // Градиент затухания внизу — подсказка, что список можно листать
-                        val gradientHeight = 40.dp.toPx()
+                        // 1. Градиент затухания внизу меню
+                        val gradientHeight = 56.dp.toPx()
                         drawRect(
                             brush = Brush.verticalGradient(
-                                colors = listOf(Color.Transparent, DarkBg),
+                                colors = listOf(
+                                    Color.Transparent,
+                                    DarkBg.copy(alpha = 0.9f),
+                                    DarkBg
+                                ),
                                 startY = size.height - gradientHeight,
                                 endY = size.height
                             )
                         )
+                        // 2. Видимая полоса прокрутки справа
+                        if (menuScrollState.maxValue > 0) {
+                            val viewportPx = menuScrollState.viewportSize.toFloat()
+                            val maxScrollPx = menuScrollState.maxValue.toFloat()
+                            val contentPx = viewportPx + maxScrollPx
+                            if (contentPx > 0f) {
+                                // Длина ползунка пропорциональна видимой части
+                                val thumbFraction = (viewportPx / contentPx).coerceIn(0.05f, 1f)
+                                val thumbHeightPx = (size.height * thumbFraction).coerceAtLeast(56f)
+                                // Позиция ползунка зависит от текущего скролла
+                                val scrollFraction = if (maxScrollPx > 0f) {
+                                    menuScrollState.value.toFloat() / maxScrollPx
+                                } else 0f
+                                val thumbTopPx = (size.height - thumbHeightPx) * scrollFraction
+                                val thumbWidthPx = 4.dp.toPx()
+                                val thumbRightPx = 3.dp.toPx()
+                                drawRoundRect(
+                                    color = Accent.copy(alpha = 0.8f),
+                                    topLeft = Offset(
+                                        x = size.width - thumbWidthPx - thumbRightPx,
+                                        y = thumbTopPx
+                                    ),
+                                    size = Size(thumbWidthPx, thumbHeightPx),
+                                    cornerRadius = CornerRadius(thumbWidthPx / 2f)
+                                )
+                            }
+                        }
                     }
             ) {
                 // ── Раздел «Игроки» ──
