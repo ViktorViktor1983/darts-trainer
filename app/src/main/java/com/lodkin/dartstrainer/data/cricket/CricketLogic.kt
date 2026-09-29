@@ -82,23 +82,23 @@ object CricketLogic {
         val updatedPlayers = game.players.toMutableList()
         val player = updatedPlayers[playerIndex]
 
-        // Сколько меток в этом секторе у КОМАНДЫ игрока ДО броска
+        // Командные метки в этом секторе ДО броска
         val teamHitsBefore = game.playersOfTeam(player.teamIndex)
             .sumOf { it.hits[sector] ?: 0 }
         val teamAlreadyClosed = teamHitsBefore >= 3
 
-        // Личные метки игрока в этом секторе
-        val currentHits = player.hits[sector] ?: 0
-        val hitsToAdd = minOf(multiplier, 3 - currentHits)
-        val newHits = currentHits + hitsToAdd
-
-        // Сколько попаданий уйдёт в очки (закрытие команды уже случилось или случится сейчас)
+        // Избыток в очки — считаем от КОМАНДНЫХ меток.
+        // Если сектор уже закрыт командой — весь бросок в очки.
+        // Если ещё не закрыт — в очки идёт всё, что сверх 3 командных меток.
         val overflow: Int = if (teamAlreadyClosed) {
             multiplier
         } else {
-            val afterTeamHits = teamHitsBefore + hitsToAdd
-            if (afterTeamHits > 3) afterTeamHits - 3 else 0
+            maxOf(0, teamHitsBefore + multiplier - 3)
         }
+
+        // Личные hits — только для визуализации, обрезаем до 3
+        val currentHits = player.hits[sector] ?: 0
+        val newHits = minOf(currentHits + multiplier, 3)
 
         val newHitsMap = player.hits.toMutableMap()
         newHitsMap[sector] = newHits
@@ -107,7 +107,7 @@ object CricketLogic {
         var scoreGained = 0
 
         if (game.type == CricketType.AMERICAN && overflow > 0) {
-            // Проверяем: сектор закрыт у ДРУГИХ команд?
+            // Очки начисляются, если сектор ещё не закрыт у ДРУГОЙ команды
             val myTeam = player.teamIndex
             val otherTeams = (0 until game.teamCount).filter { it != myTeam }
             val anyOtherTeamClosed = otherTeams.any { isClosedByTeam(game, it, sector) }
@@ -119,9 +119,9 @@ object CricketLogic {
             }
         }
 
-        // Накопительные данные за матч
+        // Накопительные данные за матч — пишем ВСЕ попадания (multiplier)
         val newMatchHits = player.matchHits.toMutableMap()
-        newMatchHits[sector] = (newMatchHits[sector] ?: 0) + hitsToAdd
+        newMatchHits[sector] = (newMatchHits[sector] ?: 0) + multiplier
 
         val newMatchScores = player.matchScores.toMutableMap()
         if (scoreGained > 0) {
@@ -176,7 +176,6 @@ object CricketLogic {
     fun awardLegWin(game: CricketGame, winningTeam: Int): CricketGame {
         val updatedPlayers = game.players.toMutableList()
 
-        // Сколько легов у команды-победителя уже было (у всех игроков одинаково)
         val currentLegs = updatedPlayers
             .first { it.teamIndex == winningTeam }
             .legsInCurrentSet
@@ -189,7 +188,6 @@ object CricketLogic {
                 .setsWon
             val newSetsWon = currentSets + 1
 
-            // Обновляем счёт у всех игроков команды
             for (i in updatedPlayers.indices) {
                 val p = updatedPlayers[i]
                 if (p.teamIndex == winningTeam) {
@@ -201,7 +199,6 @@ object CricketLogic {
             }
 
             if (newSetsWon >= game.setsPerMatch) {
-                // Победа в МАТЧЕ
                 return game.copy(
                     players = updatedPlayers,
                     isFinished = true,
@@ -211,7 +208,6 @@ object CricketLogic {
                 )
             }
 
-            // Новый сет: сброс легов и личной статистики у ВСЕХ
             val resetPlayers = updatedPlayers.map { p ->
                 resetPlayerForNewLeg(p).copy(legsInCurrentSet = 0)
             }
@@ -226,7 +222,6 @@ object CricketLogic {
             )
         }
 
-        // Новый лег
         for (i in updatedPlayers.indices) {
             val p = updatedPlayers[i]
             if (p.teamIndex == winningTeam) {
