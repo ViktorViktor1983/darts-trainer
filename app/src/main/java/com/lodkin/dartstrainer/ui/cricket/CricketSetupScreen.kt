@@ -5,25 +5,29 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.lodkin.dartstrainer.data.cricket.CRICKET_BOTS
+import com.lodkin.dartstrainer.data.cricket.CricketBot
 import com.lodkin.dartstrainer.data.cricket.CricketPlayer
 import com.lodkin.dartstrainer.data.cricket.CricketType
+import com.lodkin.dartstrainer.data.cricket.PlayerNamesStorage
 import com.lodkin.dartstrainer.theme.Accent
 import com.lodkin.dartstrainer.theme.DarkBg
 import com.lodkin.dartstrainer.theme.GoldAccent
@@ -36,16 +40,33 @@ fun CricketSetupScreen(
     onStartGame: (CricketType, List<CricketPlayer>) -> Unit,
     onBack: () -> Unit
 ) {
+    val context = LocalContext.current
+    val savedNames = remember { PlayerNamesStorage.getSavedNames(context).toMutableList() }
+
     var isPairGame by remember { mutableStateOf(false) }
     var cricketType by remember { mutableStateOf(CricketType.AMERICAN) }
     var playWithBot by remember { mutableStateOf(true) }
     var autoOkSeconds by remember { mutableStateOf(3) }
 
     // Игроки
-    var player1Name by remember { mutableStateOf(playerName.ifBlank { "Игрок 1" }) }
-    var player2Name by remember { mutableStateOf(if (playWithBot) "Бот" else "Игрок 2") }
-    var player3Name by remember { mutableStateOf(if (playWithBot) "Бот" else "Игрок 3") }
-    var player4Name by remember { mutableStateOf(if (playWithBot) "Бот" else "Игрок 4") }
+    var player1Name by remember {
+        mutableStateOf(
+            PlayerNamesStorage.getLastPlayer1(context).ifBlank {
+                playerName.ifBlank { "Игрок 1" }
+            }
+        )
+    }
+    var player2Name by remember {
+        mutableStateOf(PlayerNamesStorage.getLastPlayer2(context).ifBlank { "Игрок 2" })
+    }
+    var player3Name by remember { mutableStateOf("Игрок 3") }
+    var player4Name by remember { mutableStateOf("Игрок 4") }
+
+    // Боты
+    var bot1 by remember { mutableStateOf(CRICKET_BOTS[2]) } // Любитель по умолчанию
+    var bot2 by remember { mutableStateOf(CRICKET_BOTS[2]) }
+    var bot3 by remember { mutableStateOf(CRICKET_BOTS[2]) }
+    var bot4 by remember { mutableStateOf(CRICKET_BOTS[2]) }
 
     Column(
         modifier = Modifier
@@ -86,24 +107,60 @@ fun CricketSetupScreen(
             SectionTitle("ИГРОКИ")
             Spacer(Modifier.height(8.dp))
 
-            PlayerInput(player1Name, { player1Name = it }, "Вы")
+            PlayerRow(
+                number = 1,
+                name = player1Name,
+                onNameChange = { player1Name = it },
+                savedNames = savedNames,
+                isBot = false,
+                bot = bot1,
+                onBotChange = { bot1 = it },
+                onBotToggle = null,
+                context = context
+            )
+
             Spacer(Modifier.height(8.dp))
+
+            PlayerRow(
+                number = 2,
+                name = player2Name,
+                onNameChange = { player2Name = it },
+                savedNames = savedNames,
+                isBot = playWithBot,
+                bot = bot2,
+                onBotChange = { bot2 = it },
+                onBotToggle = { playWithBot = it },
+                context = context
+            )
 
             if (isPairGame) {
-                PlayerInput(player2Name, { player2Name = it }, "Ваш партнёр")
                 Spacer(Modifier.height(8.dp))
-                PlayerInput(player3Name, { player3Name = it }, "Соперник 1")
+                PlayerRow(
+                    number = 3,
+                    name = player3Name,
+                    onNameChange = { player3Name = it },
+                    savedNames = savedNames,
+                    isBot = playWithBot,
+                    bot = bot3,
+                    onBotChange = { bot3 = it },
+                    onBotToggle = null,
+                    context = context
+                )
                 Spacer(Modifier.height(8.dp))
-                PlayerInput(player4Name, { player4Name = it }, "Соперник 2")
-            } else {
-                PlayerInput(player2Name, { player2Name = it }, "Соперник")
+                PlayerRow(
+                    number = 4,
+                    name = player4Name,
+                    onNameChange = { player4Name = it },
+                    savedNames = savedNames,
+                    isBot = playWithBot,
+                    bot = bot4,
+                    onBotChange = { bot4 = it },
+                    onBotToggle = null,
+                    context = context
+                )
             }
 
-            Spacer(Modifier.height(24.dp))
-
-            // ── Игра ──
-            SectionTitle("ИГРА")
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(16.dp))
 
             // Парная игра
             SettingRow(
@@ -112,29 +169,11 @@ fun CricketSetupScreen(
                 onCheckedChange = { isPairGame = it }
             )
 
-            // Игра с ботом
-            SettingRow(
-                label = "Игра с ботом",
-                checked = playWithBot,
-                onCheckedChange = {
-                    playWithBot = it
-                    // Обновляем имена ботов
-                    player2Name = if (it) "Бот" else "Игрок 2"
-                    player3Name = if (it) "Бот" else "Игрок 3"
-                    player4Name = if (it) "Бот" else "Игрок 4"
-                }
-            )
+            Spacer(Modifier.height(24.dp))
 
-            Spacer(Modifier.height(16.dp))
-
-            // Тип крикета
-            Text(
-                "Тип крикета",
-                color = Accent,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Medium,
-                modifier = Modifier.padding(bottom = 8.dp)
-            )
+            // ── Тип крикета ──
+            SectionTitle("ТИП КРИКЕТА")
+            Spacer(Modifier.height(8.dp))
 
             CricketTypeOption(
                 label = "Американский (с очками)",
@@ -152,16 +191,9 @@ fun CricketSetupScreen(
 
             Spacer(Modifier.height(24.dp))
 
-            // ── Ввод ──
-            SectionTitle("ВВОД")
+            // ── АвтоОК ──
+            SectionTitle("АВТООК")
             Spacer(Modifier.height(8.dp))
-
-            Text(
-                "АвтоОК (секунд):",
-                color = Color.White,
-                fontSize = 14.sp,
-                modifier = Modifier.padding(bottom = 8.dp)
-            )
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 listOf(3, 5, 10, 0).forEach { sec ->
                     val label = if (sec == 0) "Выкл" else "$sec с"
@@ -197,12 +229,42 @@ fun CricketSetupScreen(
                 .clickable {
                     val players = buildList {
                         add(CricketPlayer(name = player1Name, isBot = false))
-                        add(CricketPlayer(name = player2Name, isBot = playWithBot && !isPairGame || (isPairGame && playWithBot)))
+                        add(
+                            CricketPlayer(
+                                name = if (playWithBot) bot2.name else player2Name,
+                                isBot = playWithBot,
+                                botLevel = if (playWithBot) bot2.id else 0
+                            )
+                        )
                         if (isPairGame) {
-                            add(CricketPlayer(name = player3Name, isBot = playWithBot))
-                            add(CricketPlayer(name = player4Name, isBot = playWithBot))
+                            add(
+                                CricketPlayer(
+                                    name = if (playWithBot) bot3.name else player3Name,
+                                    isBot = playWithBot,
+                                    botLevel = if (playWithBot) bot3.id else 0
+                                )
+                            )
+                            add(
+                                CricketPlayer(
+                                    name = if (playWithBot) bot4.name else player4Name,
+                                    isBot = playWithBot,
+                                    botLevel = if (playWithBot) bot4.id else 0
+                                )
+                            )
                         }
                     }
+                    // Сохраняем имена в память
+                    PlayerNamesStorage.saveName(context, player1Name)
+                    if (!playWithBot) {
+                        PlayerNamesStorage.saveName(context, player2Name)
+                        if (isPairGame) {
+                            PlayerNamesStorage.saveName(context, player3Name)
+                            PlayerNamesStorage.saveName(context, player4Name)
+                        }
+                    }
+                    PlayerNamesStorage.setLastPlayer1(context, player1Name)
+                    if (!playWithBot) PlayerNamesStorage.setLastPlayer2(context, player2Name)
+
                     onStartGame(cricketType, players)
                 }
                 .padding(vertical = 18.dp),
@@ -230,22 +292,241 @@ private fun SectionTitle(text: String) {
 }
 
 @Composable
-private fun PlayerInput(value: String, onChange: (String) -> Unit, hint: String) {
-    OutlinedTextField(
-        value = value,
-        onValueChange = onChange,
-        modifier = Modifier.fillMaxWidth(),
-        singleLine = true,
-        placeholder = { Text(hint, color = TileBg) },
-        keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Words),
-        colors = OutlinedTextFieldDefaults.colors(
-            focusedTextColor = Color.White,
-            unfocusedTextColor = Color.White,
-            focusedBorderColor = Accent,
-            unfocusedBorderColor = TileBg,
-            cursorColor = Accent
+private fun PlayerRow(
+    number: Int,
+    name: String,
+    onNameChange: (String) -> Unit,
+    savedNames: List<String>,
+    isBot: Boolean,
+    bot: CricketBot,
+    onBotChange: (CricketBot) -> Unit,
+    onBotToggle: ((Boolean) -> Unit)?,
+    context: android.content.Context
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(TileBgDark)
+            .padding(horizontal = 10.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        // Номер игрока
+        Box(
+            modifier = Modifier
+                .size(28.dp)
+                .clip(RoundedCornerShape(14.dp))
+                .background(TileBg),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                "$number",
+                color = Accent,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
+
+        Spacer(Modifier.width(10.dp))
+
+        // Если бот — показываем выбор бота
+        // Если игрок — выпадающий список имён
+        if (isBot) {
+            BotSelector(
+                bot = bot,
+                onBotChange = onBotChange,
+                modifier = Modifier.weight(1f)
+            )
+        } else {
+            NameSelector(
+                name = name,
+                onNameChange = onNameChange,
+                savedNames = savedNames,
+                context = context,
+                modifier = Modifier.weight(1f)
+            )
+        }
+
+        // Тумблер игрок/бот (только для 2-го игрока)
+        if (onBotToggle != null) {
+            Spacer(Modifier.width(8.dp))
+            Switch(
+                checked = isBot,
+                onCheckedChange = onBotToggle,
+                colors = SwitchDefaults.colors(
+                    checkedThumbColor = Accent,
+                    checkedTrackColor = Accent.copy(alpha = 0.5f),
+                    uncheckedThumbColor = Color.White,
+                    uncheckedTrackColor = TileBg
+                )
+            )
+            Spacer(Modifier.width(4.dp))
+            Text(
+                "Бот",
+                color = if (isBot) Accent else Color.White.copy(alpha = 0.6f),
+                fontSize = 11.sp
+            )
+        }
+    }
+}
+
+@Composable
+private fun NameSelector(
+    name: String,
+    onNameChange: (String) -> Unit,
+    savedNames: List<String>,
+    context: android.content.Context,
+    modifier: Modifier
+) {
+    var expanded by remember { mutableStateOf(false) }
+    var showAddDialog by remember { mutableStateOf(false) }
+    var newNameInput by remember { mutableStateOf("") }
+
+    Box(modifier = modifier) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(8.dp))
+                .background(TileBg)
+                .clickable { expanded = true }
+                .padding(horizontal = 10.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                name,
+                color = Color.White,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Medium,
+                modifier = Modifier.weight(1f)
+            )
+            Text("▼", color = Accent, fontSize = 10.sp)
+        }
+
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false }
+        ) {
+            savedNames.forEach { saved ->
+                DropdownMenuItem(
+                    text = { Text(saved, color = Color.White) },
+                    onClick = {
+                        onNameChange(saved)
+                        expanded = false
+                    }
+                )
+            }
+            DropdownMenuItem(
+                text = { Text("+ Новое имя", color = Accent) },
+                onClick = {
+                    expanded = false
+                    newNameInput = ""
+                    showAddDialog = true
+                }
+            )
+        }
+    }
+
+    if (showAddDialog) {
+        AlertDialog(
+            onDismissRequest = { showAddDialog = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    val trimmed = newNameInput.trim()
+                    if (trimmed.isNotBlank()) {
+                        onNameChange(trimmed)
+                        PlayerNamesStorage.saveName(context, trimmed)
+                    }
+                    showAddDialog = false
+                }) {
+                    Text("Сохранить", color = Accent)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showAddDialog = false }) {
+                    Text("Отмена", color = Color.White.copy(alpha = 0.6f))
+                }
+            },
+            title = { Text("Новое имя игрока", color = Color.White) },
+            text = {
+                androidx.compose.material3.OutlinedTextField(
+                    value = newNameInput,
+                    onValueChange = { newNameInput = it },
+                    singleLine = true,
+                    colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = Color.White,
+                        unfocusedTextColor = Color.White,
+                        focusedBorderColor = Accent,
+                        unfocusedBorderColor = TileBg,
+                        cursorColor = Accent
+                    )
+                )
+            }
         )
-    )
+    }
+}
+
+@Composable
+private fun BotSelector(
+    bot: CricketBot,
+    onBotChange: (CricketBot) -> Unit,
+    modifier: Modifier
+) {
+    var expanded by remember { mutableStateOf(false) }
+
+    Box(modifier = modifier) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(8.dp))
+                .background(TileBg)
+                .clickable { expanded = true }
+                .padding(horizontal = 10.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    bot.name,
+                    color = Color.White,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Medium
+                )
+                Text(
+                    "ср. ${bot.averageMin}–${bot.averageMax}",
+                    color = Accent,
+                    fontSize = 11.sp
+                )
+            }
+            Text("▼", color = Accent, fontSize = 10.sp)
+        }
+
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false }
+        ) {
+            CRICKET_BOTS.forEach { b ->
+                DropdownMenuItem(
+                    text = {
+                        Column {
+                            Text(
+                                "${b.id}. ${b.name}",
+                                color = Color.White,
+                                fontWeight = FontWeight.Medium
+                            )
+                            Text(
+                                "ср. ${b.averageMin}–${b.averageMax} · ${b.description}",
+                                color = Accent,
+                                fontSize = 11.sp
+                            )
+                        }
+                    },
+                    onClick = {
+                        onBotChange(b)
+                        expanded = false
+                    }
+                )
+            }
+        }
+    }
 }
 
 @Composable
