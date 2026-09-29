@@ -35,9 +35,8 @@ fun CricketStatsScreen(
             .background(Color(0xFF121212))
             .padding(16.dp)
     ) {
-        // Заголовок
         Text(
-            "ОТЧЁТ ОБ ИГРЕ",
+            "ОТЧЁТ О МАТЧЕ",
             color = Accent,
             fontSize = 13.sp,
             fontWeight = FontWeight.Medium,
@@ -57,26 +56,33 @@ fun CricketStatsScreen(
             // Победитель
             if (game.winnerIndex != null) {
                 val winner = game.players[game.winnerIndex]
-                WinnerCard(winner.name, winner.totalScore)
+                WinnerCard(
+                    name = winner.name,
+                    matchScore = winner.matchTotalScore,
+                    setsWon = winner.setsWon,
+                    setsTotal = game.setsPerMatch
+                )
                 Spacer(Modifier.height(20.dp))
             }
 
-            // Счёт по игрокам
+            // Счёт по игрокам (за весь матч)
             SectionTitle("ИГРОКИ")
             Spacer(Modifier.height(8.dp))
             game.players.forEach { player ->
                 PlayerStatsRow(
                     name = player.name,
-                    score = player.totalScore,
-                    darts = player.dartsThrown
+                    matchScore = player.matchTotalScore,
+                    matchDarts = player.matchDartsThrown,
+                    setsWon = player.setsWon,
+                    setsTotal = game.setsPerMatch
                 )
                 Spacer(Modifier.height(6.dp))
             }
 
             Spacer(Modifier.height(20.dp))
 
-            // Детализация по секторам
-            SectionTitle("ПО СЕКТОРАМ")
+            // Детализация по секторам (за весь матч)
+            SectionTitle("ПО СЕКТОРАМ (ЗА МАТЧ)")
             Spacer(Modifier.height(8.dp))
 
             SectorStatsHeader(game)
@@ -138,7 +144,12 @@ private fun SectionTitle(text: String) {
 }
 
 @Composable
-private fun WinnerCard(name: String, score: Int) {
+private fun WinnerCard(
+    name: String,
+    matchScore: Int,
+    setsWon: Int,
+    setsTotal: Int
+) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -154,7 +165,7 @@ private fun WinnerCard(name: String, score: Int) {
             )
             Spacer(Modifier.height(8.dp))
             Text(
-                "ПОБЕДА",
+                "ПОБЕДА В МАТЧЕ",
                 color = Accent,
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Medium,
@@ -168,9 +179,15 @@ private fun WinnerCard(name: String, score: Int) {
                 fontWeight = FontWeight.Bold,
                 textAlign = TextAlign.Center
             )
-            Spacer(Modifier.height(4.dp))
+            Spacer(Modifier.height(8.dp))
             Text(
-                "Очки: $score",
+                "Сеты: $setsWon из $setsTotal",
+                color = Color.White,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Medium
+            )
+            Text(
+                "Очки за матч: $matchScore",
                 color = Color.White,
                 fontSize = 14.sp
             )
@@ -179,7 +196,13 @@ private fun WinnerCard(name: String, score: Int) {
 }
 
 @Composable
-private fun PlayerStatsRow(name: String, score: Int, darts: Int) {
+private fun PlayerStatsRow(
+    name: String,
+    matchScore: Int,
+    matchDarts: Int,
+    setsWon: Int,
+    setsTotal: Int
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -188,22 +211,28 @@ private fun PlayerStatsRow(name: String, score: Int, darts: Int) {
             .padding(horizontal = 14.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(
-            name,
-            color = Color.White,
-            fontSize = 15.sp,
-            fontWeight = FontWeight.Medium,
-            modifier = Modifier.weight(1f)
-        )
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                name,
+                color = Color.White,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Medium
+            )
+            Text(
+                "Сеты: $setsWon из $setsTotal",
+                color = Accent,
+                fontSize = 11.sp
+            )
+        }
         Column(horizontalAlignment = Alignment.End) {
             Text(
-                "Очки: $score",
+                "Очки: $matchScore",
                 color = GoldAccent,
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Bold
             )
             Text(
-                "Бросков: $darts",
+                "Бросков: $matchDarts",
                 color = Color.White.copy(alpha = 0.7f),
                 fontSize = 11.sp
             )
@@ -260,8 +289,8 @@ private fun SectorStatsRow(sector: CricketSector, game: CricketGame) {
         )
 
         game.players.forEach { player ->
-            val hits = player.hits[sector] ?: 0
-            val score = player.scores[sector] ?: 0
+            val hits = player.matchHits[sector] ?: 0
+            val score = player.matchScores[sector] ?: 0
             Column(
                 modifier = Modifier.weight(1f),
                 horizontalAlignment = Alignment.CenterHorizontally
