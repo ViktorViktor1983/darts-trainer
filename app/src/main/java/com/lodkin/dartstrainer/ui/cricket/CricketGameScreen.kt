@@ -35,9 +35,7 @@ fun CricketGameScreen(
     var game by remember { mutableStateOf(initialGame) }
     var showWinDialog by remember { mutableStateOf(false) }
     var showBackConfirm by remember { mutableStateOf(false) }
-    var showCloseLegDialog by remember { mutableStateOf(false) }
 
-    // Проверка на победу
     LaunchedEffect(game.isFinished) {
         if (game.isFinished) {
             showWinDialog = true
@@ -49,13 +47,11 @@ fun CricketGameScreen(
             .fillMaxSize()
             .background(Color(0xFF121212))
     ) {
-        // ── Верхняя панель ──
         CricketTopBar(
             game = game,
             onBack = { showBackConfirm = true }
         )
 
-        // ── Таблица секторов ──
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -67,22 +63,25 @@ fun CricketGameScreen(
                     sector = sector,
                     game = game,
                     onThrow = { result ->
-                        game = CricketLogic.applyThrow(
+                        val currentPlayerIndex = game.currentPlayerIndex
+                        var updatedGame = CricketLogic.applyThrow(
                             game = game,
                             sector = sector,
                             result = result,
-                            playerIndex = game.currentPlayerIndex
+                            playerIndex = currentPlayerIndex
                         )
+
                         // Если 3 дротика в подходе — передаём ход
-                        if (game.currentTurnDarts >= 3 && !game.isFinished) {
-                            game = CricketLogic.nextPlayer(game)
+                        if (updatedGame.currentTurnDarts >= 3 && !updatedGame.isFinished) {
+                            updatedGame = CricketLogic.nextPlayer(updatedGame)
                         }
+
+                        game = updatedGame
                     }
                 )
             }
         }
 
-        // ── Нижняя панель ──
         CricketBottomBar(
             game = game,
             onNextPlayer = {
@@ -92,8 +91,6 @@ fun CricketGameScreen(
             }
         )
     }
-
-    // ── Диалоги ──
 
     if (showWinDialog) {
         WinDialog(
@@ -133,7 +130,6 @@ private fun CricketTopBar(game: CricketGame, onBack: () -> Unit) {
             .background(TileBgDark)
             .padding(horizontal = 8.dp, vertical = 6.dp)
     ) {
-        // Верхняя строка: назад + счёт
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
@@ -169,7 +165,6 @@ private fun CricketTopBar(game: CricketGame, onBack: () -> Unit) {
 
         Spacer(Modifier.height(6.dp))
 
-        // Строка игроков
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(6.dp)
@@ -216,13 +211,6 @@ private fun PlayerHeader(
             fontSize = 18.sp,
             fontWeight = FontWeight.Bold
         )
-        if (isActive && player.dartsThrown > 0) {
-            Text(
-                "ср. ${(player.totalScore.toFloat() / player.dartsThrown * 3).toInt()}",
-                color = Color(0xFF121212),
-                fontSize = 9.sp
-            )
-        }
     }
 }
 
@@ -232,22 +220,20 @@ private fun SectorRow(
     game: CricketGame,
     onThrow: (ThrowResult) -> Unit
 ) {
-    val currentPlayer = game.currentPlayer
-    val isCurrentTurn = !game.isFinished
-
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(if (sector == CricketSector.BULL) TileBgDark.copy(alpha = 0.5f) else Color.Transparent)
             .padding(horizontal = 4.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         game.players.forEachIndexed { index, player ->
-            val isActive = index == game.currentPlayerIndex
+            val isActive = index == game.currentPlayerIndex && !game.isFinished
             PlayerSectorCell(
                 player = player,
                 sector = sector,
-                isActive = isActive && isCurrentTurn,
+                game = game,
+                isActive = isActive,
+                playerIndex = index,
                 onThrow = onThrow,
                 modifier = Modifier.weight(1f)
             )
@@ -262,13 +248,30 @@ private fun SectorRow(
 private fun PlayerSectorCell(
     player: CricketPlayer,
     sector: CricketSector,
+    game: CricketGame,
     isActive: Boolean,
+    playerIndex: Int,
     onThrow: (ThrowResult) -> Unit,
     modifier: Modifier
 ) {
     val hits = player.hits[sector] ?: 0
     val score = player.scores[sector] ?: 0
     val isClosed = hits >= 3
+
+    // Может ли игрок набирать очки в этом секторе?
+    // Да, если сектор закрыт у него, но не закрыт хотя бы у одного соперника
+    val canScore = if (game.type == CricketType.AMERICAN) {
+        val others = game.players.filterIndexed { i, _ -> i != playerIndex }
+        val anyOtherNotClosed = others.any { (it.hits[sector] ?: 0) < 3 }
+        isClosed && anyOtherNotClosed
+    } else {
+        false
+    }
+
+    // Показывать кнопки, если:
+    // - ход этого игрока
+    // - сектор НЕ закрыт у него, ИЛИ сектор закрыт, но можно набирать очки
+    val showButtons = isActive && (!isClosed || canScore)
 
     Column(
         modifier = modifier
@@ -277,7 +280,6 @@ private fun PlayerSectorCell(
             .padding(6.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // Номер сектора
         Text(
             sector.label,
             color = if (isClosed) Accent else Color.White,
@@ -287,12 +289,10 @@ private fun PlayerSectorCell(
 
         Spacer(Modifier.height(4.dp))
 
-        // Визуализация попаданий
         HitsVisualization(hits = hits)
 
         Spacer(Modifier.height(4.dp))
 
-        // Очки (если есть)
         if (score > 0) {
             Text(
                 "+$score",
@@ -304,8 +304,7 @@ private fun PlayerSectorCell(
             Spacer(Modifier.height(14.dp))
         }
 
-        // Кнопки T / S / D
-        if (isActive && !isClosed) {
+        if (showButtons) {
             Spacer(Modifier.height(4.dp))
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -371,20 +370,18 @@ private fun CricketBottomBar(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            // Кнопка «Ход назад» — упрощённая (только подтверждение)
             Box(
                 modifier = Modifier
                     .weight(1f)
                     .clip(RoundedCornerShape(10.dp))
                     .background(TileBg)
-                    .clickable { /* позже */ }
+                    .clickable { }
                     .padding(vertical = 12.dp),
                 contentAlignment = Alignment.Center
             ) {
                 Text("↶ Ход назад", color = Accent, fontSize = 12.sp, fontWeight = FontWeight.Medium)
             }
 
-            // Кнопка «Завершить подход»
             Box(
                 modifier = Modifier
                     .weight(1f)
