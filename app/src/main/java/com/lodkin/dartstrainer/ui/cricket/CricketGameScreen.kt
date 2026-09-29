@@ -36,8 +36,22 @@ fun CricketGameScreen(
     var showWinDialog by remember { mutableStateOf(false) }
     var showBackConfirm by remember { mutableStateOf(false) }
 
+    // История для отката
+    val history = remember { mutableStateListOf<CricketGame>() }
+
+    fun saveHistory() {
+        history.add(game)
+        if (history.size > 50) history.removeAt(0)
+    }
+
+    fun undo() {
+        if (history.isNotEmpty()) {
+            game = history.removeAt(history.lastIndex)
+        }
+    }
+
     LaunchedEffect(game.isFinished) {
-        if (game.isFinished) {
+        if (game.isFinished && !showWinDialog) {
             showWinDialog = true
         }
     }
@@ -63,6 +77,7 @@ fun CricketGameScreen(
                     sector = sector,
                     game = game,
                     onThrow = { result ->
+                        saveHistory()
                         val currentPlayerIndex = game.currentPlayerIndex
                         var updatedGame = CricketLogic.applyThrow(
                             game = game,
@@ -83,8 +98,11 @@ fun CricketGameScreen(
 
         CricketBottomBar(
             game = game,
+            canUndo = history.isNotEmpty(),
+            onUndo = { undo() },
             onNextPlayer = {
                 if (!game.isFinished) {
+                    saveHistory()
                     game = CricketLogic.nextPlayer(game)
                 }
             }
@@ -94,6 +112,11 @@ fun CricketGameScreen(
     if (showWinDialog) {
         WinDialog(
             game = game,
+            onUndo = {
+                // Откатываем победу и закрываем диалог
+                undo()
+                showWinDialog = false
+            },
             onContinue = {
                 showWinDialog = false
                 onGameFinish(game)
@@ -257,7 +280,6 @@ private fun PlayerSectorCell(
     val score = player.scores[sector] ?: 0
     val isClosed = hits >= 3
 
-    // Может ли игрок набирать очки в этом секторе?
     val canScore = if (game.type == CricketType.AMERICAN) {
         val others = game.players.filterIndexed { i, _ -> i != playerIndex }
         val anyOtherNotClosed = others.any { (it.hits[sector] ?: 0) < 3 }
@@ -266,10 +288,8 @@ private fun PlayerSectorCell(
         false
     }
 
-    // Показывать кнопки, если ход игрока и сектор не закрыт (или можно набирать очки)
     val showButtons = isActive && (!isClosed || canScore)
 
-    // Закрыт ли сектор у всех — тогда он "мёртвый"
     val closedByAll = game.players.all { (it.hits[sector] ?: 0) >= 3 }
 
     Column(
@@ -315,7 +335,6 @@ private fun PlayerSectorCell(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(2.dp)
             ) {
-                // У Bull нет утроения — кнопка T не показывается
                 if (sector.hasTriple) {
                     ThrowButton("T", Modifier.weight(1f)) { onThrow(ThrowResult.TRIPLE) }
                 }
@@ -366,6 +385,8 @@ private fun ThrowButton(label: String, modifier: Modifier, onClick: () -> Unit) 
 @Composable
 private fun CricketBottomBar(
     game: CricketGame,
+    canUndo: Boolean,
+    onUndo: () -> Unit,
     onNextPlayer: () -> Unit
 ) {
     Column(
@@ -378,18 +399,28 @@ private fun CricketBottomBar(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
+            // Кнопка «Ход назад»
+            val undoBg = if (canUndo) TileBg else TileBgDark
+            val undoFg = if (canUndo) Accent else Accent.copy(alpha = 0.3f)
+
             Box(
                 modifier = Modifier
                     .weight(1f)
                     .clip(RoundedCornerShape(10.dp))
-                    .background(TileBg)
-                    .clickable { }
+                    .background(undoBg)
+                    .clickable(enabled = canUndo) { onUndo() }
                     .padding(vertical = 12.dp),
                 contentAlignment = Alignment.Center
             ) {
-                Text("↶ Ход назад", color = Accent, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                Text(
+                    "↶ Ход назад",
+                    color = undoFg,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium
+                )
             }
 
+            // Кнопка «Завершить ход»
             Box(
                 modifier = Modifier
                     .weight(1f)
@@ -411,7 +442,11 @@ private fun CricketBottomBar(
 }
 
 @Composable
-private fun WinDialog(game: CricketGame, onContinue: () -> Unit) {
+private fun WinDialog(
+    game: CricketGame,
+    onUndo: () -> Unit,
+    onContinue: () -> Unit
+) {
     val winner = game.winnerIndex?.let { game.players.getOrNull(it) }
 
     AlertDialog(
@@ -419,6 +454,11 @@ private fun WinDialog(game: CricketGame, onContinue: () -> Unit) {
         confirmButton = {
             TextButton(onClick = onContinue) {
                 Text("Продолжить", color = Accent)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onUndo) {
+                Text("↶ Отменить", color = ErrorColor)
             }
         },
         title = {
