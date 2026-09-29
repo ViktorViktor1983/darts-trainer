@@ -264,53 +264,24 @@ fun CricketSetupScreen(
 
             Spacer(Modifier.height(24.dp))
 
-            // ── Леги в сете ──
-            Text(
-                "ЛЕГИ В СЕТЕ",
-                color = Accent,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Medium,
-                letterSpacing = 3.sp,
+            // ── Сеты / Леги в одну строку ──
+            Row(
                 modifier = Modifier.fillMaxWidth(),
-                textAlign = TextAlign.Center
-            )
-            Spacer(Modifier.height(10.dp))
-            NumberRow(
-                values = (1..5).toList(),
-                selected = legsPerSet,
-                onSelect = { legsPerSet = it }
-            )
-            Spacer(Modifier.height(6.dp))
-            NumberRow(
-                values = (6..10).toList(),
-                selected = legsPerSet,
-                onSelect = { legsPerSet = it }
-            )
-
-            Spacer(Modifier.height(24.dp))
-
-            // ── Сеты в матче ──
-            Text(
-                "СЕТЫ В МАТЧЕ",
-                color = Accent,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Medium,
-                letterSpacing = 3.sp,
-                modifier = Modifier.fillMaxWidth(),
-                textAlign = TextAlign.Center
-            )
-            Spacer(Modifier.height(10.dp))
-            NumberRow(
-                values = (1..5).toList(),
-                selected = setsPerMatch,
-                onSelect = { setsPerMatch = it }
-            )
-            Spacer(Modifier.height(6.dp))
-            NumberRow(
-                values = (6..10).toList(),
-                selected = setsPerMatch,
-                onSelect = { setsPerMatch = it }
-            )
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                CompactNumberPicker(
+                    label = "СЕТЫ",
+                    value = setsPerMatch,
+                    onValueChange = { setsPerMatch = it },
+                    modifier = Modifier.weight(1f)
+                )
+                CompactNumberPicker(
+                    label = "ЛЕГИ",
+                    value = legsPerSet,
+                    onValueChange = { legsPerSet = it },
+                    modifier = Modifier.weight(1f)
+                )
+            }
 
             Spacer(Modifier.height(24.dp))
 
@@ -366,13 +337,11 @@ fun CricketSetupScreen(
                             botLevel = if (slot.isBot) slot.bot.id else 0
                         )
                     }
-                    // Сохраняем имена живых игроков
                     activeSlots.forEach { slot ->
                         if (!slot.isBot) {
                             PlayerNamesStorage.saveName(context, slot.name)
                         }
                     }
-                    // Запоминаем 1-го и 2-го игрока (живых)
                     if (!activeSlots[0].isBot) {
                         PlayerNamesStorage.setLastPlayer1(context, activeSlots[0].name)
                     }
@@ -396,34 +365,62 @@ fun CricketSetupScreen(
 }
 
 // ─────────────────────────────────────────────
-// Строка с числами (для выбора легов/сетов)
+// Компактный выбор числа (Сеты / Леги) с выпадающим списком 1..10
 // ─────────────────────────────────────────────
 @Composable
-private fun NumberRow(
-    values: List<Int>,
-    selected: Int,
-    onSelect: (Int) -> Unit
+private fun CompactNumberPicker(
+    label: String,
+    value: Int,
+    onValueChange: (Int) -> Unit,
+    modifier: Modifier = Modifier
 ) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(6.dp)
-    ) {
-        values.forEach { v ->
-            val isSel = v == selected
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(if (isSel) Accent else TileBgDark)
-                    .clickable { onSelect(v) }
-                    .padding(vertical = 12.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    "$v",
-                    color = if (isSel) Color(0xFF121212) else Color.White,
-                    fontSize = 14.sp,
-                    fontWeight = if (isSel) FontWeight.Bold else FontWeight.Medium
+    var expanded by remember { mutableStateOf(false) }
+
+    Box(modifier = modifier) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(12.dp))
+                .background(TileBgDark)
+                .clickable { expanded = true }
+                .padding(horizontal = 14.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                label,
+                color = Color.White,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Medium,
+                modifier = Modifier.weight(1f)
+            )
+            Text(
+                "$value",
+                color = Accent,
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(Modifier.width(6.dp))
+            Text("▼", color = Accent, fontSize = 10.sp)
+        }
+
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+            modifier = Modifier.background(DarkBg)
+        ) {
+            (1..10).forEach { n ->
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            "$n",
+                            color = if (n == value) Accent else Color.White,
+                            fontWeight = if (n == value) FontWeight.Bold else FontWeight.Normal
+                        )
+                    },
+                    onClick = {
+                        onValueChange(n)
+                        expanded = false
+                    }
                 )
             }
         }
@@ -453,7 +450,6 @@ private fun PlayerCell(
             .background(TileBgDark)
             .padding(8.dp)
     ) {
-        // Номер
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
@@ -476,7 +472,6 @@ private fun PlayerCell(
 
         Spacer(Modifier.height(6.dp))
 
-        // Основное поле с текущим выбором
         Box(modifier = Modifier.fillMaxWidth()) {
             Row(
                 modifier = Modifier
@@ -507,7 +502,6 @@ private fun PlayerCell(
                     .background(DarkBg)
                     .drawWithContent {
                         drawContent()
-                        // 1. Градиент затухания внизу меню
                         val gradientHeight = 56.dp.toPx()
                         drawRect(
                             brush = Brush.verticalGradient(
@@ -520,7 +514,6 @@ private fun PlayerCell(
                                 endY = size.height
                             )
                         )
-                        // 2. Видимая полоса прокрутки справа
                         if (menuScrollState.maxValue > 0) {
                             val viewportPx = menuScrollState.viewportSize.toFloat()
                             val maxScrollPx = menuScrollState.maxValue.toFloat()
@@ -547,7 +540,6 @@ private fun PlayerCell(
                         }
                     }
             ) {
-                // ── Раздел «Игроки» ──
                 Text(
                     "  ИГРОК",
                     color = Accent,
@@ -578,7 +570,6 @@ private fun PlayerCell(
 
                 HorizontalDivider(color = TileBg)
 
-                // ── Раздел «Боты» ──
                 Text(
                     "  БОТЫ",
                     color = Accent,
@@ -614,7 +605,6 @@ private fun PlayerCell(
         }
     }
 
-    // Диалог нового имени
     if (showAddDialog) {
         AlertDialog(
             onDismissRequest = { showAddDialog = false },
