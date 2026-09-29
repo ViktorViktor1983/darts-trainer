@@ -72,7 +72,6 @@ fun CricketSetupScreen(
             .background(DarkBg)
             .padding(16.dp)
     ) {
-        // Верхняя панель
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(
                 modifier = Modifier
@@ -101,7 +100,6 @@ fun CricketSetupScreen(
                 .verticalScroll(rememberScrollState())
         ) {
 
-            // ── Игроки (заголовок по центру) ──
             Text(
                 "ИГРОКИ",
                 color = Accent,
@@ -113,7 +111,6 @@ fun CricketSetupScreen(
             )
             Spacer(Modifier.height(10.dp))
 
-            // Первый ряд
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -144,7 +141,6 @@ fun CricketSetupScreen(
                 )
             }
 
-            // Парная игра — второй ряд
             if (isPairGame) {
                 Spacer(Modifier.height(8.dp))
                 Row(
@@ -179,7 +175,6 @@ fun CricketSetupScreen(
 
             Spacer(Modifier.height(16.dp))
 
-            // ── Парная игра + Бот в одной строке ──
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -200,7 +195,6 @@ fun CricketSetupScreen(
 
             Spacer(Modifier.height(24.dp))
 
-            // ── Тип крикета ──
             Text(
                 "ТИП КРИКЕТА",
                 color = Accent,
@@ -228,7 +222,6 @@ fun CricketSetupScreen(
 
             Spacer(Modifier.height(24.dp))
 
-            // ── АвтоОК ──
             Text(
                 "АВТООК",
                 color = Accent,
@@ -265,7 +258,6 @@ fun CricketSetupScreen(
             Spacer(Modifier.height(24.dp))
         }
 
-        // Кнопка «Начать игру»
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -324,9 +316,6 @@ fun CricketSetupScreen(
     }
 }
 
-// ─────────────────────────────────────────────
-// Ячейка игрока (одна колонка) — БЕЗ тумблера бота
-// ─────────────────────────────────────────────
 @Composable
 private fun PlayerCell(
     number: Int,
@@ -345,7 +334,6 @@ private fun PlayerCell(
             .background(TileBgDark)
             .padding(8.dp)
     ) {
-        // Верхняя строка: номер
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
@@ -368,7 +356,6 @@ private fun PlayerCell(
 
         Spacer(Modifier.height(6.dp))
 
-        // Поле имени или выбор бота
         if (isBot) {
             BotSelector(
                 bot = bot,
@@ -406,7 +393,7 @@ private fun NameSelector(
                 .clip(RoundedCornerShape(8.dp))
                 .background(TileBg)
                 .clickable { expanded = true }
-                .padding(horizontal = 10.dp, vertical = 8.dp),
+                .padding(horizontal = 10.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
@@ -498,23 +485,18 @@ private fun BotSelector(
                 .clip(RoundedCornerShape(8.dp))
                 .background(TileBg)
                 .clickable { expanded = true }
-                .padding(horizontal = 10.dp, vertical = 6.dp),
+                .padding(horizontal = 10.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    bot.name,
-                    color = Color.White,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Medium,
-                    maxLines = 1
-                )
-                Text(
-                    "ср. ${bot.averageMin}–${bot.averageMax}",
-                    color = Accent,
-                    fontSize = 10.sp
-                )
-            }
+            // Только имя бота — без подписи со средним набором
+            Text(
+                bot.name,
+                color = Color.White,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Medium,
+                maxLines = 1,
+                modifier = Modifier.weight(1f)
+            )
             Text("▼", color = Accent, fontSize = 10.sp)
         }
 
@@ -548,7 +530,6 @@ private fun BotSelector(
     }
 }
 
-// Половина строки: тумблер + подпись
 @Composable
 private fun HalfSetting(
     label: String,
