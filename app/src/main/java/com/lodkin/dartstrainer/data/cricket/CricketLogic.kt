@@ -30,7 +30,8 @@ object CricketLogic {
         return CricketSector.ALL.all { isClosed(player, it) }
     }
 
-    // Сброс состояния игрока для нового лега
+    // Сброс состояния игрока для нового лега.
+    // ВАЖНО: накопительные поля match* НЕ сбрасываются — они хранят статистику за весь матч.
     private fun resetPlayerForNewLeg(player: CricketPlayer): CricketPlayer {
         return player.copy(
             hits = CricketSector.ALL.associateWith { 0 }.toMutableMap(),
@@ -50,7 +51,8 @@ object CricketLogic {
             val updatedPlayers = game.players.toMutableList()
             val player = updatedPlayers[playerIndex]
             updatedPlayers[playerIndex] = player.copy(
-                dartsThrown = player.dartsThrown + 1
+                dartsThrown = player.dartsThrown + 1,
+                matchDartsThrown = player.matchDartsThrown + 1
             )
             return game.copy(
                 players = updatedPlayers,
@@ -84,11 +86,25 @@ object CricketLogic {
             }
         }
 
+        // Накопительные данные за матч
+        val newMatchHits = player.matchHits.toMutableMap()
+        newMatchHits[sector] = (newMatchHits[sector] ?: 0) + hitsToAdd
+
+        val newMatchScores = player.matchScores.toMutableMap()
+        if (scoreGained > 0) {
+            newMatchScores[sector] = (newMatchScores[sector] ?: 0) + scoreGained
+        }
+
         updatedPlayers[playerIndex] = player.copy(
             hits = newHitsMap,
             scores = newScores,
             totalScore = player.totalScore + scoreGained,
-            dartsThrown = player.dartsThrown + 1
+            dartsThrown = player.dartsThrown + 1,
+            // Накопительные поля
+            matchHits = newMatchHits,
+            matchScores = newMatchScores,
+            matchTotalScore = player.matchTotalScore + scoreGained,
+            matchDartsThrown = player.matchDartsThrown + 1
         )
 
         val updatedGame = game.copy(
