@@ -25,6 +25,7 @@ import com.lodkin.dartstrainer.theme.ErrorColor
 import com.lodkin.dartstrainer.theme.GoldAccent
 import com.lodkin.dartstrainer.theme.TileBg
 import com.lodkin.dartstrainer.theme.TileBgDark
+import kotlinx.coroutines.delay
 
 @Composable
 fun CricketGameScreen(
@@ -47,13 +48,36 @@ fun CricketGameScreen(
 
     fun saveHistory() {
         history.add(game)
-        if (history.size > 50) history.removeAt(0)
+        if (history.size > 200) history.removeAt(0)
     }
 
     fun undo() {
         if (history.isNotEmpty()) {
             game = history.removeAt(history.lastIndex)
         }
+    }
+
+    // ── Автоматический ход бота ──
+    LaunchedEffect(
+        game.currentPlayerIndex,
+        game.isFinished,
+        showLegWonDialog,
+        showSetWonDialog,
+        showWinDialog
+    ) {
+        val currentPlayer = game.players.getOrNull(game.currentPlayerIndex) ?: return@LaunchedEffect
+        if (game.isFinished) return@LaunchedEffect
+        if (showLegWonDialog || showSetWonDialog || showWinDialog) return@LaunchedEffect
+        if (!currentPlayer.isBot) return@LaunchedEffect
+
+        // Пауза перед ходом бота, чтобы было видно
+        delay(700L)
+        if (game.isFinished) return@LaunchedEffect
+        if (showLegWonDialog || showSetWonDialog || showWinDialog) return@LaunchedEffect
+        if (game.players.getOrNull(game.currentPlayerIndex)?.isBot != true) return@LaunchedEffect
+
+        saveHistory()
+        game = CricketBotAI.performTurn(game, game.currentPlayerIndex)
     }
 
     // Реакция на завершение лега
@@ -101,6 +125,9 @@ fun CricketGameScreen(
                     sector = sector,
                     game = game,
                     onThrow = { result ->
+                        val currentPlayer = game.players.getOrNull(game.currentPlayerIndex)
+                        if (currentPlayer?.isBot == true) return@SectorRow
+
                         saveHistory()
                         val currentPlayerIndex = game.currentPlayerIndex
                         var updatedGame = CricketLogic.applyThrow(
@@ -125,7 +152,8 @@ fun CricketGameScreen(
             canUndo = history.isNotEmpty(),
             onUndo = { undo() },
             onNextPlayer = {
-                if (!game.isFinished) {
+                val currentPlayer = game.players.getOrNull(game.currentPlayerIndex)
+                if (!game.isFinished && currentPlayer?.isBot != true) {
                     saveHistory()
                     game = CricketLogic.nextPlayer(game)
                 }
@@ -299,7 +327,6 @@ private fun CricketTopBar(game: CricketGame, onBack: () -> Unit) {
 
         Spacer(Modifier.height(4.dp))
 
-        // Счёт по сетам и легам
         Text(
             "Сет ${game.currentSetNumber}/${game.setsPerMatch}  •  Лег ${game.currentLegNumber}/${game.legsPerSet}",
             color = Color.White.copy(alpha = 0.7f),
@@ -417,7 +444,8 @@ private fun PlayerSectorCell(
         false
     }
 
-    val showButtons = isActive && (!isClosed || canScore)
+    // Кнопки показываем только человеку (не боту)
+    val showButtons = isActive && !player.isBot && (!isClosed || canScore)
 
     val closedByAll = game.players.all { (it.hits[sector] ?: 0) >= 3 }
 
@@ -518,12 +546,27 @@ private fun CricketBottomBar(
     onUndo: () -> Unit,
     onNextPlayer: () -> Unit
 ) {
+    val currentPlayer = game.players.getOrNull(game.currentPlayerIndex)
+    val isBotTurn = currentPlayer?.isBot == true
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .background(TileBgDark)
             .padding(8.dp)
     ) {
+        if (isBotTurn && !game.isFinished) {
+            Text(
+                "Ход бота: ${currentPlayer?.name ?: ""}...",
+                color = Accent,
+                fontSize = 12.sp,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 6.dp),
+                textAlign = TextAlign.Center
+            )
+        }
+
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -552,14 +595,14 @@ private fun CricketBottomBar(
                 modifier = Modifier
                     .weight(1f)
                     .clip(RoundedCornerShape(10.dp))
-                    .background(Accent)
-                    .clickable(enabled = !game.isFinished) { onNextPlayer() }
+                    .background(if (isBotTurn) TileBgDark else Accent)
+                    .clickable(enabled = !game.isFinished && !isBotTurn) { onNextPlayer() }
                     .padding(vertical = 12.dp),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    "Завершить ход",
-                    color = Color(0xFF121212),
+                    if (isBotTurn) "Ждём бота..." else "Завершить ход",
+                    color = if (isBotTurn) Accent.copy(alpha = 0.5f) else Color(0xFF121212),
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Bold
                 )
@@ -606,17 +649,17 @@ private fun WinDialog(
                 )
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    "Сеты: ${winner?.setsWon ?: 0}",
+                    "Сеты: ${winner?.setsWon ?: 0} из ${game.setsPerMatch}",
                     color = Color.White,
                     fontSize = 14.sp
                 )
                 Text(
-                    "Очки в последнем леге: ${winner?.totalScore ?: 0}",
+                    "Очки за матч: ${winner?.matchTotalScore ?: 0}",
                     color = Color.White,
                     fontSize = 14.sp
                 )
                 Text(
-                    "Бросков: ${winner?.dartsThrown ?: 0}",
+                    "Бросков: ${winner?.matchDartsThrown ?: 0}",
                     color = Color.White,
                     fontSize = 14.sp
                 )
