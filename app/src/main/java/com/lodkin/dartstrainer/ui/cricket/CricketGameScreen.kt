@@ -36,6 +36,12 @@ fun CricketGameScreen(
     var showWinDialog by remember { mutableStateOf(false) }
     var showBackConfirm by remember { mutableStateOf(false) }
 
+    // Диалоги лега и сета
+    var showLegWonDialog by remember { mutableStateOf(false) }
+    var showSetWonDialog by remember { mutableStateOf(false) }
+    var legWinnerName by remember { mutableStateOf("") }
+    var setWinnerName by remember { mutableStateOf("") }
+
     // История для отката
     val history = remember { mutableStateListOf<CricketGame>() }
 
@@ -47,6 +53,24 @@ fun CricketGameScreen(
     fun undo() {
         if (history.isNotEmpty()) {
             game = history.removeAt(history.lastIndex)
+        }
+    }
+
+    // Реакция на завершение лега
+    LaunchedEffect(game.lastLegWinnerIndex) {
+        val idx = game.lastLegWinnerIndex
+        if (idx != null && !game.isFinished) {
+            legWinnerName = game.players.getOrNull(idx)?.name ?: ""
+            showLegWonDialog = true
+        }
+    }
+
+    // Реакция на завершение сета
+    LaunchedEffect(game.lastSetWinnerIndex) {
+        val idx = game.lastSetWinnerIndex
+        if (idx != null && !game.isFinished) {
+            setWinnerName = game.players.getOrNull(idx)?.name ?: ""
+            showSetWonDialog = true
         }
     }
 
@@ -109,11 +133,99 @@ fun CricketGameScreen(
         )
     }
 
+    // Диалог завершения ЛЕГА
+    if (showLegWonDialog) {
+        AlertDialog(
+            onDismissRequest = { },
+            confirmButton = {
+                TextButton(onClick = {
+                    showLegWonDialog = false
+                    game = game.copy(lastLegWinnerIndex = null)
+                }) {
+                    Text("Продолжить", color = Accent)
+                }
+            },
+            title = {
+                Text(
+                    "ЛЕГ ЗАВЕРШЁН",
+                    color = Accent,
+                    fontSize = 22.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Column {
+                    Text("Победитель лега:", color = Color.White, fontSize = 14.sp)
+                    Text(
+                        legWinnerName,
+                        color = GoldAccent,
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    Text("Счёт по легам в сете:", color = Color.White, fontSize = 14.sp)
+                    Spacer(Modifier.height(4.dp))
+                    game.players.forEach { p ->
+                        Text(
+                            "${p.name}: ${p.legsInCurrentSet}",
+                            color = Color.White,
+                            fontSize = 13.sp
+                        )
+                    }
+                }
+            }
+        )
+    }
+
+    // Диалог завершения СЕТА
+    if (showSetWonDialog) {
+        AlertDialog(
+            onDismissRequest = { },
+            confirmButton = {
+                TextButton(onClick = {
+                    showSetWonDialog = false
+                    game = game.copy(lastSetWinnerIndex = null)
+                }) {
+                    Text("Продолжить", color = Accent)
+                }
+            },
+            title = {
+                Text(
+                    "СЕТ ЗАВЕРШЁН",
+                    color = GoldAccent,
+                    fontSize = 22.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Column {
+                    Text("Победитель сета:", color = Color.White, fontSize = 14.sp)
+                    Text(
+                        setWinnerName,
+                        color = GoldAccent,
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    Text("Счёт по сетам:", color = Color.White, fontSize = 14.sp)
+                    Spacer(Modifier.height(4.dp))
+                    game.players.forEach { p ->
+                        Text(
+                            "${p.name}: ${p.setsWon}",
+                            color = Color.White,
+                            fontSize = 13.sp
+                        )
+                    }
+                }
+            }
+        )
+    }
+
+    // Финальный диалог победы в МАТЧЕ
     if (showWinDialog) {
         WinDialog(
             game = game,
             onUndo = {
-                // Откатываем победу и закрываем диалог
                 undo()
                 showWinDialog = false
             },
@@ -185,6 +297,17 @@ private fun CricketTopBar(game: CricketGame, onBack: () -> Unit) {
             )
         }
 
+        Spacer(Modifier.height(4.dp))
+
+        // Счёт по сетам и легам
+        Text(
+            "Сет ${game.currentSetNumber}/${game.setsPerMatch}  •  Лег ${game.currentLegNumber}/${game.legsPerSet}",
+            color = Color.White.copy(alpha = 0.7f),
+            fontSize = 11.sp,
+            modifier = Modifier.fillMaxWidth(),
+            textAlign = TextAlign.Center
+        )
+
         Spacer(Modifier.height(6.dp))
 
         Row(
@@ -232,6 +355,12 @@ private fun PlayerHeader(
             color = if (isActive) Color(0xFF121212) else GoldAccent,
             fontSize = 18.sp,
             fontWeight = FontWeight.Bold
+        )
+        Text(
+            "S${player.setsWon} L${player.legsInCurrentSet}",
+            color = if (isActive) Color(0xFF121212).copy(alpha = 0.7f) else Accent,
+            fontSize = 9.sp,
+            fontWeight = FontWeight.Medium
         )
     }
 }
@@ -399,7 +528,6 @@ private fun CricketBottomBar(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            // Кнопка «Ход назад»
             val undoBg = if (canUndo) TileBg else TileBgDark
             val undoFg = if (canUndo) Accent else Accent.copy(alpha = 0.3f)
 
@@ -420,7 +548,6 @@ private fun CricketBottomBar(
                 )
             }
 
-            // Кнопка «Завершить ход»
             Box(
                 modifier = Modifier
                     .weight(1f)
@@ -463,7 +590,7 @@ private fun WinDialog(
         },
         title = {
             Text(
-                "ПОБЕДА!",
+                "ПОБЕДА В МАТЧЕ!",
                 color = Accent,
                 fontSize = 24.sp,
                 fontWeight = FontWeight.Bold
@@ -479,7 +606,12 @@ private fun WinDialog(
                 )
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    "Очки: ${winner?.totalScore ?: 0}",
+                    "Сеты: ${winner?.setsWon ?: 0}",
+                    color = Color.White,
+                    fontSize = 14.sp
+                )
+                Text(
+                    "Очки в последнем леге: ${winner?.totalScore ?: 0}",
                     color = Color.White,
                     fontSize = 14.sp
                 )
