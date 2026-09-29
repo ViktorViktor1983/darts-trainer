@@ -55,15 +55,17 @@ data class CricketGame(
     val currentTurnDarts: Int = 0,
 
     // ── Настройки матча (леги и сеты) ──
-    // Сколько легов нужно выиграть, чтобы забрать сет
     val legsPerSet: Int = 1,
-    // Сколько сетов нужно выиграть, чтобы забрать матч
     val setsPerMatch: Int = 1,
 
-    // Текущий номер лега (начинается с 1) — только для отображения
+    // Текущий номер лега/сета (для отображения)
     val currentLegNumber: Int = 1,
-    // Текущий номер сета (начинается с 1) — только для отображения
-    val currentSetNumber: Int = 1
+    val currentSetNumber: Int = 1,
+
+    // Кто выиграл последний лег (для показа диалога)
+    val lastLegWinnerIndex: Int? = null,
+    // Кто выиграл последний сет (для показа диалога)
+    val lastSetWinnerIndex: Int? = null
 ) {
     val currentPlayer: CricketPlayer?
         get() = players.getOrNull(currentPlayerIndex)
