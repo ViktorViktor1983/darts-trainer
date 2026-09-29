@@ -53,7 +53,6 @@ fun DartsTrainerApp() {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
-    // Репозиторий крикета
     val cricketRepository = remember {
         CricketRepository(CricketDatabase.get(context).cricketDao())
     }
@@ -66,7 +65,6 @@ fun DartsTrainerApp() {
     }
     var screen by remember { mutableStateOf("main") }
 
-    // Состояние крикета
     var cricketGame by remember { mutableStateOf<CricketGame?>(null) }
 
     if (stage == "loading") {
@@ -106,7 +104,6 @@ fun DartsTrainerApp() {
                 onBack = { screen = "main" }
             )
 
-            // ── Выбор игры ──
             "game_select" -> GameSelectScreen(
                 onCricket = { screen = "cricket_setup" },
                 on501 = { screen = "placeholder_501" },
@@ -121,12 +118,17 @@ fun DartsTrainerApp() {
             // ── Крикет ──
             "cricket_setup" -> CricketSetupScreen(
                 playerName = SettingsStorage.getPlayerName(context),
-                onStartGame = { type: CricketType, players: List<CricketPlayer>, legsPerSet: Int, setsPerMatch: Int ->
+                onStartGame = { type: CricketType,
+                                players: List<CricketPlayer>,
+                                legsPerSet: Int,
+                                setsPerMatch: Int,
+                                isPairGame: Boolean ->
                     cricketGame = CricketLogic.newGame(
                         type = type,
                         players = players,
                         legsPerSet = legsPerSet,
-                        setsPerMatch = setsPerMatch
+                        setsPerMatch = setsPerMatch,
+                        isPairGame = isPairGame
                     )
                     screen = "cricket_game"
                 },
@@ -139,7 +141,6 @@ fun DartsTrainerApp() {
                     CricketGameScreen(
                         initialGame = game,
                         onGameFinish = { finished: CricketGame ->
-                            // Сохраняем игру в базу
                             scope.launch {
                                 cricketRepository.saveGame(finished)
                             }
