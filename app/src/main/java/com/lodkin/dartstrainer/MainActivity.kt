@@ -16,6 +16,7 @@ import androidx.compose.ui.platform.LocalContext
 import com.lodkin.dartstrainer.data.SettingsStorage
 import com.lodkin.dartstrainer.data.cricket.CricketDatabase
 import com.lodkin.dartstrainer.data.cricket.CricketGame
+import com.lodkin.dartstrainer.data.cricket.CricketLogic
 import com.lodkin.dartstrainer.data.cricket.CricketPlayer
 import com.lodkin.dartstrainer.data.cricket.CricketRepository
 import com.lodkin.dartstrainer.data.cricket.CricketType
@@ -120,14 +121,12 @@ fun DartsTrainerApp() {
             // ── Крикет ──
             "cricket_setup" -> CricketSetupScreen(
                 playerName = SettingsStorage.getPlayerName(context),
-                onStartGame = { type: CricketType, players: List<CricketPlayer> ->
-                    cricketGame = CricketGame(
+                onStartGame = { type: CricketType, players: List<CricketPlayer>, legsPerSet: Int, setsPerMatch: Int ->
+                    cricketGame = CricketLogic.newGame(
                         type = type,
                         players = players,
-                        currentPlayerIndex = 0,
-                        isFinished = false,
-                        winnerIndex = null,
-                        currentTurnDarts = 0
+                        legsPerSet = legsPerSet,
+                        setsPerMatch = setsPerMatch
                     )
                     screen = "cricket_game"
                 },
