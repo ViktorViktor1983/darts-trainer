@@ -20,6 +20,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -409,88 +410,81 @@ private fun PlayerCell(
                 onDismissRequest = { expanded = false },
                 modifier = Modifier
                     .heightIn(max = 480.dp)
-                    .background(DarkBg) // Фон меню, чтобы градиент сливался
-            ) {
-                Box {
-                    Column(
-                        modifier = Modifier.verticalScroll(rememberScrollState())
-                    ) {
-                        // ── Раздел «Игроки» ──
-                        Text(
-                            "  ИГРОК",
-                            color = Accent,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            letterSpacing = 2.sp,
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
-                        )
-
-                        savedNames.forEach { saved ->
-                            DropdownMenuItem(
-                                text = { Text(saved, color = Color.White) },
-                                onClick = {
-                                    onSlotChange(slot.copy(isBot = false, name = saved))
-                                    expanded = false
-                                }
+                    .background(DarkBg)
+                    .drawWithContent {
+                        drawContent()
+                        // Градиент затухания внизу — подсказка, что список можно листать
+                        val gradientHeight = 40.dp.toPx()
+                        drawRect(
+                            brush = Brush.verticalGradient(
+                                colors = listOf(Color.Transparent, DarkBg),
+                                startY = size.height - gradientHeight,
+                                endY = size.height
                             )
-                        }
-
-                        DropdownMenuItem(
-                            text = { Text("+ Новое имя", color = Accent) },
-                            onClick = {
-                                expanded = false
-                                newNameInput = ""
-                                showAddDialog = true
-                            }
                         )
-
-                        HorizontalDivider(color = TileBg)
-
-                        // ── Раздел «Боты» ──
-                        Text(
-                            "  БОТЫ",
-                            color = Accent,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            letterSpacing = 2.sp,
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
-                        )
-
-                        CRICKET_BOTS.forEach { b ->
-                            DropdownMenuItem(
-                                text = {
-                                    Column {
-                                        Text(
-                                            "${b.id}. ${b.name}",
-                                            color = Color.White,
-                                            fontWeight = FontWeight.Medium
-                                        )
-                                        Text(
-                                            "ср. ${b.averageMin}–${b.averageMax}",
-                                            color = Accent,
-                                            fontSize = 11.sp
-                                        )
-                                    }
-                                },
-                                onClick = {
-                                    onSlotChange(slot.copy(isBot = true, bot = b))
-                                    expanded = false
-                                }
-                            )
-                        }
                     }
+            ) {
+                // ── Раздел «Игроки» ──
+                Text(
+                    "  ИГРОК",
+                    color = Accent,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 2.sp,
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+                )
 
-                    // ── Градиент затухания внизу ──
-                    Box(
-                        modifier = Modifier
-                            .align(Alignment.BottomCenter)
-                            .fillMaxWidth()
-                            .height(32.dp)
-                            .background(
-                                Brush.verticalGradient(
-                                    colors = listOf(Color.Transparent, DarkBg)
+                savedNames.forEach { saved ->
+                    DropdownMenuItem(
+                        text = { Text(saved, color = Color.White) },
+                        onClick = {
+                            onSlotChange(slot.copy(isBot = false, name = saved))
+                            expanded = false
+                        }
+                    )
+                }
+
+                DropdownMenuItem(
+                    text = { Text("+ Новое имя", color = Accent) },
+                    onClick = {
+                        expanded = false
+                        newNameInput = ""
+                        showAddDialog = true
+                    }
+                )
+
+                HorizontalDivider(color = TileBg)
+
+                // ── Раздел «Боты» ──
+                Text(
+                    "  БОТЫ",
+                    color = Accent,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 2.sp,
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+                )
+
+                CRICKET_BOTS.forEach { b ->
+                    DropdownMenuItem(
+                        text = {
+                            Column {
+                                Text(
+                                    "${b.id}. ${b.name}",
+                                    color = Color.White,
+                                    fontWeight = FontWeight.Medium
                                 )
-                            )
+                                Text(
+                                    "ср. ${b.averageMin}–${b.averageMax}",
+                                    color = Accent,
+                                    fontSize = 11.sp
+                                )
+                            }
+                        },
+                        onClick = {
+                            onSlotChange(slot.copy(isBot = true, bot = b))
+                            expanded = false
+                        }
                     )
                 }
             }
