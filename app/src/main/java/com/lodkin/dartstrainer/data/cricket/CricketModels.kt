@@ -37,7 +37,11 @@ data class CricketPlayer(
     // общая сумма очков
     var totalScore: Int = 0,
     // количество бросков (для статистики)
-    var dartsThrown: Int = 0
+    var dartsThrown: Int = 0,
+    // Леги, выигранные в ТЕКУЩЕМ сете (сбрасывается при выигрыше сета)
+    var legsInCurrentSet: Int = 0,
+    // Сеты, выигранные в МАТЧЕ (не сбрасывается до конца игры)
+    var setsWon: Int = 0
 )
 
 // Состояние игры
@@ -48,7 +52,18 @@ data class CricketGame(
     val isFinished: Boolean = false,
     val winnerIndex: Int? = null,
     // количество дротиков в текущем подходе (для статистики)
-    val currentTurnDarts: Int = 0
+    val currentTurnDarts: Int = 0,
+
+    // ── Настройки матча (леги и сеты) ──
+    // Сколько легов нужно выиграть, чтобы забрать сет
+    val legsPerSet: Int = 1,
+    // Сколько сетов нужно выиграть, чтобы забрать матч
+    val setsPerMatch: Int = 1,
+
+    // Текущий номер лега (начинается с 1) — только для отображения
+    val currentLegNumber: Int = 1,
+    // Текущий номер сета (начинается с 1) — только для отображения
+    val currentSetNumber: Int = 1
 ) {
     val currentPlayer: CricketPlayer?
         get() = players.getOrNull(currentPlayerIndex)
