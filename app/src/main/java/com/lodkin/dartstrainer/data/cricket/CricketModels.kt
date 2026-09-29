@@ -30,18 +30,28 @@ data class CricketPlayer(
     val name: String,
     val isBot: Boolean = false,
     val botLevel: Int = 0,
-    // для каждого сектора: сколько попаданий (0..3)
+    // для каждого сектора: сколько попаданий (0..3) в текущем леге
     val hits: MutableMap<CricketSector, Int> = CricketSector.ALL.associateWith { 0 }.toMutableMap(),
-    // для каждого сектора: сколько очков набрал
+    // для каждого сектора: сколько очков набрал в текущем леге
     val scores: MutableMap<CricketSector, Int> = CricketSector.ALL.associateWith { 0 }.toMutableMap(),
-    // общая сумма очков
+    // общая сумма очков в текущем леге
     var totalScore: Int = 0,
-    // количество бросков (для статистики)
+    // количество бросков в текущем леге (для статистики)
     var dartsThrown: Int = 0,
     // Леги, выигранные в ТЕКУЩЕМ сете (сбрасывается при выигрыше сета)
     var legsInCurrentSet: Int = 0,
     // Сеты, выигранные в МАТЧЕ (не сбрасывается до конца игры)
-    var setsWon: Int = 0
+    var setsWon: Int = 0,
+
+    // ── Накопительные данные за ВЕСЬ МАТЧ (не сбрасываются при новом леге) ──
+    // Общая сумма очков за матч
+    var matchTotalScore: Int = 0,
+    // Общее количество бросков за матч
+    var matchDartsThrown: Int = 0,
+    // Сумма попаданий по секторам за матч
+    val matchHits: MutableMap<CricketSector, Int> = CricketSector.ALL.associateWith { 0 }.toMutableMap(),
+    // Сумма очков по секторам за матч
+    val matchScores: MutableMap<CricketSector, Int> = CricketSector.ALL.associateWith { 0 }.toMutableMap()
 )
 
 // Состояние игры
