@@ -1,6 +1,5 @@
 package com.lodkin.dartstrainer.ui.cricket
 
-import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -52,7 +51,7 @@ data class PlayerSlot(
 @Composable
 fun CricketSetupScreen(
     playerName: String,
-    onStartGame: (CricketType, List<CricketPlayer>) -> Unit,
+    onStartGame: (CricketType, List<CricketPlayer>, Int, Int) -> Unit,
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
@@ -61,6 +60,10 @@ fun CricketSetupScreen(
     var isPairGame by remember { mutableStateOf(false) }
     var cricketType by remember { mutableStateOf(CricketType.AMERICAN) }
     var autoOkSeconds by remember { mutableStateOf(3) }
+
+    // Настройки матча
+    var legsPerSet by remember { mutableStateOf(1) }
+    var setsPerMatch by remember { mutableStateOf(1) }
 
     // 4 слота игрока
     var slots by remember {
@@ -261,6 +264,56 @@ fun CricketSetupScreen(
 
             Spacer(Modifier.height(24.dp))
 
+            // ── Леги в сете ──
+            Text(
+                "ЛЕГИ В СЕТЕ",
+                color = Accent,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Medium,
+                letterSpacing = 3.sp,
+                modifier = Modifier.fillMaxWidth(),
+                textAlign = TextAlign.Center
+            )
+            Spacer(Modifier.height(10.dp))
+            NumberRow(
+                values = (1..5).toList(),
+                selected = legsPerSet,
+                onSelect = { legsPerSet = it }
+            )
+            Spacer(Modifier.height(6.dp))
+            NumberRow(
+                values = (6..10).toList(),
+                selected = legsPerSet,
+                onSelect = { legsPerSet = it }
+            )
+
+            Spacer(Modifier.height(24.dp))
+
+            // ── Сеты в матче ──
+            Text(
+                "СЕТЫ В МАТЧЕ",
+                color = Accent,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Medium,
+                letterSpacing = 3.sp,
+                modifier = Modifier.fillMaxWidth(),
+                textAlign = TextAlign.Center
+            )
+            Spacer(Modifier.height(10.dp))
+            NumberRow(
+                values = (1..5).toList(),
+                selected = setsPerMatch,
+                onSelect = { setsPerMatch = it }
+            )
+            Spacer(Modifier.height(6.dp))
+            NumberRow(
+                values = (6..10).toList(),
+                selected = setsPerMatch,
+                onSelect = { setsPerMatch = it }
+            )
+
+            Spacer(Modifier.height(24.dp))
+
             // ── АвтоОК ──
             Text(
                 "АВТООК",
@@ -327,7 +380,7 @@ fun CricketSetupScreen(
                         PlayerNamesStorage.setLastPlayer2(context, activeSlots[1].name)
                     }
 
-                    onStartGame(cricketType, players)
+                    onStartGame(cricketType, players, legsPerSet, setsPerMatch)
                 }
                 .padding(vertical = 18.dp),
             contentAlignment = Alignment.Center
@@ -338,6 +391,41 @@ fun CricketSetupScreen(
                 fontSize = 16.sp,
                 fontWeight = FontWeight.Bold
             )
+        }
+    }
+}
+
+// ─────────────────────────────────────────────
+// Строка с числами (для выбора легов/сетов)
+// ─────────────────────────────────────────────
+@Composable
+private fun NumberRow(
+    values: List<Int>,
+    selected: Int,
+    onSelect: (Int) -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        values.forEach { v ->
+            val isSel = v == selected
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(if (isSel) Accent else TileBgDark)
+                    .clickable { onSelect(v) }
+                    .padding(vertical = 12.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    "$v",
+                    color = if (isSel) Color(0xFF121212) else Color.White,
+                    fontSize = 14.sp,
+                    fontWeight = if (isSel) FontWeight.Bold else FontWeight.Medium
+                )
+            }
         }
     }
 }
@@ -438,10 +526,8 @@ private fun PlayerCell(
                             val maxScrollPx = menuScrollState.maxValue.toFloat()
                             val contentPx = viewportPx + maxScrollPx
                             if (contentPx > 0f) {
-                                // Длина ползунка пропорциональна видимой части
                                 val thumbFraction = (viewportPx / contentPx).coerceIn(0.05f, 1f)
                                 val thumbHeightPx = (size.height * thumbFraction).coerceAtLeast(56f)
-                                // Позиция ползунка зависит от текущего скролла
                                 val scrollFraction = if (maxScrollPx > 0f) {
                                     menuScrollState.value.toFloat() / maxScrollPx
                                 } else 0f
