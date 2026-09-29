@@ -9,6 +9,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
@@ -48,7 +50,6 @@ fun CricketSetupScreen(
     var playWithBot by remember { mutableStateOf(true) }
     var autoOkSeconds by remember { mutableStateOf(3) }
 
-    // Игроки
     var player1Name by remember {
         mutableStateOf(
             PlayerNamesStorage.getLastPlayer1(context).ifBlank {
@@ -62,8 +63,6 @@ fun CricketSetupScreen(
     var player3Name by remember { mutableStateOf("Игрок 3") }
     var player4Name by remember { mutableStateOf("Игрок 4") }
 
-    // Боты
-    var bot1 by remember { mutableStateOf(CRICKET_BOTS[2]) } // Любитель по умолчанию
     var bot2 by remember { mutableStateOf(CRICKET_BOTS[2]) }
     var bot3 by remember { mutableStateOf(CRICKET_BOTS[2]) }
     var bot4 by remember { mutableStateOf(CRICKET_BOTS[2]) }
@@ -103,61 +102,86 @@ fun CricketSetupScreen(
                 .verticalScroll(rememberScrollState())
         ) {
 
-            // ── Игроки ──
-            SectionTitle("ИГРОКИ")
-            Spacer(Modifier.height(8.dp))
-
-            PlayerRow(
-                number = 1,
-                name = player1Name,
-                onNameChange = { player1Name = it },
-                savedNames = savedNames,
-                isBot = false,
-                bot = bot1,
-                onBotChange = { bot1 = it },
-                onBotToggle = null,
-                context = context
+            // ── Игроки (заголовок по центру) ──
+            Text(
+                "ИГРОКИ",
+                color = Accent,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Medium,
+                letterSpacing = 3.sp,
+                modifier = Modifier.fillMaxWidth(),
+                textAlign = TextAlign.Center
             )
+            Spacer(Modifier.height(10.dp))
 
-            Spacer(Modifier.height(8.dp))
+            // Первый ряд игроков (или пара 1)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Игрок 1
+                PlayerCell(
+                    number = 1,
+                    name = player1Name,
+                    onNameChange = { player1Name = it },
+                    savedNames = savedNames,
+                    isBot = false,
+                    bot = CRICKET_BOTS[2],
+                    onBotChange = {},
+                    onBotToggle = null,
+                    context = context,
+                    modifier = Modifier.weight(1f)
+                )
 
-            PlayerRow(
-                number = 2,
-                name = player2Name,
-                onNameChange = { player2Name = it },
-                savedNames = savedNames,
-                isBot = playWithBot,
-                bot = bot2,
-                onBotChange = { bot2 = it },
-                onBotToggle = { playWithBot = it },
-                context = context
-            )
+                // Игрок 2 (или бот)
+                PlayerCell(
+                    number = 2,
+                    name = if (playWithBot) bot2.name else player2Name,
+                    onNameChange = { player2Name = it },
+                    savedNames = savedNames,
+                    isBot = playWithBot,
+                    bot = bot2,
+                    onBotChange = { bot2 = it },
+                    onBotToggle = { playWithBot = it },
+                    context = context,
+                    modifier = Modifier.weight(1f)
+                )
+            }
 
+            // Парная игра — второй ряд
             if (isPairGame) {
                 Spacer(Modifier.height(8.dp))
-                PlayerRow(
-                    number = 3,
-                    name = player3Name,
-                    onNameChange = { player3Name = it },
-                    savedNames = savedNames,
-                    isBot = playWithBot,
-                    bot = bot3,
-                    onBotChange = { bot3 = it },
-                    onBotToggle = null,
-                    context = context
-                )
-                Spacer(Modifier.height(8.dp))
-                PlayerRow(
-                    number = 4,
-                    name = player4Name,
-                    onNameChange = { player4Name = it },
-                    savedNames = savedNames,
-                    isBot = playWithBot,
-                    bot = bot4,
-                    onBotChange = { bot4 = it },
-                    onBotToggle = null,
-                    context = context
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    PlayerCell(
+                        number = 3,
+                        name = if (playWithBot) bot3.name else player3Name,
+                        onNameChange = { player3Name = it },
+                        savedNames = savedNames,
+                        isBot = playWithBot,
+                        bot = bot3,
+                        onBotChange = { bot3 = it },
+                        onBotToggle = null,
+                        context = context,
+                        modifier = Modifier.weight(1f)
+                    )
+                    PlayerCell(
+                        number = 4,
+                        name = if (playWithBot) bot4.name else player4Name,
+                        onNameChange = { player4Name = it },
+                        savedNames = savedNames,
+                        isBot = playWithBot,
+                        bot = bot4,
+                        onBotChange = { bot4 = it },
+                        onBotToggle = null,
+                        context = context,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
             }
 
             Spacer(Modifier.height(16.dp))
@@ -172,8 +196,16 @@ fun CricketSetupScreen(
             Spacer(Modifier.height(24.dp))
 
             // ── Тип крикета ──
-            SectionTitle("ТИП КРИКЕТА")
-            Spacer(Modifier.height(8.dp))
+            Text(
+                "ТИП КРИКЕТА",
+                color = Accent,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Medium,
+                letterSpacing = 3.sp,
+                modifier = Modifier.fillMaxWidth(),
+                textAlign = TextAlign.Center
+            )
+            Spacer(Modifier.height(10.dp))
 
             CricketTypeOption(
                 label = "Американский (с очками)",
@@ -192,8 +224,16 @@ fun CricketSetupScreen(
             Spacer(Modifier.height(24.dp))
 
             // ── АвтоОК ──
-            SectionTitle("АВТООК")
-            Spacer(Modifier.height(8.dp))
+            Text(
+                "АВТООК",
+                color = Accent,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Medium,
+                letterSpacing = 3.sp,
+                modifier = Modifier.fillMaxWidth(),
+                textAlign = TextAlign.Center
+            )
+            Spacer(Modifier.height(10.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 listOf(3, 5, 10, 0).forEach { sec ->
                     val label = if (sec == 0) "Выкл" else "$sec с"
@@ -253,7 +293,6 @@ fun CricketSetupScreen(
                             )
                         }
                     }
-                    // Сохраняем имена в память
                     PlayerNamesStorage.saveName(context, player1Name)
                     if (!playWithBot) {
                         PlayerNamesStorage.saveName(context, player2Name)
@@ -280,19 +319,11 @@ fun CricketSetupScreen(
     }
 }
 
+// ─────────────────────────────────────────────
+// Ячейка игрока (одна колонка)
+// ─────────────────────────────────────────────
 @Composable
-private fun SectionTitle(text: String) {
-    Text(
-        text = text,
-        color = Accent,
-        fontSize = 13.sp,
-        fontWeight = FontWeight.Medium,
-        letterSpacing = 3.sp
-    )
-}
-
-@Composable
-private fun PlayerRow(
+private fun PlayerCell(
     number: Int,
     name: String,
     onNameChange: (String) -> Unit,
@@ -301,41 +332,67 @@ private fun PlayerRow(
     bot: CricketBot,
     onBotChange: (CricketBot) -> Unit,
     onBotToggle: ((Boolean) -> Unit)?,
-    context: android.content.Context
+    context: android.content.Context,
+    modifier: Modifier
 ) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
+    Column(
+        modifier = modifier
             .clip(RoundedCornerShape(12.dp))
             .background(TileBgDark)
-            .padding(horizontal = 10.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically
+            .padding(8.dp)
     ) {
-        // Номер игрока
-        Box(
-            modifier = Modifier
-                .size(28.dp)
-                .clip(RoundedCornerShape(14.dp))
-                .background(TileBg),
-            contentAlignment = Alignment.Center
+        // Верхняя строка: номер + тумблер «Бот»
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(
-                "$number",
-                color = Accent,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Bold
-            )
+            Box(
+                modifier = Modifier
+                    .size(24.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(TileBg),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    "$number",
+                    color = Accent,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+
+            Spacer(Modifier.weight(1f))
+
+            if (onBotToggle != null) {
+                Switch(
+                    checked = isBot,
+                    onCheckedChange = onBotToggle,
+                    modifier = Modifier.height(24.dp),
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = Accent,
+                        checkedTrackColor = Accent.copy(alpha = 0.5f),
+                        uncheckedThumbColor = Color.White,
+                        uncheckedTrackColor = TileBg
+                    )
+                )
+                Spacer(Modifier.width(4.dp))
+                Text(
+                    "Бот",
+                    color = if (isBot) Accent else Color.White.copy(alpha = 0.6f),
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Medium
+                )
+            }
         }
 
-        Spacer(Modifier.width(10.dp))
+        Spacer(Modifier.height(6.dp))
 
-        // Если бот — показываем выбор бота
-        // Если игрок — выпадающий список имён
+        // Поле имени или выбор бота
         if (isBot) {
             BotSelector(
                 bot = bot,
                 onBotChange = onBotChange,
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.fillMaxWidth()
             )
         } else {
             NameSelector(
@@ -343,28 +400,7 @@ private fun PlayerRow(
                 onNameChange = onNameChange,
                 savedNames = savedNames,
                 context = context,
-                modifier = Modifier.weight(1f)
-            )
-        }
-
-        // Тумблер игрок/бот (только для 2-го игрока)
-        if (onBotToggle != null) {
-            Spacer(Modifier.width(8.dp))
-            Switch(
-                checked = isBot,
-                onCheckedChange = onBotToggle,
-                colors = SwitchDefaults.colors(
-                    checkedThumbColor = Accent,
-                    checkedTrackColor = Accent.copy(alpha = 0.5f),
-                    uncheckedThumbColor = Color.White,
-                    uncheckedTrackColor = TileBg
-                )
-            )
-            Spacer(Modifier.width(4.dp))
-            Text(
-                "Бот",
-                color = if (isBot) Accent else Color.White.copy(alpha = 0.6f),
-                fontSize = 11.sp
+                modifier = Modifier.fillMaxWidth()
             )
         }
     }
@@ -397,6 +433,7 @@ private fun NameSelector(
                 color = Color.White,
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Medium,
+                maxLines = 1,
                 modifier = Modifier.weight(1f)
             )
             Text("▼", color = Accent, fontSize = 10.sp)
@@ -448,11 +485,11 @@ private fun NameSelector(
             },
             title = { Text("Новое имя игрока", color = Color.White) },
             text = {
-                androidx.compose.material3.OutlinedTextField(
+                OutlinedTextField(
                     value = newNameInput,
                     onValueChange = { newNameInput = it },
                     singleLine = true,
-                    colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
+                    colors = OutlinedTextFieldDefaults.colors(
                         focusedTextColor = Color.White,
                         unfocusedTextColor = Color.White,
                         focusedBorderColor = Accent,
@@ -480,20 +517,21 @@ private fun BotSelector(
                 .clip(RoundedCornerShape(8.dp))
                 .background(TileBg)
                 .clickable { expanded = true }
-                .padding(horizontal = 10.dp, vertical = 8.dp),
+                .padding(horizontal = 10.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     bot.name,
                     color = Color.White,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Medium
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 1
                 )
                 Text(
                     "ср. ${bot.averageMin}–${bot.averageMax}",
                     color = Accent,
-                    fontSize = 11.sp
+                    fontSize = 10.sp
                 )
             }
             Text("▼", color = Accent, fontSize = 10.sp)
