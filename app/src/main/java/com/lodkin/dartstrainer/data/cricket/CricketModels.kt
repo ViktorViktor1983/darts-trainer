@@ -1,14 +1,18 @@
 package com.lodkin.dartstrainer.data.cricket
 
 // Сектора в крикете
-enum class CricketSector(val number: Int, val label: String) {
+enum class CricketSector(
+    val number: Int,
+    val label: String,
+    val hasTriple: Boolean = true
+) {
     S20(20, "20"),
     S19(19, "19"),
     S18(18, "18"),
     S17(17, "17"),
     S16(16, "16"),
     S15(15, "15"),
-    BULL(25, "Bull");
+    BULL(25, "Bull", hasTriple = false);
 
     companion object {
         val ALL = listOf(S20, S19, S18, S17, S16, S15, BULL)
