@@ -26,12 +26,11 @@ object CricketLogic {
         return players.all { isClosed(it, sector) }
     }
 
-    // Все ли сектора закрыты у одного игрока
     fun hasClosedAll(player: CricketPlayer): Boolean {
         return CricketSector.ALL.all { isClosed(player, it) }
     }
 
-    // Сброс состояния игрока для нового лега (хиты, очки)
+    // Сброс состояния игрока для нового лега
     private fun resetPlayerForNewLeg(player: CricketPlayer): CricketPlayer {
         return player.copy(
             hits = CricketSector.ALL.associateWith { 0 }.toMutableMap(),
@@ -74,9 +73,7 @@ object CricketLogic {
         val newScores = player.scores.toMutableMap()
         var scoreGained = 0
 
-        // Начисляем очки только в American, и только если есть overflow
         if (game.type == CricketType.AMERICAN && overflow > 0) {
-            // Проверяем: сектор закрыт у соперника?
             val otherPlayers = updatedPlayers.filterIndexed { i, _ -> i != playerIndex }
             val anyOtherClosed = otherPlayers.any { isClosed(it, sector) }
 
@@ -119,11 +116,9 @@ object CricketLogic {
         if (closedAllIndices.isEmpty()) return null
 
         if (type == CricketType.NO_SCORE) {
-            // Без очков: побеждает первый, кто закрыл всё
             return closedAllIndices.first()
         }
 
-        // American: побеждает тот, кто закрыл всё И имеет больше всех очков
         val maxScore = players.maxOf { it.totalScore }
         val winner = closedAllIndices.firstOrNull { i ->
             players[i].totalScore == maxScore
@@ -145,7 +140,6 @@ object CricketLogic {
         )
 
         if (setWon) {
-            // Победа в СЕТЕ
             val newSetsWon = updatedPlayers[legWinnerIndex].setsWon + 1
             updatedPlayers[legWinnerIndex] = updatedPlayers[legWinnerIndex].copy(
                 setsWon = newSetsWon
@@ -156,11 +150,13 @@ object CricketLogic {
                 return game.copy(
                     players = updatedPlayers,
                     isFinished = true,
-                    winnerIndex = legWinnerIndex
+                    winnerIndex = legWinnerIndex,
+                    lastLegWinnerIndex = null,
+                    lastSetWinnerIndex = legWinnerIndex
                 )
             }
 
-            // Новый сет: сброс легов в сете у ВСЕХ + сброс хитов/очков
+            // Новый сет
             val resetPlayers = updatedPlayers.map { p ->
                 resetPlayerForNewLeg(p).copy(legsInCurrentSet = 0)
             }
@@ -169,17 +165,21 @@ object CricketLogic {
                 currentPlayerIndex = 0,
                 currentTurnDarts = 0,
                 currentLegNumber = 1,
-                currentSetNumber = game.currentSetNumber + 1
+                currentSetNumber = game.currentSetNumber + 1,
+                lastLegWinnerIndex = null,
+                lastSetWinnerIndex = legWinnerIndex
             )
         }
 
-        // Победа в ЛЕГЕ, но сет не закончен: новый лег
+        // Новый лег
         val resetPlayers = updatedPlayers.map { p -> resetPlayerForNewLeg(p) }
         return game.copy(
             players = resetPlayers,
             currentPlayerIndex = 0,
             currentTurnDarts = 0,
-            currentLegNumber = game.currentLegNumber + 1
+            currentLegNumber = game.currentLegNumber + 1,
+            lastLegWinnerIndex = legWinnerIndex,
+            lastSetWinnerIndex = null
         )
     }
 
@@ -207,7 +207,9 @@ object CricketLogic {
             legsPerSet = legsPerSet,
             setsPerMatch = setsPerMatch,
             currentLegNumber = 1,
-            currentSetNumber = 1
+            currentSetNumber = 1,
+            lastLegWinnerIndex = null,
+            lastSetWinnerIndex = null
         )
     }
 }
