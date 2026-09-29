@@ -51,7 +51,7 @@ data class PlayerSlot(
 @Composable
 fun CricketSetupScreen(
     playerName: String,
-    onStartGame: (CricketType, List<CricketPlayer>, Int, Int) -> Unit,
+    onStartGame: (CricketType, List<CricketPlayer>, Int, Int, Boolean) -> Unit,
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
@@ -61,11 +61,9 @@ fun CricketSetupScreen(
     var cricketType by remember { mutableStateOf(CricketType.AMERICAN) }
     var autoOkSeconds by remember { mutableStateOf(3) }
 
-    // Настройки матча
     var legsPerSet by remember { mutableStateOf(1) }
     var setsPerMatch by remember { mutableStateOf(1) }
 
-    // 4 слота игрока
     var slots by remember {
         mutableStateOf(
             listOf(
@@ -101,7 +99,6 @@ fun CricketSetupScreen(
             .background(DarkBg)
             .padding(16.dp)
     ) {
-        // Верхняя панель
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(
                 modifier = Modifier
@@ -130,9 +127,9 @@ fun CricketSetupScreen(
                 .verticalScroll(rememberScrollState())
         ) {
 
-            // ── Игроки ──
+            // ── Игроки / Команды ──
             Text(
-                "ИГРОКИ",
+                if (isPairGame) "КОМАНДЫ (2 НА 2)" else "ИГРОКИ",
                 color = Accent,
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Medium,
@@ -142,57 +139,70 @@ fun CricketSetupScreen(
             )
             Spacer(Modifier.height(10.dp))
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.Top
-            ) {
-                PlayerCell(
-                    number = 1,
-                    slot = slots[0],
-                    savedNames = savedNames,
-                    context = context,
-                    onSlotChange = { newSlot ->
-                        slots = slots.toMutableList().also { it[0] = newSlot }
-                    },
-                    modifier = Modifier.weight(1f)
-                )
-                PlayerCell(
-                    number = 2,
-                    slot = slots[1],
-                    savedNames = savedNames,
-                    context = context,
-                    onSlotChange = { newSlot ->
-                        slots = slots.toMutableList().also { it[1] = newSlot }
-                    },
-                    modifier = Modifier.weight(1f)
-                )
-            }
-
             if (isPairGame) {
-                Spacer(Modifier.height(8.dp))
+                // Порядок: Команда A: 1, 3. Команда B: 2, 4.
+                // Ход: A1 → B1 → A2 → B2 (индексы 0 → 2 → 1 → 3)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.Top
+                ) {
+                    TeamColumn(
+                        teamLabel = "КОМАНДА A",
+                        slot1 = slots[0],
+                        slot2 = slots[2],
+                        slot1Label = "1",
+                        slot2Label = "3",
+                        savedNames = savedNames,
+                        context = context,
+                        onSlot1Change = { newSlot ->
+                            slots = slots.toMutableList().also { it[0] = newSlot }
+                        },
+                        onSlot2Change = { newSlot ->
+                            slots = slots.toMutableList().also { it[2] = newSlot }
+                        },
+                        modifier = Modifier.weight(1f)
+                    )
+                    TeamColumn(
+                        teamLabel = "КОМАНДА B",
+                        slot1 = slots[1],
+                        slot2 = slots[3],
+                        slot1Label = "2",
+                        slot2Label = "4",
+                        savedNames = savedNames,
+                        context = context,
+                        onSlot1Change = { newSlot ->
+                            slots = slots.toMutableList().also { it[1] = newSlot }
+                        },
+                        onSlot2Change = { newSlot ->
+                            slots = slots.toMutableList().also { it[3] = newSlot }
+                        },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            } else {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.Top
                 ) {
                     PlayerCell(
-                        number = 3,
-                        slot = slots[2],
+                        number = 1,
+                        slot = slots[0],
                         savedNames = savedNames,
                         context = context,
                         onSlotChange = { newSlot ->
-                            slots = slots.toMutableList().also { it[2] = newSlot }
+                            slots = slots.toMutableList().also { it[0] = newSlot }
                         },
                         modifier = Modifier.weight(1f)
                     )
                     PlayerCell(
-                        number = 4,
-                        slot = slots[3],
+                        number = 2,
+                        slot = slots[1],
                         savedNames = savedNames,
                         context = context,
                         onSlotChange = { newSlot ->
-                            slots = slots.toMutableList().also { it[3] = newSlot }
+                            slots = slots.toMutableList().also { it[1] = newSlot }
                         },
                         modifier = Modifier.weight(1f)
                     )
@@ -232,7 +242,7 @@ fun CricketSetupScreen(
 
             Spacer(Modifier.height(24.dp))
 
-            // ── Тип крикета — в одну строку ──
+            // ── Тип крикета ──
             Text(
                 "ТИП КРИКЕТА",
                 color = Accent,
@@ -264,7 +274,7 @@ fun CricketSetupScreen(
 
             Spacer(Modifier.height(24.dp))
 
-            // ── Сеты / Леги в одну строку ──
+            // ── Сеты / Леги ──
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -329,27 +339,73 @@ fun CricketSetupScreen(
                 .clip(RoundedCornerShape(16.dp))
                 .background(Accent)
                 .clickable {
-                    val activeSlots = if (isPairGame) slots else slots.take(2)
-                    val players = activeSlots.map { slot ->
-                        CricketPlayer(
-                            name = if (slot.isBot) slot.bot.name else slot.name,
-                            isBot = slot.isBot,
-                            botLevel = if (slot.isBot) slot.bot.id else 0
+                    val players: List<CricketPlayer> = if (isPairGame) {
+                        // Порядок хода: A1 → B1 → A2 → B2 (индексы 0 → 1 → 2 → 3)
+                        // slots[0] = A1 (teamIndex 0), slots[1] = B1 (teamIndex 1),
+                        // slots[2] = A2 (teamIndex 0), slots[3] = B2 (teamIndex 1)
+                        listOf(
+                            CricketPlayer(
+                                name = if (slots[0].isBot) slots[0].bot.name else slots[0].name,
+                                isBot = slots[0].isBot,
+                                botLevel = if (slots[0].isBot) slots[0].bot.id else 0,
+                                teamIndex = 0
+                            ),
+                            CricketPlayer(
+                                name = if (slots[1].isBot) slots[1].bot.name else slots[1].name,
+                                isBot = slots[1].isBot,
+                                botLevel = if (slots[1].isBot) slots[1].bot.id else 0,
+                                teamIndex = 1
+                            ),
+                            CricketPlayer(
+                                name = if (slots[2].isBot) slots[2].bot.name else slots[2].name,
+                                isBot = slots[2].isBot,
+                                botLevel = if (slots[2].isBot) slots[2].bot.id else 0,
+                                teamIndex = 0
+                            ),
+                            CricketPlayer(
+                                name = if (slots[3].isBot) slots[3].bot.name else slots[3].name,
+                                isBot = slots[3].isBot,
+                                botLevel = if (slots[3].isBot) slots[3].bot.id else 0,
+                                teamIndex = 1
+                            )
+                        ).also {
+                            // Сохраняем имена живых игроков
+                            slots.forEach { slot ->
+                                if (!slot.isBot) {
+                                    PlayerNamesStorage.saveName(context, slot.name)
+                                }
+                            }
+                        }
+                    } else {
+                        val activeSlots = slots.take(2)
+                        activeSlots.forEach { slot ->
+                            if (!slot.isBot) {
+                                PlayerNamesStorage.saveName(context, slot.name)
+                            }
+                        }
+                        if (!activeSlots[0].isBot) {
+                            PlayerNamesStorage.setLastPlayer1(context, activeSlots[0].name)
+                        }
+                        if (activeSlots.size > 1 && !activeSlots[1].isBot) {
+                            PlayerNamesStorage.setLastPlayer2(context, activeSlots[1].name)
+                        }
+                        listOf(
+                            CricketPlayer(
+                                name = if (activeSlots[0].isBot) activeSlots[0].bot.name else activeSlots[0].name,
+                                isBot = activeSlots[0].isBot,
+                                botLevel = if (activeSlots[0].isBot) activeSlots[0].bot.id else 0,
+                                teamIndex = 0
+                            ),
+                            CricketPlayer(
+                                name = if (activeSlots[1].isBot) activeSlots[1].bot.name else activeSlots[1].name,
+                                isBot = activeSlots[1].isBot,
+                                botLevel = if (activeSlots[1].isBot) activeSlots[1].bot.id else 0,
+                                teamIndex = 1
+                            )
                         )
                     }
-                    activeSlots.forEach { slot ->
-                        if (!slot.isBot) {
-                            PlayerNamesStorage.saveName(context, slot.name)
-                        }
-                    }
-                    if (!activeSlots[0].isBot) {
-                        PlayerNamesStorage.setLastPlayer1(context, activeSlots[0].name)
-                    }
-                    if (activeSlots.size > 1 && !activeSlots[1].isBot) {
-                        PlayerNamesStorage.setLastPlayer2(context, activeSlots[1].name)
-                    }
 
-                    onStartGame(cricketType, players, legsPerSet, setsPerMatch)
+                    onStartGame(cricketType, players, legsPerSet, setsPerMatch, isPairGame)
                 }
                 .padding(vertical = 18.dp),
             contentAlignment = Alignment.Center
@@ -365,7 +421,7 @@ fun CricketSetupScreen(
 }
 
 // ─────────────────────────────────────────────
-// Компактный выбор числа (Сеты / Леги) с выпадающим списком 1..10
+// Компактный выбор числа
 // ─────────────────────────────────────────────
 @Composable
 private fun CompactNumberPicker(
@@ -428,7 +484,270 @@ private fun CompactNumberPicker(
 }
 
 // ─────────────────────────────────────────────
-// Ячейка игрока — с единым списком (Игрок / Бот)
+// Колонка команды (парная игра) — 2 слота
+// ─────────────────────────────────────────────
+@Composable
+private fun TeamColumn(
+    teamLabel: String,
+    slot1: PlayerSlot,
+    slot2: PlayerSlot,
+    slot1Label: String,
+    slot2Label: String,
+    savedNames: List<String>,
+    context: android.content.Context,
+    onSlot1Change: (PlayerSlot) -> Unit,
+    onSlot2Change: (PlayerSlot) -> Unit,
+    modifier: Modifier
+) {
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(12.dp))
+            .background(TileBgDark)
+            .padding(8.dp)
+    ) {
+        Text(
+            teamLabel,
+            color = Accent,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Bold,
+            letterSpacing = 2.sp,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 6.dp),
+            textAlign = TextAlign.Center
+        )
+
+        PlayerInnerSlot(
+            numberLabel = slot1Label,
+            slot = slot1,
+            savedNames = savedNames,
+            context = context,
+            onSlotChange = onSlot1Change
+        )
+
+        Spacer(Modifier.height(6.dp))
+
+        PlayerInnerSlot(
+            numberLabel = slot2Label,
+            slot = slot2,
+            savedNames = savedNames,
+            context = context,
+            onSlotChange = onSlot2Change
+        )
+    }
+}
+
+// ─────────────────────────────────────────────
+// Внутренний слот игрока внутри команды
+// ─────────────────────────────────────────────
+@Composable
+private fun PlayerInnerSlot(
+    numberLabel: String,
+    slot: PlayerSlot,
+    savedNames: List<String>,
+    context: android.content.Context,
+    onSlotChange: (PlayerSlot) -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+    var showAddDialog by remember { mutableStateOf(false) }
+    var newNameInput by remember { mutableStateOf("") }
+    val menuScrollState = rememberScrollState()
+
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .size(22.dp)
+                .clip(RoundedCornerShape(11.dp))
+                .background(TileBg),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                numberLabel,
+                color = Accent,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
+
+        Spacer(Modifier.width(6.dp))
+
+        Box(modifier = Modifier.weight(1f)) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(TileBg)
+                    .clickable { expanded = true }
+                    .padding(horizontal = 10.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    if (slot.isBot) slot.bot.name else slot.name,
+                    color = Color.White,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 1,
+                    modifier = Modifier.weight(1f)
+                )
+                Text("▼", color = Accent, fontSize = 10.sp)
+            }
+
+            DropdownMenu(
+                expanded = expanded,
+                onDismissRequest = { expanded = false },
+                scrollState = menuScrollState,
+                modifier = Modifier
+                    .heightIn(max = 400.dp)
+                    .background(DarkBg)
+                    .drawWithContent {
+                        drawContent()
+                        val gradientHeight = 40.dp.toPx()
+                        drawRect(
+                            brush = Brush.verticalGradient(
+                                colors = listOf(
+                                    Color.Transparent,
+                                    DarkBg.copy(alpha = 0.9f),
+                                    DarkBg
+                                ),
+                                startY = size.height - gradientHeight,
+                                endY = size.height
+                            )
+                        )
+                        if (menuScrollState.maxValue > 0) {
+                            val viewportPx = menuScrollState.viewportSize.toFloat()
+                            val maxScrollPx = menuScrollState.maxValue.toFloat()
+                            val contentPx = viewportPx + maxScrollPx
+                            if (contentPx > 0f) {
+                                val thumbFraction = (viewportPx / contentPx).coerceIn(0.05f, 1f)
+                                val thumbHeightPx = (size.height * thumbFraction).coerceAtLeast(40f)
+                                val scrollFraction = if (maxScrollPx > 0f) {
+                                    menuScrollState.value.toFloat() / maxScrollPx
+                                } else 0f
+                                val thumbTopPx = (size.height - thumbHeightPx) * scrollFraction
+                                val thumbWidthPx = 4.dp.toPx()
+                                val thumbRightPx = 3.dp.toPx()
+                                drawRoundRect(
+                                    color = Accent.copy(alpha = 0.8f),
+                                    topLeft = Offset(
+                                        x = size.width - thumbWidthPx - thumbRightPx,
+                                        y = thumbTopPx
+                                    ),
+                                    size = Size(thumbWidthPx, thumbHeightPx),
+                                    cornerRadius = CornerRadius(thumbWidthPx / 2f)
+                                )
+                            }
+                        }
+                    }
+            ) {
+                Text(
+                    "  ИГРОК",
+                    color = Accent,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 2.sp,
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+                )
+
+                savedNames.forEach { saved ->
+                    DropdownMenuItem(
+                        text = { Text(saved, color = Color.White) },
+                        onClick = {
+                            onSlotChange(slot.copy(isBot = false, name = saved))
+                            expanded = false
+                        }
+                    )
+                }
+
+                DropdownMenuItem(
+                    text = { Text("+ Новое имя", color = Accent) },
+                    onClick = {
+                        expanded = false
+                        newNameInput = ""
+                        showAddDialog = true
+                    }
+                )
+
+                HorizontalDivider(color = TileBg)
+
+                Text(
+                    "  БОТЫ",
+                    color = Accent,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 2.sp,
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+                )
+
+                CRICKET_BOTS.forEach { b ->
+                    DropdownMenuItem(
+                        text = {
+                            Column {
+                                Text(
+                                    "${b.id}. ${b.name}",
+                                    color = Color.White,
+                                    fontWeight = FontWeight.Medium
+                                )
+                                Text(
+                                    "ср. ${b.averageMin}–${b.averageMax}",
+                                    color = Accent,
+                                    fontSize = 11.sp
+                                )
+                            }
+                        },
+                        onClick = {
+                            onSlotChange(slot.copy(isBot = true, bot = b))
+                            expanded = false
+                        }
+                    )
+                }
+            }
+        }
+    }
+
+    if (showAddDialog) {
+        AlertDialog(
+            onDismissRequest = { showAddDialog = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    val trimmed = newNameInput.trim()
+                    if (trimmed.isNotBlank()) {
+                        onSlotChange(slot.copy(isBot = false, name = trimmed))
+                        PlayerNamesStorage.saveName(context, trimmed)
+                    }
+                    showAddDialog = false
+                }) {
+                    Text("Сохранить", color = Accent)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showAddDialog = false }) {
+                    Text("Отмена", color = Color.White.copy(alpha = 0.6f))
+                }
+            },
+            title = { Text("Новое имя игрока", color = Color.White) },
+            text = {
+                OutlinedTextField(
+                    value = newNameInput,
+                    onValueChange = { newNameInput = it },
+                    singleLine = true,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = Color.White,
+                        unfocusedTextColor = Color.White,
+                        focusedBorderColor = Accent,
+                        unfocusedBorderColor = TileBg,
+                        cursorColor = Accent
+                    )
+                )
+            }
+        )
+    }
+}
+
+// ─────────────────────────────────────────────
+// Ячейка игрока (одиночная игра)
 // ─────────────────────────────────────────────
 @Composable
 private fun PlayerCell(
