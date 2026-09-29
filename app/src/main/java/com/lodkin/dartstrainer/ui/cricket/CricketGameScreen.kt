@@ -71,7 +71,6 @@ fun CricketGameScreen(
                             playerIndex = currentPlayerIndex
                         )
 
-                        // Если 3 дротика в подходе — передаём ход
                         if (updatedGame.currentTurnDarts >= 3 && !updatedGame.isFinished) {
                             updatedGame = CricketLogic.nextPlayer(updatedGame)
                         }
@@ -259,7 +258,6 @@ private fun PlayerSectorCell(
     val isClosed = hits >= 3
 
     // Может ли игрок набирать очки в этом секторе?
-    // Да, если сектор закрыт у него, но не закрыт хотя бы у одного соперника
     val canScore = if (game.type == CricketType.AMERICAN) {
         val others = game.players.filterIndexed { i, _ -> i != playerIndex }
         val anyOtherNotClosed = others.any { (it.hits[sector] ?: 0) < 3 }
@@ -268,15 +266,22 @@ private fun PlayerSectorCell(
         false
     }
 
-    // Показывать кнопки, если:
-    // - ход этого игрока
-    // - сектор НЕ закрыт у него, ИЛИ сектор закрыт, но можно набирать очки
+    // Показывать кнопки, если ход игрока и сектор не закрыт (или можно набирать очки)
     val showButtons = isActive && (!isClosed || canScore)
+
+    // Закрыт ли сектор у всех — тогда он "мёртвый"
+    val closedByAll = game.players.all { (it.hits[sector] ?: 0) >= 3 }
 
     Column(
         modifier = modifier
             .clip(RoundedCornerShape(10.dp))
-            .background(if (isClosed) Color(0xFF2A3F2A) else TileBg)
+            .background(
+                when {
+                    closedByAll -> Color(0xFF2A2A2A)
+                    isClosed -> Color(0xFF2A3F2A)
+                    else -> TileBg
+                }
+            )
             .padding(6.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
@@ -310,7 +315,10 @@ private fun PlayerSectorCell(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(2.dp)
             ) {
-                ThrowButton("T", Modifier.weight(1f)) { onThrow(ThrowResult.TRIPLE) }
+                // У Bull нет утроения — кнопка T не показывается
+                if (sector.hasTriple) {
+                    ThrowButton("T", Modifier.weight(1f)) { onThrow(ThrowResult.TRIPLE) }
+                }
                 ThrowButton("S", Modifier.weight(1f)) { onThrow(ThrowResult.SINGLE) }
                 ThrowButton("D", Modifier.weight(1f)) { onThrow(ThrowResult.DOUBLE) }
             }
