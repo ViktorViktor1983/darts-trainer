@@ -14,15 +14,25 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import com.lodkin.dartstrainer.data.SettingsStorage
+import com.lodkin.dartstrainer.data.cricket.CricketDatabase
+import com.lodkin.dartstrainer.data.cricket.CricketGame
+import com.lodkin.dartstrainer.data.cricket.CricketPlayer
+import com.lodkin.dartstrainer.data.cricket.CricketRepository
+import com.lodkin.dartstrainer.data.cricket.CricketType
 import com.lodkin.dartstrainer.theme.Accent
 import com.lodkin.dartstrainer.theme.DarkBg
+import com.lodkin.dartstrainer.ui.GameSelectScreen
 import com.lodkin.dartstrainer.ui.LoadingScreen
 import com.lodkin.dartstrainer.ui.MainMenuScreen
 import com.lodkin.dartstrainer.ui.OnboardingResult
 import com.lodkin.dartstrainer.ui.OnboardingScreen
 import com.lodkin.dartstrainer.ui.StatsScreen
 import com.lodkin.dartstrainer.ui.WelcomeScreen
+import com.lodkin.dartstrainer.ui.cricket.CricketGameScreen
+import com.lodkin.dartstrainer.ui.cricket.CricketSetupScreen
+import com.lodkin.dartstrainer.ui.cricket.CricketStatsScreen
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -40,22 +50,24 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun DartsTrainerApp() {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
 
-    // Пройдена ли анкета
+    // Репозиторий крикета
+    val cricketRepository = remember {
+        CricketRepository(CricketDatabase.get(context).cricketDao())
+    }
+
     var onboardingDone by remember {
         mutableStateOf(SettingsStorage.isOnboardingDone(context))
     }
-
-    // Этап: "welcome" → "loading" → "main"
-    // Если анкета НЕ пройдена → сначала "welcome" (приветствие), затем "onboarding"
-    // Если анкета пройдена → "loading" (3 сек) → "main"
     var stage by remember {
         mutableStateOf(if (onboardingDone) "loading" else "welcome")
     }
-
     var screen by remember { mutableStateOf("main") }
 
-    // Переход с "loading" на "main" через 3 секунды
+    // Состояние крикета
+    var cricketGame by remember { mutableStateOf<CricketGame?>(null) }
+
     if (stage == "loading") {
         LaunchedEffect(Unit) {
             delay(3000)
@@ -82,18 +94,81 @@ fun DartsTrainerApp() {
         "main" -> when (screen) {
             "main" -> MainMenuScreen(
                 onTraining = { screen = "training" },
-                onFreePlay = { screen = "free" },
+                onFreePlay = { screen = "game_select" },
                 onStatsClick = { screen = "stats" }
             )
+
             "stats" -> StatsScreen(onBack = { screen = "main" })
+
             "training" -> PlaceholderScreen(
                 title = "Тренировка",
                 onBack = { screen = "main" }
             )
-            "free" -> PlaceholderScreen(
-                title = "Свободная игра",
+
+            // ── Выбор игры ──
+            "game_select" -> GameSelectScreen(
+                onCricket = { screen = "cricket_setup" },
+                on501 = { screen = "placeholder_501" },
                 onBack = { screen = "main" }
             )
+
+            "placeholder_501" -> PlaceholderScreen(
+                title = "501 — в разработке",
+                onBack = { screen = "game_select" }
+            )
+
+            // ── Крикет ──
+            "cricket_setup" -> CricketSetupScreen(
+                playerName = SettingsStorage.getPlayerName(context),
+                onStartGame = { type: CricketType, players: List<CricketPlayer> ->
+                    cricketGame = CricketGame(
+                        type = type,
+                        players = players,
+                        currentPlayerIndex = 0,
+                        isFinished = false,
+                        winnerIndex = null,
+                        currentTurnDarts = 0
+                    )
+                    screen = "cricket_game"
+                },
+                onBack = { screen = "game_select" }
+            )
+
+            "cricket_game" -> {
+                val game = cricketGame
+                if (game != null) {
+                    CricketGameScreen(
+                        initialGame = game,
+                        onGameFinish = { finished: CricketGame ->
+                            // Сохраняем игру в базу
+                            scope.launch {
+                                cricketRepository.saveGame(finished)
+                            }
+                            cricketGame = finished
+                            screen = "cricket_stats"
+                        },
+                        onBack = { screen = "game_select" }
+                    )
+                } else {
+                    screen = "cricket_setup"
+                }
+            }
+
+            "cricket_stats" -> {
+                val game = cricketGame
+                if (game != null) {
+                    CricketStatsScreen(
+                        game = game,
+                        onPlayAgain = { screen = "cricket_setup" },
+                        onBackToMenu = {
+                            cricketGame = null
+                            screen = "main"
+                        }
+                    )
+                } else {
+                    screen = "main"
+                }
+            }
         }
     }
 }
@@ -105,7 +180,7 @@ fun PlaceholderScreen(title: String, onBack: () -> Unit) {
         contentAlignment = Alignment.Center
     ) {
         Text(
-            text = "$title — в разработке",
+            text = "$title",
             color = Accent
         )
     }
