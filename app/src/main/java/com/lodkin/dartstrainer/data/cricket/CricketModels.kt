@@ -73,6 +73,9 @@ data class CricketGame(
     // Кто начинал текущий лег (0 или 1) — для чередования
     val lastLegStartingTeam: Int = 0,
 
+    // АвтоОК: сколько секунд ждать без нажатия (0 = выключено)
+    val autoOkSeconds: Int = 0,
+
     val isPairGame: Boolean = false,
     val teamCount: Int = 2,
     val playersPerTeam: Int = 1
