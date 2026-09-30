@@ -177,7 +177,6 @@ object CricketLogic {
         val newLegsInCurrentSet = currentLegs + 1
         val setWon = newLegsInCurrentSet >= game.legsPerSet
 
-        // Чередование старта: следующий лег начинает противоположная команда
         val nextStartingTeam = 1 - game.lastLegStartingTeam
         val nextStartingPlayerIndex = game.players
             .indexOfFirst { it.teamIndex == nextStartingTeam }
@@ -246,7 +245,8 @@ object CricketLogic {
         legsPerSet: Int = 1,
         setsPerMatch: Int = 1,
         isPairGame: Boolean = false,
-        startingTeamIndex: Int = 0
+        startingTeamIndex: Int = 0,
+        autoOkSeconds: Int = 0
     ): CricketGame {
         val startingPlayerIndex = players
             .indexOfFirst { it.teamIndex == startingTeamIndex }
@@ -268,7 +268,8 @@ object CricketLogic {
             isPairGame = isPairGame,
             teamCount = 2,
             playersPerTeam = if (isPairGame) 2 else 1,
-            lastLegStartingTeam = startingTeamIndex
+            lastLegStartingTeam = startingTeamIndex,
+            autoOkSeconds = autoOkSeconds
         )
     }
 }
