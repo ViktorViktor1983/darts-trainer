@@ -9,6 +9,7 @@ import androidx.room.PrimaryKey
 import androidx.room.Query
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import java.util.Locale
 
 // Сохранённая игра по крикету
 @Entity(tableName = "cricket_games")
@@ -24,12 +25,12 @@ data class CricketGameEntity(
     val legsPlayed: Int,             // сколько легов было в матче
     val totalDarts: String,          // "45|42"
     val misses: String,              // "12|8"
-    val triples: String,             // "5|3" (включая T-Bull? — считаем все утроения 15-20)
-    val bullAttempts: String,        // "4|2" прицельных
+    val triples: String,             // "5|3"
+    val bullAttempts: String,        // "4|2"
     val bullHits: String,            // "2|1"
-    val perfectRounds: String,       // "1|0" идеальных (8-9 меток)
-    val strongRounds: String,        // "3|2" сильных (6-7 меток)
-    val mpr: String                  // "1.85|2.10"
+    val perfectRounds: String,       // "1|0"
+    val strongRounds: String,        // "3|2"
+    val mpr: String                  // "1.85|2.10" (точка как разделитель!)
 )
 
 @Dao
@@ -53,7 +54,7 @@ interface CricketDao {
 
 @Database(
     entities = [CricketGameEntity::class],
-    version = 2,
+    version = 3,
     exportSchema = false
 )
 abstract class CricketDatabase : RoomDatabase() {
@@ -105,17 +106,15 @@ class CricketRepository(
 
     suspend fun clearAll() = dao.clearAll()
 
-    // Сколько всего легов было в матче.
-    // Формула: (номер сета - 1) * legsPerSet + номер лега.
-    // Если матч завершён, то номер сета и лега уже актуальны для последнего лега.
     private fun computeLegsPlayed(game: CricketGame): Int {
         return (game.currentSetNumber - 1) * game.legsPerSet + game.currentLegNumber
     }
 
+    // ВАЖНО: используем Locale.US, чтобы десятичный разделитель был точкой
     private fun computeMpr(player: CricketPlayer): String {
         if (player.matchDartsThrown < 3) return "0.00"
         val marks = player.matchHits.values.sum()
         val rounds = player.matchDartsThrown / 3.0
-        return "%.2f".format(marks / rounds)
+        return String.format(Locale.US, "%.2f", marks / rounds)
     }
 }
