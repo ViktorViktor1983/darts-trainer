@@ -32,6 +32,12 @@ data class CricketPlayer(
     val botLevel: Int = 0,
     val teamIndex: Int = 0,
 
+    // ── Состояние серии бота (только для ботов) ──
+    // Текущий множитель серии: 1.0 = обычная, >1 «летит», <1 «не летит»
+    var botStreak: Double = 1.0,
+    // Сколько подходов осталось в текущей серии
+    var botStreakLeft: Int = 0,
+
     val hits: MutableMap<CricketSector, Int> = CricketSector.ALL.associateWith { 0 }.toMutableMap(),
     val scores: MutableMap<CricketSector, Int> = CricketSector.ALL.associateWith { 0 }.toMutableMap(),
     var totalScore: Int = 0,
@@ -70,11 +76,14 @@ data class CricketGame(
     val lastLegWinnerPlayerIndex: Int? = null,
     val lastLegDartsClicked: Int = 0,
 
-    // Кто начинал текущий лег (0 или 1) — для чередования
     val lastLegStartingTeam: Int = 0,
-
-    // АвтоОК: сколько секунд ждать без нажатия (0 = выключено)
     val autoOkSeconds: Int = 0,
+
+    // ── Сессия (общее на весь запуск приложения) ──
+    // Время старта сессии (System.currentTimeMillis при onCreate MainActivity)
+    val sessionStartTime: Long = 0L,
+    // Форма дня для всех ботов (0.85..1.15), одна на сессию
+    val sessionForm: Double = 1.0,
 
     val isPairGame: Boolean = false,
     val teamCount: Int = 2,
