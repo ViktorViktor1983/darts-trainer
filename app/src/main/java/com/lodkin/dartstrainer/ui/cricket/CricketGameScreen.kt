@@ -119,7 +119,6 @@ fun CricketGameScreen(
             }
         )
 
-        // Сетка секторов — растягивается на всё оставшееся место
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -253,17 +252,6 @@ private fun TopBar(game: CricketGame, onBack: () -> Unit) {
             .padding(horizontal = 12.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Box(
-            modifier = Modifier
-                .size(38.dp)
-                .clip(CircleShape)
-                .background(TileBg)
-                .clickable { onBack() },
-            contentAlignment = Alignment.Center
-        ) {
-            Text("←", color = Accent, fontSize = 20.sp)
-        }
-        Spacer(Modifier.width(12.dp))
         Text(
             "Крикет ($modeLabel)",
             color = Color.White,
@@ -271,6 +259,23 @@ private fun TopBar(game: CricketGame, onBack: () -> Unit) {
             fontWeight = FontWeight.Bold,
             modifier = Modifier.weight(1f)
         )
+        Spacer(Modifier.width(12.dp))
+        // Прямоугольная кнопка «Назад» справа
+        Box(
+            modifier = Modifier
+                .clip(RoundedCornerShape(10.dp))
+                .background(TileBg)
+                .clickable { onBack() }
+                .padding(horizontal = 24.dp, vertical = 10.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                "← Назад",
+                color = Accent,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
     }
 }
 
@@ -478,7 +483,7 @@ private fun ScoreControlRow(
 private fun UndoButton(enabled: Boolean, onClick: () -> Unit) {
     Box(
         modifier = Modifier
-            .size(38.dp)
+            .size(width = 48.dp, height = 38.dp)
             .clip(RoundedCornerShape(8.dp))
             .background(if (enabled) TileBg else TileBgDark)
             .clickable(enabled = enabled) { onClick() },
@@ -487,7 +492,7 @@ private fun UndoButton(enabled: Boolean, onClick: () -> Unit) {
         Text(
             "↶",
             color = if (enabled) Accent else Accent.copy(alpha = 0.3f),
-            fontSize = 20.sp,
+            fontSize = 22.sp,
             fontWeight = FontWeight.Bold
         )
     }
@@ -624,20 +629,23 @@ private fun TeamSectorCell(
         horizontalArrangement = if (mirror) Arrangement.End else Arrangement.Start
     ) {
         if (!mirror) {
-            // Слева: T | 18dp | очки | 18dp | S-квадрат
+            // Слева: T | очки (фикс. ширина) | S
             ThrowCircleButton(buttonLabel, canThrow) { onThrow(ThrowResult.TRIPLE) }
-            Spacer(Modifier.width(18.dp))
-            if (scoreText.isNotEmpty()) {
-                Text(
-                    scoreText,
-                    color = scoreColor,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Bold
-                )
-                Spacer(Modifier.width(18.dp))
-            } else {
-                Spacer(Modifier.width(18.dp))
+            Spacer(Modifier.width(12.dp))
+            Box(
+                modifier = Modifier.width(60.dp),
+                contentAlignment = Alignment.CenterEnd
+            ) {
+                if (scoreText.isNotEmpty()) {
+                    Text(
+                        scoreText,
+                        color = scoreColor,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
             }
+            Spacer(Modifier.width(12.dp))
             HitsSquare(
                 hits = displayHits,
                 hasScore = myScore > 0,
@@ -645,25 +653,28 @@ private fun TeamSectorCell(
                 onClick = { onThrow(ThrowResult.SINGLE) }
             )
         } else {
-            // Справа (зеркально): S-квадрат | 18dp | очки | 18dp | T
+            // Справа (зеркально): S | очки (фикс. ширина) | T
             HitsSquare(
                 hits = displayHits,
                 hasScore = myScore > 0,
                 enabled = canThrow,
                 onClick = { onThrow(ThrowResult.SINGLE) }
             )
-            Spacer(Modifier.width(18.dp))
-            if (scoreText.isNotEmpty()) {
-                Text(
-                    scoreText,
-                    color = scoreColor,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Bold
-                )
-                Spacer(Modifier.width(18.dp))
-            } else {
-                Spacer(Modifier.width(18.dp))
+            Spacer(Modifier.width(12.dp))
+            Box(
+                modifier = Modifier.width(60.dp),
+                contentAlignment = Alignment.CenterStart
+            ) {
+                if (scoreText.isNotEmpty()) {
+                    Text(
+                        scoreText,
+                        color = scoreColor,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
             }
+            Spacer(Modifier.width(12.dp))
             ThrowCircleButton(buttonLabel, canThrow) { onThrow(ThrowResult.TRIPLE) }
         }
     }
