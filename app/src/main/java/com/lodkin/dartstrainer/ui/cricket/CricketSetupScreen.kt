@@ -64,13 +64,11 @@ fun CricketSetupScreen(
     var legsPerSet by remember { mutableStateOf(1) }
     var setsPerMatch by remember { mutableStateOf(1) }
 
-    // Кто начинает: 0 или 1
     var startingTeam by remember { mutableStateOf(0) }
 
-    // Розыгрыш Bull
     var showBullInputDialog by remember { mutableStateOf(false) }
     var showBullResultDialog by remember { mutableStateOf(false) }
-    var humanBullResult by remember { mutableStateOf(-1) }  // -1 = не выбрано, 0 = мимо, 1 = зелёный, 2 = красный
+    var humanBullResult by remember { mutableStateOf(-1) }
     var botBullResult by remember { mutableStateOf(-1) }
 
     var slots by remember {
@@ -91,7 +89,6 @@ fun CricketSetupScreen(
     val allHumans = activeSlots.all { !it.isBot }
     val hasHuman = activeSlots.any { !it.isBot }
 
-    // При смене режима сбрасываем розыгрыш
     LaunchedEffect(isPairGame) {
         startingTeam = 0
         humanBullResult = -1
@@ -139,14 +136,30 @@ fun CricketSetupScreen(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.Top
                 ) {
-                    TeamColumn("КОМАНДА A", slots[0], slots[2], "1", "3", savedNames, context,
-                        onSlot1Change = { slots = slots.toMutableList().also { it[0] = it } },
-                        onSlot2Change = { slots = slots.toMutableList().also { it[2] = it } },
-                        modifier = Modifier.weight(1f))
-                    TeamColumn("КОМАНДА B", slots[1], slots[3], "2", "4", savedNames, context,
-                        onSlot1Change = { slots = slots.toMutableList().also { it[1] = it } },
-                        onSlot2Change = { slots = slots.toMutableList().also { it[3] = it } },
-                        modifier = Modifier.weight(1f))
+                    TeamColumn(
+                        teamLabel = "КОМАНДА A",
+                        slot1 = slots[0],
+                        slot2 = slots[2],
+                        slot1Label = "1",
+                        slot2Label = "3",
+                        savedNames = savedNames,
+                        context = context,
+                        onSlot1Change = { newSlot -> slots = slots.toMutableList().also { it[0] = newSlot } },
+                        onSlot2Change = { newSlot -> slots = slots.toMutableList().also { it[2] = newSlot } },
+                        modifier = Modifier.weight(1f)
+                    )
+                    TeamColumn(
+                        teamLabel = "КОМАНДА B",
+                        slot1 = slots[1],
+                        slot2 = slots[3],
+                        slot1Label = "2",
+                        slot2Label = "4",
+                        savedNames = savedNames,
+                        context = context,
+                        onSlot1Change = { newSlot -> slots = slots.toMutableList().also { it[1] = newSlot } },
+                        onSlot2Change = { newSlot -> slots = slots.toMutableList().also { it[3] = newSlot } },
+                        modifier = Modifier.weight(1f)
+                    )
                 }
             } else {
                 Row(
@@ -154,12 +167,22 @@ fun CricketSetupScreen(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.Top
                 ) {
-                    PlayerCell(1, slots[0], savedNames, context,
-                        onSlotChange = { slots = slots.toMutableList().also { it[0] = it } },
-                        modifier = Modifier.weight(1f))
-                    PlayerCell(2, slots[1], savedNames, context,
-                        onSlotChange = { slots = slots.toMutableList().also { it[1] = it } },
-                        modifier = Modifier.weight(1f))
+                    PlayerCell(
+                        number = 1,
+                        slot = slots[0],
+                        savedNames = savedNames,
+                        context = context,
+                        onSlotChange = { newSlot -> slots = slots.toMutableList().also { it[0] = newSlot } },
+                        modifier = Modifier.weight(1f)
+                    )
+                    PlayerCell(
+                        number = 2,
+                        slot = slots[1],
+                        savedNames = savedNames,
+                        context = context,
+                        onSlotChange = { newSlot -> slots = slots.toMutableList().also { it[1] = newSlot } },
+                        modifier = Modifier.weight(1f)
+                    )
                 }
             }
 
@@ -224,9 +247,8 @@ fun CricketSetupScreen(
                 }
             }
 
-            // ─── Блок "КТО НАЧИНАЕТ" ───
+            // ─── КТО НАЧИНАЕТ ───
             if (hasHuman && !allHumans) {
-                // Смесь: человек + бот → розыгрыш Bull
                 Spacer(Modifier.height(24.dp))
                 Text("КТО НАЧИНАЕТ", color = Accent, fontSize = 13.sp, fontWeight = FontWeight.Medium,
                     letterSpacing = 3.sp, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
@@ -243,7 +265,6 @@ fun CricketSetupScreen(
                     Text("Разыграть Bull", color = Accent, fontSize = 15.sp, fontWeight = FontWeight.Bold)
                 }
             } else if (allHumans) {
-                // Все люди → простой выбор
                 Spacer(Modifier.height(24.dp))
                 Text("КТО НАЧИНАЕТ", color = Accent, fontSize = 13.sp, fontWeight = FontWeight.Medium,
                     letterSpacing = 3.sp, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
@@ -256,7 +277,6 @@ fun CricketSetupScreen(
                     CricketTypeHalf(labelB, startingTeam == 1, { startingTeam = 1 }, Modifier.weight(1f))
                 }
             }
-            // Все боты → блок не показываем
 
             Spacer(Modifier.height(24.dp))
         }
@@ -281,8 +301,6 @@ fun CricketSetupScreen(
                         }
                     } else {
                         val a = slots[0]; val b = slots[1]
-                        if (!a.isBot) PlayerNamesStorage.setLastPlayer1(context, a.name)
-                        if (!b.isBot) PlayerNamesStorage.setLastPlayer2(context, b.name)
                         listOf(
                             CricketPlayer(name = if (a.isBot) a.bot.name else a.name,
                                 isBot = a.isBot, botLevel = if (a.isBot) a.bot.id else 0, teamIndex = 0),
@@ -291,6 +309,8 @@ fun CricketSetupScreen(
                         ).also {
                             if (!a.isBot) PlayerNamesStorage.saveName(context, a.name)
                             if (!b.isBot) PlayerNamesStorage.saveName(context, b.name)
+                            if (!a.isBot) PlayerNamesStorage.setLastPlayer1(context, a.name)
+                            if (!b.isBot) PlayerNamesStorage.setLastPlayer2(context, b.name)
                         }
                     }
                     onStartGame(cricketType, players, legsPerSet, setsPerMatch, isPairGame, startingTeam)
@@ -302,7 +322,7 @@ fun CricketSetupScreen(
         }
     }
 
-    // ─── Диалог: ввод результата броска в Bull ───
+    // ─── Диалог ввода результата броска в Bull ───
     if (showBullInputDialog) {
         AlertDialog(
             onDismissRequest = { showBullInputDialog = false },
@@ -340,11 +360,19 @@ fun CricketSetupScreen(
         )
     }
 
-    // ─── Диалог: результат розыгрыша ───
+    // ─── Диалог результата розыгрыша ───
     if (showBullResultDialog) {
-        val humanTeam = activeSlots.firstOrNull { !it.isBot }
-            ?.let { if (isPairGame) (if (slots.indexOf(it) == 0 || slots.indexOf(it) == 2) 0 else 1) else if (slots.indexOf(it) == 0) 0 else 1 }
-            ?: 0
+        val humanSlotIndex = activeSlots.indexOfFirst { !it.isBot }
+        val humanTeam = if (humanSlotIndex < 0) 0 else {
+            if (isPairGame) {
+                // В парной: слоты 0 и 2 — команда A, слоты 1 и 3 — команда B
+                // activeSlots при парной = все 4 слота, порядок: A1 (0), B1 (1), A2 (2), B2 (3)
+                if (humanSlotIndex == 0 || humanSlotIndex == 2) 0 else 1
+            } else {
+                // Одиночная: слот 0 — команда A, слот 1 — команда B
+                humanSlotIndex
+            }
+        }
         val humanName = activeSlots.first { !it.isBot }.let { if (it.isBot) it.bot.name else it.name }
         val botName = activeSlots.first { it.isBot }.bot.name
 
@@ -394,7 +422,6 @@ fun CricketSetupScreen(
     }
 }
 
-// Генерация результата бота в Bull: 0 = мимо, 1 = зелёный, 2 = красный
 private fun generateBotBullResult(bot: CricketBot): Int {
     val lvl = bot.id.coerceIn(1, 16)
     val pRed = 0.05 + (lvl - 1) * 0.027
