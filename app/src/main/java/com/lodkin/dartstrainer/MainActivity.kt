@@ -107,14 +107,16 @@ fun DartsTrainerApp() {
                                 legsPerSet: Int,
                                 setsPerMatch: Int,
                                 isPairGame: Boolean,
-                                startingTeam: Int ->
+                                startingTeam: Int,
+                                autoOkSeconds: Int ->
                     cricketGame = CricketLogic.newGame(
                         type = type,
                         players = players,
                         legsPerSet = legsPerSet,
                         setsPerMatch = setsPerMatch,
                         isPairGame = isPairGame,
-                        startingTeamIndex = startingTeam
+                        startingTeamIndex = startingTeam,
+                        autoOkSeconds = autoOkSeconds
                     )
                     screen = "cricket_game"
                 },
