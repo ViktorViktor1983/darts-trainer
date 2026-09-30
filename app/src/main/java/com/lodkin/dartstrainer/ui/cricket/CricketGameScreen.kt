@@ -237,9 +237,6 @@ private fun TeamScoresList(game: CricketGame, showLegs: Boolean) {
     }
 }
 
-// ─────────────────────────────────────────────
-// ВЕРХНЯЯ ПАНЕЛЬ
-// ─────────────────────────────────────────────
 @Composable
 private fun TopBar(game: CricketGame, onBack: () -> Unit) {
     val modeLabel = if (game.type == CricketType.AMERICAN) "Американский" else "Без очков"
@@ -271,9 +268,6 @@ private fun TopBar(game: CricketGame, onBack: () -> Unit) {
     }
 }
 
-// ─────────────────────────────────────────────
-// ПАРАМЕТРЫ ИГРЫ
-// ─────────────────────────────────────────────
 @Composable
 private fun ParamsRow(game: CricketGame) {
     Row(
@@ -292,7 +286,7 @@ private fun ParamsRow(game: CricketGame) {
 }
 
 // ─────────────────────────────────────────────
-// ШАПКА: ИМЕНА + СР + ЛЕГ + СЕТЫ (+25%)
+// ШАПКА: ИМЕНА + СР + ЛЕГ + СЕТЫ (+30% к предыдущему)
 // ─────────────────────────────────────────────
 @Composable
 private fun TeamsHeaderRow(game: CricketGame) {
@@ -324,7 +318,7 @@ private fun TeamsHeaderRow(game: CricketGame) {
         modifier = Modifier
             .fillMaxWidth()
             .background(Color(0xFF16202C))
-            .padding(horizontal = 10.dp, vertical = 12.dp)
+            .padding(horizontal = 10.dp, vertical = 16.dp)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             SetBadge(setsA)
@@ -333,20 +327,20 @@ private fun TeamsHeaderRow(game: CricketGame) {
                 Text(
                     teamAName,
                     color = if (activeTeam == 0) Accent else Color.White,
-                    fontSize = 17.sp,
+                    fontSize = 22.sp,
                     fontWeight = FontWeight.Bold,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
-                Text("ср. %.2f".format(avgA), color = Color(0xFF99AABB), fontSize = 14.sp)
+                Text("ср. %.2f".format(avgA), color = Color(0xFF99AABB), fontSize = 18.sp)
             }
 
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("ЛЕГ", color = Color(0xFF99AABB), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                Text("ЛЕГ", color = Color(0xFF99AABB), fontSize = 14.sp, fontWeight = FontWeight.Bold)
                 Text(
                     "$legsA : $legsB",
                     color = Color.White,
-                    fontSize = 26.sp,
+                    fontSize = 34.sp,
                     fontWeight = FontWeight.Bold
                 )
             }
@@ -355,13 +349,13 @@ private fun TeamsHeaderRow(game: CricketGame) {
                 Text(
                     teamBName,
                     color = if (activeTeam == 1) Accent else Color.White,
-                    fontSize = 17.sp,
+                    fontSize = 22.sp,
                     fontWeight = FontWeight.Bold,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     textAlign = TextAlign.End
                 )
-                Text("ср. %.2f".format(avgB), color = Color(0xFF99AABB), fontSize = 14.sp)
+                Text("ср. %.2f".format(avgB), color = Color(0xFF99AABB), fontSize = 18.sp)
             }
             Spacer(Modifier.width(8.dp))
             SetBadge(setsB)
@@ -375,17 +369,14 @@ private fun SetBadge(sets: Int) {
         modifier = Modifier
             .clip(RoundedCornerShape(8.dp))
             .background(TileBgDark)
-            .padding(horizontal = 10.dp, vertical = 6.dp),
+            .padding(horizontal = 12.dp, vertical = 8.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text("СЕТ", color = Accent, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-        Text("$sets", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+        Text("СЕТ", color = Accent, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+        Text("$sets", color = Color.White, fontSize = 23.sp, fontWeight = FontWeight.Bold)
     }
 }
 
-// ─────────────────────────────────────────────
-// СЧЁТЧИК ДРОТИКОВ + РАЗНИЦА + ХОД НАЗАД (×2) + OK
-// ─────────────────────────────────────────────
 @Composable
 private fun ScoreControlRow(
     game: CricketGame,
@@ -507,9 +498,6 @@ private fun ScoreDiffBadge(text: String, positive: Boolean) {
     }
 }
 
-// ─────────────────────────────────────────────
-// СТРОКА СЕКТОРА
-// ─────────────────────────────────────────────
 @Composable
 private fun SectorRow(
     sector: CricketSector,
@@ -621,8 +609,9 @@ private fun TeamSectorCell(
         horizontalArrangement = if (mirror) Arrangement.End else Arrangement.Start
     ) {
         if (!mirror) {
+            // T | (12dp gap) | S-квадрат | очки
             ThrowCircleButton(buttonLabel, canThrow) { onThrow(ThrowResult.TRIPLE) }
-            Spacer(Modifier.width(4.dp))
+            Spacer(Modifier.width(14.dp))
             HitsSquare(
                 hits = displayHits,
                 hasScore = myScore > 0,
@@ -639,6 +628,7 @@ private fun TeamSectorCell(
                 )
             }
         } else {
+            // очки | S-квадрат | (12dp gap) | T
             if (scoreText.isNotEmpty()) {
                 Text(
                     scoreText,
@@ -654,7 +644,7 @@ private fun TeamSectorCell(
                 enabled = canThrow,
                 onClick = { onThrow(ThrowResult.SINGLE) }
             )
-            Spacer(Modifier.width(4.dp))
+            Spacer(Modifier.width(14.dp))
             ThrowCircleButton(buttonLabel, canThrow) { onThrow(ThrowResult.TRIPLE) }
         }
     }
@@ -664,7 +654,7 @@ private fun TeamSectorCell(
 private fun ThrowCircleButton(label: String, enabled: Boolean, onClick: () -> Unit) {
     Box(
         modifier = Modifier
-            .size(36.dp)
+            .size(38.dp)
             .clip(CircleShape)
             .background(if (enabled) Accent.copy(alpha = 0.9f) else TileBgDark)
             .clickable(enabled = enabled) { onClick() },
@@ -698,31 +688,31 @@ private fun HitsSquare(
         hits >= 3 -> "3"
         hits == 2 -> "2"
         hits == 1 -> "1"
-        else -> ""
+        else -> "S"
+    }
+    val labelColor = when {
+        hits == 0 -> Color(0xFF78909C)   // серая S
+        hits >= 3 -> Color.White          // белый на красном/фиолетовом
+        else -> Color(0xFF121212)         // чёрный на зелёном/жёлтом
     }
 
     Box(
         modifier = Modifier
-            .size(36.dp)
+            .size(38.dp)
             .clip(RoundedCornerShape(8.dp))
             .background(color)
             .clickable(enabled = enabled) { onClick() },
         contentAlignment = Alignment.Center
     ) {
-        if (label.isNotEmpty()) {
-            Text(
-                label,
-                color = if (hits == 0) Color.White else Color(0xFF121212),
-                fontSize = 15.sp,
-                fontWeight = FontWeight.Bold
-            )
-        }
+        Text(
+            label,
+            color = labelColor,
+            fontSize = if (hits == 0) 16.sp else 15.sp,
+            fontWeight = FontWeight.Bold
+        )
     }
 }
 
-// ─────────────────────────────────────────────
-// УТИЛИТЫ
-// ─────────────────────────────────────────────
 private fun teamScore(game: CricketGame, team: Int, sector: CricketSector): Int {
     return game.playersOfTeam(team).sumOf { it.scores[sector] ?: 0 }
 }
@@ -735,9 +725,6 @@ private fun avgPerLeg(game: CricketGame, team: Int): Double {
     return marks.toDouble() / (darts / 3.0)
 }
 
-// ─────────────────────────────────────────────
-// ДИАЛОГ ПОБЕДЫ
-// ─────────────────────────────────────────────
 @Composable
 private fun WinDialog(
     game: CricketGame,
