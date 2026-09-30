@@ -26,6 +26,7 @@ import com.lodkin.dartstrainer.theme.GoldAccent
 import com.lodkin.dartstrainer.theme.TileBg
 import com.lodkin.dartstrainer.theme.TileBgDark
 import kotlinx.coroutines.launch
+import java.util.Locale
 
 // ─────────────────────────────────────────────
 // Период фильтра
@@ -43,7 +44,6 @@ private enum class StatPeriod(val label: String, val daysBack: Long?) {
 // Агрегат статистики крикета (только по игрокам-людям)
 // ─────────────────────────────────────────────
 private data class CricketAggregate(
-    val matches: Int = 0,
     val legs: Int = 0,
     val darts: Int = 0,
     val misses: Int = 0,
@@ -165,24 +165,22 @@ private fun CricketTabContent(
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
     ) {
-        // Фильтр по периоду
         PeriodSelector(period = period, onPeriodChange = onPeriodChange)
 
         Spacer(Modifier.height(16.dp))
 
-        if (aggregate.matches == 0) {
+        if (aggregate.legs == 0) {
             EmptyStats()
         } else {
             // Блок 1 — Основные
             SectionTitle("ОСНОВНЫЕ")
             Spacer(Modifier.height(8.dp))
-            StatRowCard("Матчей сыграно", aggregate.matches.toString())
-            Spacer(Modifier.height(6.dp))
+            // ВНИМАНИЕ: Строка "Матчей сыграно" убрана отсюда
             StatRowCard("Легов сыграно", aggregate.legs.toString())
             Spacer(Modifier.height(6.dp))
-            StatRowCard("Средний набор (MPR)", "%.2f".format(aggregate.avgMpr))
+            StatRowCard("Средний набор (MPR)", "%.2f".format(Locale.US, aggregate.avgMpr))
             Spacer(Modifier.height(6.dp))
-            StatRowCard("Лучший MPR за матч", "%.2f".format(aggregate.bestMpr))
+            StatRowCard("Лучший MPR за матч", "%.2f".format(Locale.US, aggregate.bestMpr))
 
             Spacer(Modifier.height(20.dp))
 
@@ -425,11 +423,10 @@ private fun parseDoubleList(s: String): List<Double> =
 private fun percentLabel(part: Int, total: Int): String {
     if (total <= 0) return "—"
     val p = part.toDouble() / total * 100.0
-    return "%.1f%%".format(p)
+    return String.format(Locale.US, "%.1f%%", p)
 }
 
 private fun computeAggregate(games: List<CricketGameEntity>): CricketAggregate {
-    var matches = 0
     var legs = 0
     var darts = 0
     var misses = 0
@@ -466,7 +463,6 @@ private fun computeAggregate(games: List<CricketGameEntity>): CricketAggregate {
             }
         }
         if (hasHuman) {
-            matches++
             legs += g.legsPlayed
         }
     }
@@ -475,7 +471,6 @@ private fun computeAggregate(games: List<CricketGameEntity>): CricketAggregate {
     val bestMpr = mprValues.maxOrNull() ?: 0.0
 
     return CricketAggregate(
-        matches = matches,
         legs = legs,
         darts = darts,
         misses = misses,
