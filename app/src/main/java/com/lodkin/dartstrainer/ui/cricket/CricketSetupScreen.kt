@@ -55,7 +55,7 @@ data class PlayerSlot(
 @Composable
 fun CricketSetupScreen(
     playerName: String,
-    onStartGame: (CricketType, List<CricketPlayer>, Int, Int, Boolean, Int) -> Unit,
+    onStartGame: (CricketType, List<CricketPlayer>, Int, Int, Boolean, Int, Int) -> Unit,
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
@@ -90,7 +90,6 @@ fun CricketSetupScreen(
     val allHumans = activeSlots.all { !it.isBot }
     val hasHuman = activeSlots.any { !it.isBot }
 
-    // Функция сборки списка игроков и старта
     fun startGame(startingTeam: Int) {
         val players: List<CricketPlayer> = if (isPairGame) {
             listOf(
@@ -119,7 +118,7 @@ fun CricketSetupScreen(
                 if (!b.isBot) PlayerNamesStorage.setLastPlayer2(context, b.name)
             }
         }
-        onStartGame(cricketType, players, legsPerSet, setsPerMatch, isPairGame, startingTeam)
+        onStartGame(cricketType, players, legsPerSet, setsPerMatch, isPairGame, startingTeam, autoOkSeconds)
     }
 
     LaunchedEffect(isPairGame) {
@@ -281,7 +280,6 @@ fun CricketSetupScreen(
 
             // ─── КТО НАЧИНАЕТ ───
             if (hasHuman && !allHumans) {
-                // Смесь человек + бот → розыгрыш Bull
                 Spacer(Modifier.height(24.dp))
                 Text("КТО НАЧИНАЕТ", color = Accent, fontSize = 13.sp, fontWeight = FontWeight.Medium,
                     letterSpacing = 3.sp, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
@@ -298,7 +296,6 @@ fun CricketSetupScreen(
                     Text("Разыграть Bull", color = PaleRedText, fontSize = 16.sp, fontWeight = FontWeight.Bold)
                 }
             } else if (allHumans) {
-                // Все люди → сразу старт при выборе
                 Spacer(Modifier.height(24.dp))
                 Text("КТО НАЧИНАЕТ", color = Accent, fontSize = 13.sp, fontWeight = FontWeight.Medium,
                     letterSpacing = 3.sp, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
@@ -329,12 +326,10 @@ fun CricketSetupScreen(
                     }
                 }
             }
-            // Все боты → блок не показываем, будет нижняя кнопка «НАЧАТЬ ИГРУ»
 
             Spacer(Modifier.height(24.dp))
         }
 
-        // Нижняя кнопка — только если все боты
         if (allBots) {
             Box(
                 modifier = Modifier.fillMaxWidth()
@@ -349,7 +344,6 @@ fun CricketSetupScreen(
         }
     }
 
-    // ─── Диалог ввода результата броска в Bull ───
     if (showBullInputDialog) {
         AlertDialog(
             onDismissRequest = { showBullInputDialog = false },
@@ -387,7 +381,6 @@ fun CricketSetupScreen(
         )
     }
 
-    // ─── Диалог результата розыгрыша ───
     if (showBullResultDialog) {
         val humanSlotIndex = activeSlots.indexOfFirst { !it.isBot }
         val humanTeam = if (humanSlotIndex < 0) 0 else {
