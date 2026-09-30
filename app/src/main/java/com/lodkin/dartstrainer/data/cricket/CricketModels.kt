@@ -21,7 +21,7 @@ enum class CricketSector(
 
 // Тип крикета
 enum class CricketType {
-    AMERICAN,        // с набором очков
+    AMERICAN,        // американский (с набором очков)
     NO_SCORE         // без набора очков
 }
 
@@ -32,34 +32,21 @@ data class CricketPlayer(
     val botLevel: Int = 0,
     val teamIndex: Int = 0,
 
-    // для каждого сектора: сколько попаданий (0..3) в текущем леге
     val hits: MutableMap<CricketSector, Int> = CricketSector.ALL.associateWith { 0 }.toMutableMap(),
-    // для каждого сектора: сколько очков набрал в текущем леге
     val scores: MutableMap<CricketSector, Int> = CricketSector.ALL.associateWith { 0 }.toMutableMap(),
-    // общая сумма очков в текущем леге
     var totalScore: Int = 0,
-    // количество бросков в текущем леге
     var dartsThrown: Int = 0,
-    // ВСЕ метки за текущий лег (без обрезки до 3) — для правильного среднего набора
     var legMarks: Int = 0,
-    // Леги, выигранные в ТЕКУЩЕМ сете
     var legsInCurrentSet: Int = 0,
-    // Сеты, выигранные в МАТЧЕ
     var setsWon: Int = 0,
 
-    // ── Накопительные данные за ВЕСЬ МАТЧ ──
     var matchTotalScore: Int = 0,
     var matchDartsThrown: Int = 0,
-    // Промахи за матч
     var matchMissesThrown: Int = 0,
-    // Попадания в утроения за матч
     var matchTriplesHit: Int = 0,
-    // Bull — статистика
     var matchBullAttempts: Int = 0,
     var matchBullHits: Int = 0,
-    // Сумма попаданий по секторам за матч (в метках)
     val matchHits: MutableMap<CricketSector, Int> = CricketSector.ALL.associateWith { 0 }.toMutableMap(),
-    // Сумма очков по секторам за матч
     val matchScores: MutableMap<CricketSector, Int> = CricketSector.ALL.associateWith { 0 }.toMutableMap()
 )
 
@@ -72,24 +59,20 @@ data class CricketGame(
     val winnerIndex: Int? = null,
     val currentTurnDarts: Int = 0,
 
-    // ── Настройки матча ──
     val legsPerSet: Int = 1,
     val setsPerMatch: Int = 1,
 
-    // Текущий номер лега/сета
     val currentLegNumber: Int = 1,
     val currentSetNumber: Int = 1,
 
-    // Кто выиграл последний лег (teamIndex)
     val lastLegWinnerIndex: Int? = null,
-    // Кто выиграл последний сет (teamIndex)
     val lastSetWinnerIndex: Int? = null,
-    // Какой конкретный игрок сделал победный бросок
     val lastLegWinnerPlayerIndex: Int? = null,
-    // Сколько кликов сделал игрок в победном ходу
     val lastLegDartsClicked: Int = 0,
 
-    // ── Парная игра ──
+    // Кто начинал текущий лег (0 или 1) — для чередования
+    val lastLegStartingTeam: Int = 0,
+
     val isPairGame: Boolean = false,
     val teamCount: Int = 2,
     val playersPerTeam: Int = 1
