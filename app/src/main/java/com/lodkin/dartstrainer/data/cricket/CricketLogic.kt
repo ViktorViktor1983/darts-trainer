@@ -48,7 +48,8 @@ object CricketLogic {
             hits = CricketSector.ALL.associateWith { 0 }.toMutableMap(),
             scores = CricketSector.ALL.associateWith { 0 }.toMutableMap(),
             totalScore = 0,
-            dartsThrown = 0
+            dartsThrown = 0,
+            legMarks = 0
         )
     }
 
@@ -123,6 +124,7 @@ object CricketLogic {
             scores = newScores,
             totalScore = player.totalScore + scoreGained,
             dartsThrown = player.dartsThrown + 1,
+            legMarks = player.legMarks + multiplier,
             matchHits = newMatchHits,
             matchScores = newMatchScores,
             matchTotalScore = player.matchTotalScore + scoreGained,
