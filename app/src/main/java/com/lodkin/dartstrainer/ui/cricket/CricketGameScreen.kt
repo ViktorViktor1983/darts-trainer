@@ -136,15 +136,21 @@ fun CricketGameScreen(
                         onThrow = { result ->
                             val currentPlayer = game.players.getOrNull(game.currentPlayerIndex)
                             if (currentPlayer?.isBot == true) return@SectorRow
+                            if (game.currentTurnDarts >= 3) return@SectorRow
 
                             saveHistory()
                             val currentPlayerIndex = game.currentPlayerIndex
-                            game = CricketLogic.applyThrow(
+                            var updated = CricketLogic.applyThrow(
                                 game = game,
                                 sector = sector,
                                 result = result,
                                 playerIndex = currentPlayerIndex
                             )
+                            // Автопереход: если сделано 3 броска и лег не завершился
+                            if (updated.currentTurnDarts >= 3 && !updated.isFinished) {
+                                updated = CricketLogic.nextPlayer(updated)
+                            }
+                            game = updated
                         }
                     )
                 }
@@ -239,9 +245,6 @@ private fun TeamScoresList(game: CricketGame, showLegs: Boolean) {
     }
 }
 
-// ─────────────────────────────────────────────
-// ВЕРХНЯЯ ПАНЕЛЬ
-// ─────────────────────────────────────────────
 @Composable
 private fun TopBar(game: CricketGame, onBack: () -> Unit) {
     val modeLabel = if (game.type == CricketType.AMERICAN) "Американский" else "Без очков"
@@ -260,7 +263,6 @@ private fun TopBar(game: CricketGame, onBack: () -> Unit) {
             modifier = Modifier.weight(1f)
         )
         Spacer(Modifier.width(12.dp))
-        // Прямоугольная кнопка «Назад» справа
         Box(
             modifier = Modifier
                 .clip(RoundedCornerShape(10.dp))
@@ -279,9 +281,6 @@ private fun TopBar(game: CricketGame, onBack: () -> Unit) {
     }
 }
 
-// ─────────────────────────────────────────────
-// ПАРАМЕТРЫ ИГРЫ
-// ─────────────────────────────────────────────
 @Composable
 private fun ParamsRow(game: CricketGame) {
     Row(
@@ -299,9 +298,6 @@ private fun ParamsRow(game: CricketGame) {
     }
 }
 
-// ─────────────────────────────────────────────
-// ШАПКА: ИМЕНА + СР + ЛЕГ + СЕТЫ
-// ─────────────────────────────────────────────
 @Composable
 private fun TeamsHeaderRow(game: CricketGame) {
     val currentIdx = game.currentPlayerIndex
@@ -391,9 +387,6 @@ private fun SetBadge(sets: Int) {
     }
 }
 
-// ─────────────────────────────────────────────
-// СЧЁТЧИК ДРОТИКОВ + РАЗНИЦА + ХОД НАЗАД (×2) + OK
-// ─────────────────────────────────────────────
 @Composable
 private fun ScoreControlRow(
     game: CricketGame,
@@ -515,9 +508,6 @@ private fun ScoreDiffBadge(text: String, positive: Boolean) {
     }
 }
 
-// ─────────────────────────────────────────────
-// СТРОКА СЕКТОРА
-// ─────────────────────────────────────────────
 @Composable
 private fun SectorRow(
     sector: CricketSector,
@@ -607,21 +597,8 @@ private fun TeamSectorCell(
     val scoreA = teamScore(game, 0, sector)
     val scoreB = teamScore(game, 1, sector)
     val myScore = if (team == 0) scoreA else scoreB
-    val otherScore = if (team == 0) scoreB else scoreA
 
-    val buttonLabel = if (sector == CricketSector.BULL) "D" else "T"
-    val canThrow = isActive && !game.isFinished
-
-    val scoreText = when {
-        myScore > 0 -> "+$myScore"
-        otherScore > 0 -> "-$otherScore"
-        else -> ""
-    }
-    val scoreColor = when {
-        myScore > 0 -> GoldAccent
-        otherScore > 0 -> Color(0xFFE57373)
-        else -> Color.Transparent
-    }
+    val canThrow = isActive && !game.isFinished && game.currentTurnDarts < 3
 
     Row(
         modifier = modifier,
@@ -629,23 +606,12 @@ private fun TeamSectorCell(
         horizontalArrangement = if (mirror) Arrangement.End else Arrangement.Start
     ) {
         if (!mirror) {
-            // Слева: T | очки (фикс. ширина) | S
-            ThrowCircleButton(buttonLabel, canThrow) { onThrow(ThrowResult.TRIPLE) }
-            Spacer(Modifier.width(12.dp))
-            Box(
-                modifier = Modifier.width(60.dp),
-                contentAlignment = Alignment.CenterEnd
-            ) {
-                if (scoreText.isNotEmpty()) {
-                    Text(
-                        scoreText,
-                        color = scoreColor,
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
+            if (sector.hasTriple) {
+                ThrowCircleButton("T", canThrow) { onThrow(ThrowResult.TRIPLE) }
+                Spacer(Modifier.width(5.dp))
             }
-            Spacer(Modifier.width(12.dp))
+            ThrowCircleButton("D", canThrow) { onThrow(ThrowResult.DOUBLE) }
+            Spacer(Modifier.width(5.dp))
             HitsSquare(
                 hits = displayHits,
                 hasScore = myScore > 0,
@@ -653,29 +619,18 @@ private fun TeamSectorCell(
                 onClick = { onThrow(ThrowResult.SINGLE) }
             )
         } else {
-            // Справа (зеркально): S | очки (фикс. ширина) | T
             HitsSquare(
                 hits = displayHits,
                 hasScore = myScore > 0,
                 enabled = canThrow,
                 onClick = { onThrow(ThrowResult.SINGLE) }
             )
-            Spacer(Modifier.width(12.dp))
-            Box(
-                modifier = Modifier.width(60.dp),
-                contentAlignment = Alignment.CenterStart
-            ) {
-                if (scoreText.isNotEmpty()) {
-                    Text(
-                        scoreText,
-                        color = scoreColor,
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
+            Spacer(Modifier.width(5.dp))
+            ThrowCircleButton("D", canThrow) { onThrow(ThrowResult.DOUBLE) }
+            if (sector.hasTriple) {
+                Spacer(Modifier.width(5.dp))
+                ThrowCircleButton("T", canThrow) { onThrow(ThrowResult.TRIPLE) }
             }
-            Spacer(Modifier.width(12.dp))
-            ThrowCircleButton(buttonLabel, canThrow) { onThrow(ThrowResult.TRIPLE) }
         }
     }
 }
@@ -684,7 +639,7 @@ private fun TeamSectorCell(
 private fun ThrowCircleButton(label: String, enabled: Boolean, onClick: () -> Unit) {
     Box(
         modifier = Modifier
-            .size(48.dp)
+            .size(42.dp)
             .clip(CircleShape)
             .background(if (enabled) Accent.copy(alpha = 0.9f) else TileBgDark)
             .clickable(enabled = enabled) { onClick() },
@@ -693,7 +648,7 @@ private fun ThrowCircleButton(label: String, enabled: Boolean, onClick: () -> Un
         Text(
             label,
             color = if (enabled) Color(0xFF121212) else Accent.copy(alpha = 0.4f),
-            fontSize = 20.sp,
+            fontSize = 17.sp,
             fontWeight = FontWeight.Bold
         )
     }
@@ -728,7 +683,7 @@ private fun HitsSquare(
 
     Box(
         modifier = Modifier
-            .size(48.dp)
+            .size(42.dp)
             .clip(RoundedCornerShape(8.dp))
             .background(color)
             .clickable(enabled = enabled) { onClick() },
@@ -737,7 +692,7 @@ private fun HitsSquare(
         Text(
             label,
             color = labelColor,
-            fontSize = if (hits == 0) 20.sp else 18.sp,
+            fontSize = if (hits == 0) 18.sp else 16.sp,
             fontWeight = FontWeight.Bold
         )
     }
@@ -755,9 +710,6 @@ private fun avgPerLeg(game: CricketGame, team: Int): Double {
     return marks.toDouble() / (darts / 3.0)
 }
 
-// ─────────────────────────────────────────────
-// ДИАЛОГ ПОБЕДЫ
-// ─────────────────────────────────────────────
 @Composable
 private fun WinDialog(
     game: CricketGame,
