@@ -59,9 +59,7 @@ fun DartsTrainerApp() {
     }
 
     // ── Сессия ──
-    // Время старта сессии: фиксируется один раз при запуске приложения
     val sessionStartTime = remember { System.currentTimeMillis() }
-    // Форма дня: одна на всю сессию для всех ботов (0.85..1.15)
     val sessionForm = remember { 0.85 + Random.nextDouble() * 0.30 }
 
     var onboardingDone by remember { mutableStateOf(SettingsStorage.isOnboardingDone(context)) }
@@ -96,7 +94,11 @@ fun DartsTrainerApp() {
                 onStatsClick = { screen = "stats" }
             )
 
-            "stats" -> StatsScreen(onBack = { screen = "main" })
+            "stats" -> StatsScreen(
+                repository = cricketRepository,
+                onBack = { screen = "main" }
+            )
+
             "training" -> PlaceholderScreen("Тренировка", { screen = "main" })
 
             "game_select" -> GameSelectScreen(
