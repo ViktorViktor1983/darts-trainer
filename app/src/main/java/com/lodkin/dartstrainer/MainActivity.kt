@@ -57,21 +57,13 @@ fun DartsTrainerApp() {
         CricketRepository(CricketDatabase.get(context).cricketDao())
     }
 
-    var onboardingDone by remember {
-        mutableStateOf(SettingsStorage.isOnboardingDone(context))
-    }
-    var stage by remember {
-        mutableStateOf(if (onboardingDone) "loading" else "welcome")
-    }
+    var onboardingDone by remember { mutableStateOf(SettingsStorage.isOnboardingDone(context)) }
+    var stage by remember { mutableStateOf(if (onboardingDone) "loading" else "welcome") }
     var screen by remember { mutableStateOf("main") }
-
     var cricketGame by remember { mutableStateOf<CricketGame?>(null) }
 
     if (stage == "loading") {
-        LaunchedEffect(Unit) {
-            delay(3000)
-            stage = "main"
-        }
+        LaunchedEffect(Unit) { delay(3000); stage = "main" }
     }
 
     when (stage) {
@@ -98,11 +90,7 @@ fun DartsTrainerApp() {
             )
 
             "stats" -> StatsScreen(onBack = { screen = "main" })
-
-            "training" -> PlaceholderScreen(
-                title = "Тренировка",
-                onBack = { screen = "main" }
-            )
+            "training" -> PlaceholderScreen("Тренировка", { screen = "main" })
 
             "game_select" -> GameSelectScreen(
                 onCricket = { screen = "cricket_setup" },
@@ -110,25 +98,23 @@ fun DartsTrainerApp() {
                 onBack = { screen = "main" }
             )
 
-            "placeholder_501" -> PlaceholderScreen(
-                title = "501 — в разработке",
-                onBack = { screen = "game_select" }
-            )
+            "placeholder_501" -> PlaceholderScreen("501 — в разработке", { screen = "game_select" })
 
-            // ── Крикет ──
             "cricket_setup" -> CricketSetupScreen(
                 playerName = SettingsStorage.getPlayerName(context),
                 onStartGame = { type: CricketType,
                                 players: List<CricketPlayer>,
                                 legsPerSet: Int,
                                 setsPerMatch: Int,
-                                isPairGame: Boolean ->
+                                isPairGame: Boolean,
+                                startingTeam: Int ->
                     cricketGame = CricketLogic.newGame(
                         type = type,
                         players = players,
                         legsPerSet = legsPerSet,
                         setsPerMatch = setsPerMatch,
-                        isPairGame = isPairGame
+                        isPairGame = isPairGame,
+                        startingTeamIndex = startingTeam
                     )
                     screen = "cricket_game"
                 },
@@ -141,17 +127,13 @@ fun DartsTrainerApp() {
                     CricketGameScreen(
                         initialGame = game,
                         onGameFinish = { finished: CricketGame ->
-                            scope.launch {
-                                cricketRepository.saveGame(finished)
-                            }
+                            scope.launch { cricketRepository.saveGame(finished) }
                             cricketGame = finished
                             screen = "cricket_stats"
                         },
                         onBack = { screen = "game_select" }
                     )
-                } else {
-                    screen = "cricket_setup"
-                }
+                } else screen = "cricket_setup"
             }
 
             "cricket_stats" -> {
@@ -160,14 +142,9 @@ fun DartsTrainerApp() {
                     CricketStatsScreen(
                         game = game,
                         onPlayAgain = { screen = "cricket_setup" },
-                        onBackToMenu = {
-                            cricketGame = null
-                            screen = "main"
-                        }
+                        onBackToMenu = { cricketGame = null; screen = "main" }
                     )
-                } else {
-                    screen = "main"
-                }
+                } else screen = "main"
             }
         }
     }
@@ -175,13 +152,7 @@ fun DartsTrainerApp() {
 
 @Composable
 fun PlaceholderScreen(title: String, onBack: () -> Unit) {
-    Box(
-        modifier = Modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(
-            text = "$title",
-            color = Accent
-        )
+    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Text(text = title, color = Accent)
     }
 }
