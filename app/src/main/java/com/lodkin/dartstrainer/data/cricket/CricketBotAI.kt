@@ -8,15 +8,29 @@ object CricketBotAI {
     // Полный ход бота (3 дротика)
     fun performTurn(game: CricketGame, playerIndex: Int): CricketGame {
         val player = game.players[playerIndex]
-        val bot = CRICKET_BOTS.firstOrNull { it.id == player.botLevel } ?: CRICKET_BOTS[0]
+        if (!player.isBot) return game
 
-        val preferScore = decidePreferScore(game, playerIndex)
-        val target = chooseTargetSector(game, playerIndex, preferScore)
+        // Обновляем состояние серии для этого подхода
+        val updatedPlayer = updateStreak(player)
 
-        val startLeg = game.currentLegNumber
-        val startSet = game.currentSetNumber
+        // Сохраняем обновлённого игрока в игре
+        val playersWithStreak = game.players.toMutableList()
+        playersWithStreak[playerIndex] = updatedPlayer
+        var currentGame = game.copy(players = playersWithStreak)
 
-        var currentGame = game
+        val bot = CRICKET_BOTS.firstOrNull { it.id == updatedPlayer.botLevel } ?: CRICKET_BOTS[0]
+
+        // Итоговый множитель точности: форма дня × серия × усталость
+        val multiplier = game.sessionForm *
+            updatedPlayer.botStreak *
+            fatigueFactor(game.sessionStartTime)
+
+        val preferScore = decidePreferScore(currentGame, playerIndex)
+        val target = chooseTargetSector(currentGame, playerIndex, preferScore)
+
+        val startLeg = currentGame.currentLegNumber
+        val startSet = currentGame.currentSetNumber
+
         var dartsThrown = 0
 
         while (dartsThrown < 3 && !currentGame.isFinished) {
@@ -24,7 +38,7 @@ object CricketBotAI {
                 currentGame.currentSetNumber != startSet
             ) break
 
-            val marks = marksForDart(bot)
+            val marks = marksForDart(bot, multiplier)
             val result = when (marks) {
                 0 -> ThrowResult.MISS
                 1 -> ThrowResult.SINGLE
@@ -56,8 +70,47 @@ object CricketBotAI {
     }
 
     // ─────────────────────────────────────────────
+    // Серия (стрик) бота
+    // ─────────────────────────────────────────────
+    private fun updateStreak(player: CricketPlayer): CricketPlayer {
+        // Если серия ещё идёт — уменьшаем счётчик, streak не меняется
+        if (player.botStreakLeft > 0) {
+            return player.copy(botStreakLeft = player.botStreakLeft - 1)
+        }
+
+        // Серия закончилась (или не начиналась). 25% шанс новой серии.
+        if (Random.nextDouble() < 0.25) {
+            val positive = Random.nextBoolean()
+            val newStreak = if (positive) {
+                1.10 + Random.nextDouble() * 0.10   // 1.10..1.20 «летит»
+            } else {
+                0.80 + Random.nextDouble() * 0.10   // 0.80..0.90 «не летит»
+            }
+            val duration = 2 + Random.nextInt(2)     // 2 или 3 подхода
+            return player.copy(botStreak = newStreak, botStreakLeft = duration - 1)
+        }
+
+        // Обычное состояние
+        return player.copy(botStreak = 1.0, botStreakLeft = 0)
+    }
+
+    // ─────────────────────────────────────────────
+    // Усталость (глобальная, зависит от времени сессии)
+    // ─────────────────────────────────────────────
+    private fun fatigueFactor(sessionStartTime: Long): Double {
+        if (sessionStartTime <= 0L) return 1.0
+        val minutes = (System.currentTimeMillis() - sessionStartTime) / 60000.0
+        return when {
+            minutes < 90.0 -> 1.0
+            minutes < 120.0 -> 1.0 - 0.10 * (minutes - 90.0) / 30.0
+            minutes < 180.0 -> 0.90 - 0.05 * (minutes - 120.0) / 60.0
+            minutes < 240.0 -> 0.85 - 0.05 * (minutes - 180.0) / 60.0
+            else -> 0.80
+        }
+    }
+
+    // ─────────────────────────────────────────────
     // Решение: набирать очки или закрывать?
-    // true = набирать очки, false = закрывать сектора
     // ─────────────────────────────────────────────
     private fun decidePreferScore(game: CricketGame, playerIndex: Int): Boolean {
         val player = game.players[playerIndex]
@@ -72,10 +125,8 @@ object CricketBotAI {
             !CricketLogic.isClosedByTeam(game, myTeam, sector)
         }
 
-        // Если всё закрыто — только набирать очки
         if (notClosedByMe.isEmpty()) return true
 
-        // Если проигрываем — сначала набрать очки (если есть где)
         if (diff < 0) {
             val scoringAvailable = CricketSector.ALL.any { sector ->
                 CricketLogic.isClosedByTeam(game, myTeam, sector) &&
@@ -84,17 +135,14 @@ object CricketBotAI {
             return scoringAvailable
         }
 
-        // Остался 1 сектор до победы и счёт не меньше соперника — закрывать!
         if (notClosedByMe.size == 1 && diff >= 0) return false
 
-        // Проверка: есть ли где набирать очки
         val scoringAvailable = CricketSector.ALL.any { sector ->
             CricketLogic.isClosedByTeam(game, myTeam, sector) &&
                 !CricketLogic.isClosedByTeam(game, otherTeam, sector)
         }
-        if (!scoringAvailable) return false  // нечего набирать — закрываем
+        if (!scoringAvailable) return false
 
-        // Вероятностный выбор в зависимости от преимущества
         val pScore = when {
             diff < 50 -> 0.5
             diff < 100 -> 0.35
@@ -108,7 +156,6 @@ object CricketBotAI {
 
     // ─────────────────────────────────────────────
     // Выбор целевого сектора
-    // preferScore = true → приоритет на сектора для очков
     // ─────────────────────────────────────────────
     private fun chooseTargetSector(
         game: CricketGame,
@@ -119,24 +166,20 @@ object CricketBotAI {
         val myTeam = player.teamIndex
         val otherTeam = 1 - myTeam
 
-        // Сектора, где я закрыл, а соперник — нет (можно набирать очки)
         val scoringSectors = CricketSector.ALL.filter { sector ->
             CricketLogic.isClosedByTeam(game, myTeam, sector) &&
                 !CricketLogic.isClosedByTeam(game, otherTeam, sector)
         }
 
-        // Сектора, где соперник закрыл, а я — нет (срочно закрыть!)
         val threatened = CricketSector.ALL.filter { sector ->
             !CricketLogic.isClosedByTeam(game, myTeam, sector) &&
                 CricketLogic.isClosedByTeam(game, otherTeam, sector)
         }
 
-        // Мои незакрытые сектора
         val notClosedByMe = CricketSector.ALL.filter { sector ->
             !CricketLogic.isClosedByTeam(game, myTeam, sector)
         }
 
-        // Порядок приоритетов в зависимости от стратегии
         val groups = if (preferScore) {
             listOf(scoringSectors, threatened, notClosedByMe)
         } else {
@@ -145,7 +188,6 @@ object CricketBotAI {
 
         for (group in groups) {
             if (group.isNotEmpty()) {
-                // Приоритет секторов: 20, 19, 18, 17, 16, 15, Bull
                 for (pref in CricketSector.ALL) {
                     if (pref in group) return pref
                 }
@@ -158,13 +200,17 @@ object CricketBotAI {
 
     // ─────────────────────────────────────────────
     // Сколько меток принесёт один дротик (0..3)
+    // multiplier = форма × серия × усталость
     // ─────────────────────────────────────────────
-    private fun marksForDart(bot: CricketBot): Int {
+    private fun marksForDart(bot: CricketBot, multiplier: Double): Int {
         val targetMPR = (bot.averageMin + bot.averageMax) / 20.0
         val targetMean = targetMPR / 3.0
 
-        // E = 0.25 + 1.76s  =>  s = (targetMean - 0.25) / 1.76
-        val s = ((targetMean - 0.25) / 1.76).coerceIn(0.02, 1.0)
+        // Базовый коэффициент мастерства
+        val baseS = ((targetMean - 0.25) / 1.76).coerceIn(0.02, 1.0)
+
+        // Применяем множитель (форма × серия × усталость)
+        val s = (baseS * multiplier).coerceIn(0.02, 1.0)
 
         val pTriple = s * 0.45
         val pDouble = s * 0.18
