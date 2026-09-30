@@ -246,7 +246,9 @@ object CricketLogic {
         setsPerMatch: Int = 1,
         isPairGame: Boolean = false,
         startingTeamIndex: Int = 0,
-        autoOkSeconds: Int = 0
+        autoOkSeconds: Int = 0,
+        sessionStartTime: Long = 0L,
+        sessionForm: Double = 1.0
     ): CricketGame {
         val startingPlayerIndex = players
             .indexOfFirst { it.teamIndex == startingTeamIndex }
@@ -269,7 +271,9 @@ object CricketLogic {
             teamCount = 2,
             playersPerTeam = if (isPairGame) 2 else 1,
             lastLegStartingTeam = startingTeamIndex,
-            autoOkSeconds = autoOkSeconds
+            autoOkSeconds = autoOkSeconds,
+            sessionStartTime = sessionStartTime,
+            sessionForm = sessionForm
         )
     }
 }
