@@ -43,13 +43,33 @@ object CricketLogic {
         return game.playersOfTeam(team).sumOf { it.matchTotalScore }
     }
 
-    private fun resetPlayerForNewLeg(player: CricketPlayer): CricketPlayer {
+    // ─────────────────────────────────────────────
+    // Завершение подхода игрока: подсчёт идеальных/сильных подходов
+    // Вызывается ПЕРЕД сменой игрока или сбросом для нового лега.
+    // ─────────────────────────────────────────────
+    private fun finalizeTurn(player: CricketPlayer): CricketPlayer {
+        if (player.turnMarks <= 0) {
+            return player.copy(turnMarks = 0)
+        }
+        val perfect = if (player.turnMarks >= 8) 1 else 0
+        val strong = if (player.turnMarks in 6..7) 1 else 0
         return player.copy(
+            turnMarks = 0,
+            matchPerfectRounds = player.matchPerfectRounds + perfect,
+            matchStrongRounds = player.matchStrongRounds + strong
+        )
+    }
+
+    private fun resetPlayerForNewLeg(player: CricketPlayer): CricketPlayer {
+        // Сначала финализируем текущий подход (если был), потом сбрасываем
+        val finalized = finalizeTurn(player)
+        return finalized.copy(
             hits = CricketSector.ALL.associateWith { 0 }.toMutableMap(),
             scores = CricketSector.ALL.associateWith { 0 }.toMutableMap(),
             totalScore = 0,
             dartsThrown = 0,
-            legMarks = 0
+            legMarks = 0,
+            turnMarks = 0
         )
     }
 
@@ -124,6 +144,7 @@ object CricketLogic {
             totalScore = player.totalScore + scoreGained,
             dartsThrown = player.dartsThrown + 1,
             legMarks = player.legMarks + multiplier,
+            turnMarks = player.turnMarks + multiplier,
             matchHits = newMatchHits,
             matchScores = newMatchScores,
             matchTotalScore = player.matchTotalScore + scoreGained,
@@ -173,6 +194,13 @@ object CricketLogic {
 
     fun awardLegWin(game: CricketGame, winningTeam: Int): CricketGame {
         val updatedPlayers = game.players.toMutableList()
+
+        // Финализируем подход игрока, который только что закончил лег
+        val lastPlayerIdx = game.currentPlayerIndex
+        if (lastPlayerIdx in updatedPlayers.indices) {
+            updatedPlayers[lastPlayerIdx] = finalizeTurn(updatedPlayers[lastPlayerIdx])
+        }
+
         val currentLegs = updatedPlayers.first { it.teamIndex == winningTeam }.legsInCurrentSet
         val newLegsInCurrentSet = currentLegs + 1
         val setWon = newLegsInCurrentSet >= game.legsPerSet
@@ -235,8 +263,18 @@ object CricketLogic {
     }
 
     fun nextPlayer(game: CricketGame): CricketGame {
+        // Финализируем подход текущего игрока перед сменой
+        val updatedPlayers = game.players.toMutableList()
+        val playerIndex = game.currentPlayerIndex
+        if (playerIndex in updatedPlayers.indices) {
+            updatedPlayers[playerIndex] = finalizeTurn(updatedPlayers[playerIndex])
+        }
         val next = (game.currentPlayerIndex + 1) % game.players.size
-        return game.copy(currentPlayerIndex = next, currentTurnDarts = 0)
+        return game.copy(
+            players = updatedPlayers,
+            currentPlayerIndex = next,
+            currentTurnDarts = 0
+        )
     }
 
     fun newGame(
