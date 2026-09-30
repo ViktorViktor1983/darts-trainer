@@ -120,7 +120,6 @@ fun CricketGameScreen(
             }
         )
 
-        // ── Сетка секторов ──
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -327,7 +326,6 @@ private fun TeamsRow(game: CricketGame) {
             .padding(horizontal = 8.dp, vertical = 8.dp)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            // Квадратик сетов A
             SetBadge(setsA)
             Spacer(Modifier.width(6.dp))
             Column(modifier = Modifier.weight(1f)) {
@@ -341,7 +339,6 @@ private fun TeamsRow(game: CricketGame) {
                 )
                 Text("ср. %.2f".format(avgA), color = Color(0xFF99AABB), fontSize = 11.sp)
             }
-            // Счёт по легам
             Text(
                 "$legsA : $legsB",
                 color = Color.White,
@@ -450,7 +447,6 @@ private fun SectorRowNew(
             .padding(horizontal = 4.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Левая ячейка (команда A)
         LeftCell(
             sector = sector,
             game = game,
@@ -460,10 +456,8 @@ private fun SectorRowNew(
             modifier = Modifier.weight(1f)
         )
 
-        // Центр — номер сектора
         CenterCell(sector = sector)
 
-        // Правая ячейка (команда B)
         RightCell(
             sector = sector,
             game = game,
@@ -478,7 +472,6 @@ private fun SectorRowNew(
 @Composable
 private fun CenterCell(sector: CricketSector) {
     if (sector == CricketSector.BULL) {
-        // Иконка мишени
         Box(
             modifier = Modifier
                 .size(36.dp)
@@ -523,7 +516,6 @@ private fun LeftCell(
         modifier = modifier,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Кнопка T (или D для Bull)
         Box(
             modifier = Modifier
                 .size(36.dp)
@@ -542,7 +534,6 @@ private fun LeftCell(
 
         Spacer(Modifier.width(6.dp))
 
-        // Кружки меток (клик = SINGLE)
         MarksRow(
             hits = hits,
             enabled = canThrow,
@@ -551,7 +542,6 @@ private fun LeftCell(
 
         Spacer(Modifier.width(4.dp))
 
-        // Очки
         if (score > 0) {
             Text("+$score", color = GoldAccent, fontSize = 11.sp, fontWeight = FontWeight.Bold)
         } else {
@@ -617,9 +607,6 @@ private fun RightCell(
     }
 }
 
-// ─────────────────────────────────────────────
-// КРУЖКИ МЕТОК (3 шт, клик = SINGLE)
-// ─────────────────────────────────────────────
 @Composable
 private fun MarksRow(
     hits: Int,
@@ -689,11 +676,12 @@ private fun teamScore(game: CricketGame, team: Int, sector: CricketSector): Int 
     return game.playersOfTeam(team).sumOf { it.scores[sector] ?: 0 }
 }
 
+// Средний набор = все метки команды за лег / (все дротики / 3)
 private fun avgPerLeg(game: CricketGame, team: Int): Double {
     val players = game.playersOfTeam(team)
     val darts = players.sumOf { it.dartsThrown }
     if (darts < 3) return 0.0
-    val marks = players.sumOf { p -> p.hits.values.sum() }
+    val marks = players.sumOf { it.legMarks }
     return marks.toDouble() / (darts / 3.0)
 }
 
