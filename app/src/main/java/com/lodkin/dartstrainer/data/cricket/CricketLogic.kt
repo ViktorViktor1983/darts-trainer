@@ -53,7 +53,6 @@ object CricketLogic {
         )
     }
 
-    // Обработка одного броска
     fun applyThrow(
         game: CricketGame,
         sector: CricketSector,
@@ -145,7 +144,6 @@ object CricketLogic {
         return updatedGame
     }
 
-    // Завершение хода кнопкой OK: добавляем промахи за недостающие дротики
     fun finishTurn(game: CricketGame): CricketGame {
         if (game.isFinished) return game
         val missing = (3 - game.currentTurnDarts).coerceAtLeast(0)
@@ -239,12 +237,18 @@ object CricketLogic {
         players: List<CricketPlayer>,
         legsPerSet: Int = 1,
         setsPerMatch: Int = 1,
-        isPairGame: Boolean = false
+        isPairGame: Boolean = false,
+        startingTeamIndex: Int = 0
     ): CricketGame {
+        // Определяем индекс первого игрока в начинающей команде
+        val startingPlayerIndex = players
+            .indexOfFirst { it.teamIndex == startingTeamIndex }
+            .let { if (it >= 0) it else 0 }
+
         return CricketGame(
             type = type,
             players = players,
-            currentPlayerIndex = 0,
+            currentPlayerIndex = startingPlayerIndex,
             isFinished = false,
             winnerIndex = null,
             currentTurnDarts = 0,
