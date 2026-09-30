@@ -53,6 +53,7 @@ fun CricketGameScreen(
         }
     }
 
+    // ─── Автоход бота ───
     LaunchedEffect(
         game.currentPlayerIndex,
         game.isFinished,
@@ -73,6 +74,41 @@ fun CricketGameScreen(
 
         saveHistory()
         game = CricketBotAI.performTurn(game, game.currentPlayerIndex)
+    }
+
+    // ─── АвтоОК для человека ───
+    // Таймер запускается только после первого нажатия в подходе.
+    // При каждом новом нажатии (currentTurnDarts меняется) — таймер сбрасывается.
+    LaunchedEffect(
+        game.currentTurnDarts,
+        game.currentPlayerIndex,
+        game.isFinished,
+        showLegWonDialog,
+        showSetWonDialog,
+        showWinDialog
+    ) {
+        if (game.autoOkSeconds <= 0) return@LaunchedEffect
+        if (game.isFinished) return@LaunchedEffect
+        if (showLegWonDialog || showSetWonDialog || showWinDialog) return@LaunchedEffect
+
+        val currentPlayer = game.players.getOrNull(game.currentPlayerIndex) ?: return@LaunchedEffect
+        if (currentPlayer.isBot) return@LaunchedEffect
+
+        // Таймер работает только если уже сделано хотя бы 1 нажатие
+        if (game.currentTurnDarts <= 0) return@LaunchedEffect
+        // Если уже 3 нажатия — автопереход срабатывает сам, таймер не нужен
+        if (game.currentTurnDarts >= 3) return@LaunchedEffect
+
+        delay(game.autoOkSeconds * 1000L)
+
+        // Повторная проверка на случай изменений за время задержки
+        if (game.isFinished) return@LaunchedEffect
+        if (showLegWonDialog || showSetWonDialog || showWinDialog) return@LaunchedEffect
+        if (game.players.getOrNull(game.currentPlayerIndex)?.isBot != false) return@LaunchedEffect
+        if (game.currentTurnDarts <= 0 || game.currentTurnDarts >= 3) return@LaunchedEffect
+
+        saveHistory()
+        game = CricketLogic.finishTurn(game)
     }
 
     LaunchedEffect(game.lastLegWinnerIndex) {
@@ -246,7 +282,7 @@ private fun TeamScoresList(game: CricketGame, showLegs: Boolean) {
 
 @Composable
 private fun TopBar(game: CricketGame, onBack: () -> Unit) {
-    val modeLabel = if (game.type == CricketType.AMERICAN) "Американский" else "Без очков"
+    val modeLabel = if (game.type == CricketType.AMERICAN) "Американский" else "Без набора"
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -604,7 +640,6 @@ private fun TeamSectorCell(
         verticalAlignment = Alignment.CenterVertically
     ) {
         if (!mirror) {
-            // Слева: T — x — D — x — S — 2x
             if (sector.hasTriple) {
                 ThrowCircleButton("T", canThrow) { onThrow(ThrowResult.TRIPLE) }
                 Spacer(Modifier.weight(1f))
@@ -619,7 +654,6 @@ private fun TeamSectorCell(
             )
             Spacer(Modifier.weight(2f))
         } else {
-            // Справа (зеркально): 2x — S — x — D — x — T
             Spacer(Modifier.weight(2f))
             HitsSquare(
                 hits = displayHits,
