@@ -55,7 +55,7 @@ fun CricketGameScreen(
         }
     }
 
-    // ── Автоход бота ──
+    // Автоход бота
     LaunchedEffect(
         game.currentPlayerIndex,
         game.isFinished,
@@ -103,14 +103,16 @@ fun CricketGameScreen(
             .fillMaxSize()
             .background(Color(0xFF0D1117))
     ) {
-        TopBar(onBack = { showBackConfirm = true })
+        TopBar(game = game, onBack = { showBackConfirm = true })
 
         ParamsRow(game = game)
 
-        TeamsRow(game = game)
+        TeamsHeaderRow(game = game)
 
-        OKRow(
+        ScoreControlRow(
             game = game,
+            canUndo = history.isNotEmpty(),
+            onUndo = { undo() },
             onOk = {
                 val currentPlayer = game.players.getOrNull(game.currentPlayerIndex)
                 if (!game.isFinished && currentPlayer?.isBot != true) {
@@ -127,33 +129,26 @@ fun CricketGameScreen(
                 .verticalScroll(rememberScrollState())
         ) {
             CricketSector.ALL.forEach { sector ->
-                SectorRowNew(
+                SectorRow(
                     sector = sector,
                     game = game,
                     onThrow = { result ->
                         val currentPlayer = game.players.getOrNull(game.currentPlayerIndex)
-                        if (currentPlayer?.isBot == true) return@SectorRowNew
+                        if (currentPlayer?.isBot == true) return@SectorRow
 
                         saveHistory()
                         val currentPlayerIndex = game.currentPlayerIndex
-                        val updated = CricketLogic.applyThrow(
+                        game = CricketLogic.applyThrow(
                             game = game,
                             sector = sector,
                             result = result,
                             playerIndex = currentPlayerIndex
                         )
-                        game = updated
                     }
                 )
             }
             Spacer(Modifier.height(8.dp))
         }
-
-        BottomBar(
-            game = game,
-            canUndo = history.isNotEmpty(),
-            onUndo = { undo() }
-        )
     }
 
     if (showLegWonDialog) {
@@ -247,7 +242,8 @@ private fun TeamScoresList(game: CricketGame, showLegs: Boolean) {
 // ВЕРХНЯЯ ПАНЕЛЬ
 // ─────────────────────────────────────────────
 @Composable
-private fun TopBar(onBack: () -> Unit) {
+private fun TopBar(game: CricketGame, onBack: () -> Unit) {
+    val modeLabel = if (game.type == CricketType.AMERICAN) "Американский" else "Без очков"
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -266,7 +262,13 @@ private fun TopBar(onBack: () -> Unit) {
             Text("←", color = Accent, fontSize = 18.sp)
         }
         Spacer(Modifier.width(12.dp))
-        Text("Крикет", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+        Text(
+            "Крикет ($modeLabel)",
+            color = Color.White,
+            fontSize = 18.sp,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.weight(1f)
+        )
     }
 }
 
@@ -291,10 +293,10 @@ private fun ParamsRow(game: CricketGame) {
 }
 
 // ─────────────────────────────────────────────
-// ИМЕНА КОМАНД + СР + СЧЁТ ПО ЛЕГАМ
+// ШАПКА: ИМЕНА + СР + ЛЕГ + СЕТЫ
 // ─────────────────────────────────────────────
 @Composable
-private fun TeamsRow(game: CricketGame) {
+private fun TeamsHeaderRow(game: CricketGame) {
     val currentIdx = game.currentPlayerIndex
     val currentPlayer = game.players.getOrNull(currentIdx)
     val activeTeam = currentPlayer?.teamIndex ?: -1
@@ -339,13 +341,18 @@ private fun TeamsRow(game: CricketGame) {
                 )
                 Text("ср. %.2f".format(avgA), color = Color(0xFF99AABB), fontSize = 11.sp)
             }
-            Text(
-                "$legsA : $legsB",
-                color = Color.White,
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(horizontal = 12.dp)
-            )
+
+            // ЛЕГ + счёт
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text("ЛЕГ", color = Color(0xFF99AABB), fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                Text(
+                    "$legsA : $legsB",
+                    color = Color.White,
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+
             Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.End) {
                 Text(
                     teamBName,
@@ -379,30 +386,75 @@ private fun SetBadge(sets: Int) {
 }
 
 // ─────────────────────────────────────────────
-// СЧЁТЧИК ДРОТИКОВ + КНОПКА OK
+// СЧЁТЧИК ДРОТИКОВ + РАЗНИЦА + ХОД НАЗАД + OK
 // ─────────────────────────────────────────────
 @Composable
-private fun OKRow(game: CricketGame, onOk: () -> Unit) {
+private fun ScoreControlRow(
+    game: CricketGame,
+    canUndo: Boolean,
+    onUndo: () -> Unit,
+    onOk: () -> Unit
+) {
     val currentPlayer = game.players.getOrNull(game.currentPlayerIndex)
     val isBotTurn = currentPlayer?.isBot == true
     val dartsA = game.playersOfTeam(0).sumOf { it.dartsThrown }
     val dartsB = game.playersOfTeam(1).sumOf { it.dartsThrown }
 
+    val scoreA = CricketLogic.teamTotalScore(game, 0)
+    val scoreB = CricketLogic.teamTotalScore(game, 1)
+    val diffA = scoreA - scoreB
+    val diffB = -diffA
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .background(Color(0xFF16202C))
-            .padding(horizontal = 12.dp, vertical = 6.dp),
+            .padding(horizontal = 8.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text("$dartsA", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+        // Дротики команды A
+        Text(
+            "$dartsA",
+            color = Color.White,
+            fontSize = 18.sp,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.weight(1f)
+        )
 
+        // Кнопка «Ход назад»
+        Box(
+            modifier = Modifier
+                .size(34.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(if (canUndo) TileBg else TileBgDark)
+                .clickable(enabled = canUndo) { onUndo() },
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                "↶",
+                color = if (canUndo) Accent else Accent.copy(alpha = 0.3f),
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
+
+        Spacer(Modifier.width(4.dp))
+
+        // Разница очков A
+        ScoreDiffBadge(
+            text = if (diffA >= 0) "+$diffA" else "$diffA",
+            positive = diffA >= 0
+        )
+
+        Spacer(Modifier.width(6.dp))
+
+        // OK
         Box(
             modifier = Modifier
                 .clip(RoundedCornerShape(8.dp))
                 .background(if (isBotTurn) TileBgDark else Accent)
                 .clickable(enabled = !game.isFinished && !isBotTurn) { onOk() }
-                .padding(horizontal = 40.dp, vertical = 8.dp),
+                .padding(horizontal = 28.dp, vertical = 8.dp),
             contentAlignment = Alignment.Center
         ) {
             Text(
@@ -413,13 +465,41 @@ private fun OKRow(game: CricketGame, onOk: () -> Unit) {
             )
         }
 
+        Spacer(Modifier.width(6.dp))
+
+        // Разница очков B
+        ScoreDiffBadge(
+            text = if (diffB >= 0) "+$diffB" else "$diffB",
+            positive = diffB >= 0
+        )
+
+        Spacer(Modifier.width(4.dp))
+
+        // Дротики команды B
         Text(
             "$dartsB",
             color = Color.White,
-            fontSize = 16.sp,
+            fontSize = 18.sp,
             fontWeight = FontWeight.Bold,
             modifier = Modifier.weight(1f),
             textAlign = TextAlign.End
+        )
+    }
+}
+
+@Composable
+private fun ScoreDiffBadge(text: String, positive: Boolean) {
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(6.dp))
+            .background(TileBgDark)
+            .padding(horizontal = 8.dp, vertical = 6.dp)
+    ) {
+        Text(
+            text,
+            color = if (positive) GoldAccent else Color(0xFFE57373),
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Bold
         )
     }
 }
@@ -428,7 +508,7 @@ private fun OKRow(game: CricketGame, onOk: () -> Unit) {
 // СТРОКА СЕКТОРА
 // ─────────────────────────────────────────────
 @Composable
-private fun SectorRowNew(
+private fun SectorRow(
     sector: CricketSector,
     game: CricketGame,
     onThrow: (ThrowResult) -> Unit
@@ -447,23 +527,25 @@ private fun SectorRowNew(
             .padding(horizontal = 4.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        LeftCell(
+        TeamSectorCell(
             sector = sector,
             game = game,
+            team = 0,
             isActive = activeTeam == 0,
-            isClosed = teamAClosed,
             onThrow = onThrow,
+            mirror = false,
             modifier = Modifier.weight(1f)
         )
 
         CenterCell(sector = sector)
 
-        RightCell(
+        TeamSectorCell(
             sector = sector,
             game = game,
+            team = 1,
             isActive = activeTeam == 1,
-            isClosed = teamBClosed,
             onThrow = onThrow,
+            mirror = true,
             modifier = Modifier.weight(1f)
         )
     }
@@ -492,174 +574,147 @@ private fun CenterCell(sector: CricketSector) {
             color = Color.White,
             fontSize = 20.sp,
             fontWeight = FontWeight.Bold,
-            modifier = Modifier.width(40.dp),
+            modifier = Modifier.width(44.dp),
             textAlign = TextAlign.Center
         )
     }
 }
 
 @Composable
-private fun LeftCell(
+private fun TeamSectorCell(
     sector: CricketSector,
     game: CricketGame,
+    team: Int,
     isActive: Boolean,
-    isClosed: Boolean,
     onThrow: (ThrowResult) -> Unit,
+    mirror: Boolean,
     modifier: Modifier
 ) {
-    val hits = teamHits(game, 0, sector)
-    val score = teamScore(game, 0, sector)
+    val rawHits = game.playersOfTeam(team).sumOf { it.hits[sector] ?: 0 }
+    val displayHits = rawHits.coerceAtMost(3)
+
+    val scoreA = teamScore(game, 0, sector)
+    val scoreB = teamScore(game, 1, sector)
+    val myScore = if (team == 0) scoreA else scoreB
+    val otherScore = if (team == 0) scoreB else scoreA
+    val diff = myScore - otherScore
+
     val buttonLabel = if (sector == CricketSector.BULL) "D" else "T"
     val canThrow = isActive && !game.isFinished
 
-    Row(
-        modifier = modifier,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Box(
-            modifier = Modifier
-                .size(36.dp)
-                .clip(CircleShape)
-                .background(if (canThrow) Accent.copy(alpha = 0.9f) else TileBgDark)
-                .clickable(enabled = canThrow) { onThrow(ThrowResult.TRIPLE) },
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                buttonLabel,
-                color = if (canThrow) Color(0xFF121212) else Accent.copy(alpha = 0.4f),
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Bold
-            )
-        }
-
-        Spacer(Modifier.width(6.dp))
-
-        MarksRow(
-            hits = hits,
-            enabled = canThrow,
-            onClick = { onThrow(ThrowResult.SINGLE) }
-        )
-
-        Spacer(Modifier.width(4.dp))
-
-        if (score > 0) {
-            Text("+$score", color = GoldAccent, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-        } else {
-            Spacer(Modifier.width(20.dp))
-        }
-
-        Spacer(Modifier.weight(1f))
+    val scoreText = when {
+        myScore > 0 -> "+$myScore"
+        otherScore > 0 -> "-$otherScore"
+        else -> ""
     }
-}
-
-@Composable
-private fun RightCell(
-    sector: CricketSector,
-    game: CricketGame,
-    isActive: Boolean,
-    isClosed: Boolean,
-    onThrow: (ThrowResult) -> Unit,
-    modifier: Modifier
-) {
-    val hits = teamHits(game, 1, sector)
-    val score = teamScore(game, 1, sector)
-    val buttonLabel = if (sector == CricketSector.BULL) "D" else "T"
-    val canThrow = isActive && !game.isFinished
+    val scoreColor = when {
+        myScore > 0 -> GoldAccent
+        otherScore > 0 -> Color(0xFFE57373)
+        else -> Color.Transparent
+    }
 
     Row(
         modifier = modifier,
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.End
+        horizontalArrangement = if (mirror) Arrangement.End else Arrangement.Start
     ) {
-        Spacer(Modifier.weight(1f))
-
-        if (score > 0) {
-            Text("+$score", color = GoldAccent, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-        } else {
-            Spacer(Modifier.width(20.dp))
-        }
-
-        Spacer(Modifier.width(4.dp))
-
-        MarksRow(
-            hits = hits,
-            enabled = canThrow,
-            onClick = { onThrow(ThrowResult.SINGLE) }
-        )
-
-        Spacer(Modifier.width(6.dp))
-
-        Box(
-            modifier = Modifier
-                .size(36.dp)
-                .clip(CircleShape)
-                .background(if (canThrow) Accent.copy(alpha = 0.9f) else TileBgDark)
-                .clickable(enabled = canThrow) { onThrow(ThrowResult.TRIPLE) },
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                buttonLabel,
-                color = if (canThrow) Color(0xFF121212) else Accent.copy(alpha = 0.4f),
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Bold
+        if (!mirror) {
+            // Левая сторона: T | S-квадрат | очки
+            ThrowCircleButton(buttonLabel, canThrow) { onThrow(ThrowResult.TRIPLE) }
+            Spacer(Modifier.width(4.dp))
+            HitsSquare(
+                hits = displayHits,
+                hasScore = myScore > 0,
+                enabled = canThrow,
+                onClick = { onThrow(ThrowResult.SINGLE) }
             )
+            Spacer(Modifier.width(6.dp))
+            if (scoreText.isNotEmpty()) {
+                Text(
+                    scoreText,
+                    color = scoreColor,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        } else {
+            // Правая сторона: очки | S-квадрат | T
+            if (scoreText.isNotEmpty()) {
+                Text(
+                    scoreText,
+                    color = scoreColor,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+            Spacer(Modifier.width(6.dp))
+            HitsSquare(
+                hits = displayHits,
+                hasScore = myScore > 0,
+                enabled = canThrow,
+                onClick = { onThrow(ThrowResult.SINGLE) }
+            )
+            Spacer(Modifier.width(4.dp))
+            ThrowCircleButton(buttonLabel, canThrow) { onThrow(ThrowResult.TRIPLE) }
         }
     }
 }
 
 @Composable
-private fun MarksRow(
+private fun ThrowCircleButton(label: String, enabled: Boolean, onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .size(36.dp)
+            .clip(CircleShape)
+            .background(if (enabled) Accent.copy(alpha = 0.9f) else TileBgDark)
+            .clickable(enabled = enabled) { onClick() },
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            label,
+            color = if (enabled) Color(0xFF121212) else Accent.copy(alpha = 0.4f),
+            fontSize = 16.sp,
+            fontWeight = FontWeight.Bold
+        )
+    }
+}
+
+@Composable
+private fun HitsSquare(
     hits: Int,
+    hasScore: Boolean,
     enabled: Boolean,
     onClick: () -> Unit
 ) {
-    Row(
-        modifier = Modifier.clickable(enabled = enabled) { onClick() },
-        horizontalArrangement = Arrangement.spacedBy(3.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        repeat(3) { i ->
-            val filled = i < hits
-            Box(
-                modifier = Modifier
-                    .size(18.dp)
-                    .clip(CircleShape)
-                    .background(if (filled) Accent else TileBgDark)
-            )
-        }
+    val color = when {
+        hits >= 3 && hasScore -> Color(0xFF9C27B0)  // фиолетовый: закрыт + очки
+        hits >= 3 -> Color(0xFFE53935)              // красный: закрыт
+        hits == 2 -> Color(0xFFFFC107)              // жёлтый: 2 попадания
+        hits == 1 -> Color(0xFF4CAF50)              // зелёный: 1 попадание
+        else -> TileBgDark
     }
-}
+    val label = when {
+        hits >= 3 && hasScore -> "3+"
+        hits >= 3 -> "3"
+        hits == 2 -> "2"
+        hits == 1 -> "1"
+        else -> ""
+    }
 
-// ─────────────────────────────────────────────
-// НИЖНЯЯ ПАНЕЛЬ
-// ─────────────────────────────────────────────
-@Composable
-private fun BottomBar(
-    game: CricketGame,
-    canUndo: Boolean,
-    onUndo: () -> Unit
-) {
-    Row(
+    Box(
         modifier = Modifier
-            .fillMaxWidth()
-            .background(Color(0xFF1A2332))
-            .padding(12.dp),
-        verticalAlignment = Alignment.CenterVertically
+            .size(36.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .background(color)
+            .clickable(enabled = enabled) { onClick() },
+        contentAlignment = Alignment.Center
     ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(10.dp))
-                .background(if (canUndo) TileBg else TileBgDark)
-                .clickable(enabled = canUndo) { onUndo() }
-                .padding(vertical = 12.dp),
-            contentAlignment = Alignment.Center
-        ) {
+        if (label.isNotEmpty()) {
             Text(
-                "↶ Вернуть ход соперника",
-                color = if (canUndo) Accent else Accent.copy(alpha = 0.3f),
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Medium
+                label,
+                color = if (hits == 0) Color.White else Color(0xFF121212),
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Bold
             )
         }
     }
@@ -668,15 +723,10 @@ private fun BottomBar(
 // ─────────────────────────────────────────────
 // УТИЛИТЫ
 // ─────────────────────────────────────────────
-private fun teamHits(game: CricketGame, team: Int, sector: CricketSector): Int {
-    return game.playersOfTeam(team).sumOf { it.hits[sector] ?: 0 }.coerceAtMost(3)
-}
-
 private fun teamScore(game: CricketGame, team: Int, sector: CricketSector): Int {
     return game.playersOfTeam(team).sumOf { it.scores[sector] ?: 0 }
 }
 
-// Средний набор = все метки команды за лег / (все дротики / 3)
 private fun avgPerLeg(game: CricketGame, team: Int): Double {
     val players = game.playersOfTeam(team)
     val darts = players.sumOf { it.dartsThrown }
