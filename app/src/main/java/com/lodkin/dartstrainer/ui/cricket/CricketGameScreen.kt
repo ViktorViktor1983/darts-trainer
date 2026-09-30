@@ -146,7 +146,6 @@ fun CricketGameScreen(
                                 result = result,
                                 playerIndex = currentPlayerIndex
                             )
-                            // Автопереход: если сделано 3 броска и лег не завершился
                             if (updated.currentTurnDarts >= 3 && !updated.isFinished) {
                                 updated = CricketLogic.nextPlayer(updated)
                             }
@@ -525,7 +524,7 @@ private fun SectorRow(
         modifier = Modifier
             .fillMaxSize()
             .background(if (allClosed) Color(0xFF1A1A1A) else Color(0xFF16202C))
-            .padding(horizontal = 6.dp),
+            .padding(horizontal = 4.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         TeamSectorCell(
@@ -602,33 +601,36 @@ private fun TeamSectorCell(
 
     Row(
         modifier = modifier,
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = if (mirror) Arrangement.End else Arrangement.Start
+        verticalAlignment = Alignment.CenterVertically
     ) {
         if (!mirror) {
+            // Слева: T — x — D — x — S — 2x
             if (sector.hasTriple) {
                 ThrowCircleButton("T", canThrow) { onThrow(ThrowResult.TRIPLE) }
-                Spacer(Modifier.width(5.dp))
+                Spacer(Modifier.weight(1f))
             }
             ThrowCircleButton("D", canThrow) { onThrow(ThrowResult.DOUBLE) }
-            Spacer(Modifier.width(5.dp))
+            Spacer(Modifier.weight(1f))
             HitsSquare(
                 hits = displayHits,
                 hasScore = myScore > 0,
                 enabled = canThrow,
                 onClick = { onThrow(ThrowResult.SINGLE) }
             )
+            Spacer(Modifier.weight(2f))
         } else {
+            // Справа (зеркально): 2x — S — x — D — x — T
+            Spacer(Modifier.weight(2f))
             HitsSquare(
                 hits = displayHits,
                 hasScore = myScore > 0,
                 enabled = canThrow,
                 onClick = { onThrow(ThrowResult.SINGLE) }
             )
-            Spacer(Modifier.width(5.dp))
+            Spacer(Modifier.weight(1f))
             ThrowCircleButton("D", canThrow) { onThrow(ThrowResult.DOUBLE) }
             if (sector.hasTriple) {
-                Spacer(Modifier.width(5.dp))
+                Spacer(Modifier.weight(1f))
                 ThrowCircleButton("T", canThrow) { onThrow(ThrowResult.TRIPLE) }
             }
         }
