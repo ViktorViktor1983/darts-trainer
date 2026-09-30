@@ -177,6 +177,12 @@ object CricketLogic {
         val newLegsInCurrentSet = currentLegs + 1
         val setWon = newLegsInCurrentSet >= game.legsPerSet
 
+        // Чередование старта: следующий лег начинает противоположная команда
+        val nextStartingTeam = 1 - game.lastLegStartingTeam
+        val nextStartingPlayerIndex = game.players
+            .indexOfFirst { it.teamIndex == nextStartingTeam }
+            .let { if (it >= 0) it else 0 }
+
         if (setWon) {
             val currentSets = updatedPlayers.first { it.teamIndex == winningTeam }.setsWon
             val newSetsWon = currentSets + 1
@@ -202,12 +208,13 @@ object CricketLogic {
             }
             return game.copy(
                 players = resetPlayers,
-                currentPlayerIndex = 0,
+                currentPlayerIndex = nextStartingPlayerIndex,
                 currentTurnDarts = 0,
                 currentLegNumber = 1,
                 currentSetNumber = game.currentSetNumber + 1,
                 lastLegWinnerIndex = null,
-                lastSetWinnerIndex = winningTeam
+                lastSetWinnerIndex = winningTeam,
+                lastLegStartingTeam = nextStartingTeam
             )
         }
 
@@ -219,11 +226,12 @@ object CricketLogic {
         val resetPlayers = updatedPlayers.map { resetPlayerForNewLeg(it) }
         return game.copy(
             players = resetPlayers,
-            currentPlayerIndex = 0,
+            currentPlayerIndex = nextStartingPlayerIndex,
             currentTurnDarts = 0,
             currentLegNumber = game.currentLegNumber + 1,
             lastLegWinnerIndex = winningTeam,
-            lastSetWinnerIndex = null
+            lastSetWinnerIndex = null,
+            lastLegStartingTeam = nextStartingTeam
         )
     }
 
@@ -240,7 +248,6 @@ object CricketLogic {
         isPairGame: Boolean = false,
         startingTeamIndex: Int = 0
     ): CricketGame {
-        // Определяем индекс первого игрока в начинающей команде
         val startingPlayerIndex = players
             .indexOfFirst { it.teamIndex == startingTeamIndex }
             .let { if (it >= 0) it else 0 }
@@ -260,7 +267,8 @@ object CricketLogic {
             lastSetWinnerIndex = null,
             isPairGame = isPairGame,
             teamCount = 2,
-            playersPerTeam = if (isPairGame) 2 else 1
+            playersPerTeam = if (isPairGame) 2 else 1,
+            lastLegStartingTeam = startingTeamIndex
         )
     }
 }
