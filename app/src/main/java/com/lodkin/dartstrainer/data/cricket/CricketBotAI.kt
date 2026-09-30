@@ -13,7 +13,6 @@ object CricketBotAI {
         // Обновляем состояние серии для этого подхода
         val updatedPlayer = updateStreak(player)
 
-        // Сохраняем обновлённого игрока в игре
         val playersWithStreak = game.players.toMutableList()
         playersWithStreak[playerIndex] = updatedPlayer
         var currentGame = game.copy(players = playersWithStreak)
@@ -71,6 +70,7 @@ object CricketBotAI {
 
     // ─────────────────────────────────────────────
     // Серия (стрик) бота
+    // 20% шанс новой серии, длительность 1–2 подхода, 50/50 летит/не летит
     // ─────────────────────────────────────────────
     private fun updateStreak(player: CricketPlayer): CricketPlayer {
         // Если серия ещё идёт — уменьшаем счётчик, streak не меняется
@@ -78,15 +78,16 @@ object CricketBotAI {
             return player.copy(botStreakLeft = player.botStreakLeft - 1)
         }
 
-        // Серия закончилась (или не начиналась). 25% шанс новой серии.
-        if (Random.nextDouble() < 0.25) {
+        // Серия закончилась (или не начиналась). 20% шанс новой серии.
+        if (Random.nextDouble() < 0.20) {
             val positive = Random.nextBoolean()
             val newStreak = if (positive) {
                 1.10 + Random.nextDouble() * 0.10   // 1.10..1.20 «летит»
             } else {
                 0.80 + Random.nextDouble() * 0.10   // 0.80..0.90 «не летит»
             }
-            val duration = 2 + Random.nextInt(2)     // 2 или 3 подхода
+            // Длительность: 1 или 2 подхода
+            val duration = 1 + Random.nextInt(2)
             return player.copy(botStreak = newStreak, botStreakLeft = duration - 1)
         }
 
@@ -206,10 +207,7 @@ object CricketBotAI {
         val targetMPR = (bot.averageMin + bot.averageMax) / 20.0
         val targetMean = targetMPR / 3.0
 
-        // Базовый коэффициент мастерства
         val baseS = ((targetMean - 0.25) / 1.76).coerceIn(0.02, 1.0)
-
-        // Применяем множитель (форма × серия × усталость)
         val s = (baseS * multiplier).coerceIn(0.02, 1.0)
 
         val pTriple = s * 0.45
