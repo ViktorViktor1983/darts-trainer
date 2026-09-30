@@ -43,6 +43,9 @@ import com.lodkin.dartstrainer.theme.TileBg
 import com.lodkin.dartstrainer.theme.TileBgDark
 import kotlin.random.Random
 
+private val PaleRed = Color(0xFFE57373)
+private val PaleRedText = Color(0xFF3E1010)
+
 data class PlayerSlot(
     val isBot: Boolean,
     val name: String,
@@ -63,8 +66,6 @@ fun CricketSetupScreen(
     var autoOkSeconds by remember { mutableStateOf(3) }
     var legsPerSet by remember { mutableStateOf(1) }
     var setsPerMatch by remember { mutableStateOf(1) }
-
-    var startingTeam by remember { mutableStateOf(0) }
 
     var showBullInputDialog by remember { mutableStateOf(false) }
     var showBullResultDialog by remember { mutableStateOf(false) }
@@ -89,8 +90,39 @@ fun CricketSetupScreen(
     val allHumans = activeSlots.all { !it.isBot }
     val hasHuman = activeSlots.any { !it.isBot }
 
+    // Функция сборки списка игроков и старта
+    fun startGame(startingTeam: Int) {
+        val players: List<CricketPlayer> = if (isPairGame) {
+            listOf(
+                CricketPlayer(name = if (slots[0].isBot) slots[0].bot.name else slots[0].name,
+                    isBot = slots[0].isBot, botLevel = if (slots[0].isBot) slots[0].bot.id else 0, teamIndex = 0),
+                CricketPlayer(name = if (slots[1].isBot) slots[1].bot.name else slots[1].name,
+                    isBot = slots[1].isBot, botLevel = if (slots[1].isBot) slots[1].bot.id else 0, teamIndex = 1),
+                CricketPlayer(name = if (slots[2].isBot) slots[2].bot.name else slots[2].name,
+                    isBot = slots[2].isBot, botLevel = if (slots[2].isBot) slots[2].bot.id else 0, teamIndex = 0),
+                CricketPlayer(name = if (slots[3].isBot) slots[3].bot.name else slots[3].name,
+                    isBot = slots[3].isBot, botLevel = if (slots[3].isBot) slots[3].bot.id else 0, teamIndex = 1)
+            ).also {
+                slots.forEach { s -> if (!s.isBot) PlayerNamesStorage.saveName(context, s.name) }
+            }
+        } else {
+            val a = slots[0]; val b = slots[1]
+            listOf(
+                CricketPlayer(name = if (a.isBot) a.bot.name else a.name,
+                    isBot = a.isBot, botLevel = if (a.isBot) a.bot.id else 0, teamIndex = 0),
+                CricketPlayer(name = if (b.isBot) b.bot.name else b.name,
+                    isBot = b.isBot, botLevel = if (b.isBot) b.bot.id else 0, teamIndex = 1)
+            ).also {
+                if (!a.isBot) PlayerNamesStorage.saveName(context, a.name)
+                if (!b.isBot) PlayerNamesStorage.saveName(context, b.name)
+                if (!a.isBot) PlayerNamesStorage.setLastPlayer1(context, a.name)
+                if (!b.isBot) PlayerNamesStorage.setLastPlayer2(context, b.name)
+            }
+        }
+        onStartGame(cricketType, players, legsPerSet, setsPerMatch, isPairGame, startingTeam)
+    }
+
     LaunchedEffect(isPairGame) {
-        startingTeam = 0
         humanBullResult = -1
         botBullResult = -1
     }
@@ -211,9 +243,9 @@ fun CricketSetupScreen(
             Spacer(Modifier.height(10.dp))
 
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                CricketTypeHalf("С очками", cricketType == CricketType.AMERICAN,
+                CricketTypeHalf("Американский", cricketType == CricketType.AMERICAN,
                     { cricketType = CricketType.AMERICAN }, Modifier.weight(1f))
-                CricketTypeHalf("Без очков", cricketType == CricketType.NO_SCORE,
+                CricketTypeHalf("Без набора", cricketType == CricketType.NO_SCORE,
                     { cricketType = CricketType.NO_SCORE }, Modifier.weight(1f))
             }
 
@@ -249,6 +281,7 @@ fun CricketSetupScreen(
 
             // ─── КТО НАЧИНАЕТ ───
             if (hasHuman && !allHumans) {
+                // Смесь человек + бот → розыгрыш Bull
                 Spacer(Modifier.height(24.dp))
                 Text("КТО НАЧИНАЕТ", color = Accent, fontSize = 13.sp, fontWeight = FontWeight.Medium,
                     letterSpacing = 3.sp, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
@@ -257,14 +290,15 @@ fun CricketSetupScreen(
                 Box(
                     modifier = Modifier.fillMaxWidth()
                         .clip(RoundedCornerShape(12.dp))
-                        .background(TileBgDark)
+                        .background(PaleRed)
                         .clickable { showBullInputDialog = true }
-                        .padding(vertical = 14.dp),
+                        .padding(vertical = 16.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text("Разыграть Bull", color = Accent, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                    Text("Разыграть Bull", color = PaleRedText, fontSize = 16.sp, fontWeight = FontWeight.Bold)
                 }
             } else if (allHumans) {
+                // Все люди → сразу старт при выборе
                 Spacer(Modifier.height(24.dp))
                 Text("КТО НАЧИНАЕТ", color = Accent, fontSize = 13.sp, fontWeight = FontWeight.Medium,
                     letterSpacing = 3.sp, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
@@ -273,52 +307,45 @@ fun CricketSetupScreen(
                 val labelA = if (isPairGame) "КОМАНДА A" else "Игрок 1"
                 val labelB = if (isPairGame) "КОМАНДА B" else "Игрок 2"
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    CricketTypeHalf(labelA, startingTeam == 0, { startingTeam = 0 }, Modifier.weight(1f))
-                    CricketTypeHalf(labelB, startingTeam == 1, { startingTeam = 1 }, Modifier.weight(1f))
+                    Box(
+                        modifier = Modifier.weight(1f)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(PaleRed)
+                            .clickable { startGame(0) }
+                            .padding(vertical = 16.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(labelA, color = PaleRedText, fontSize = 15.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+                    }
+                    Box(
+                        modifier = Modifier.weight(1f)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(PaleRed)
+                            .clickable { startGame(1) }
+                            .padding(vertical = 16.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(labelB, color = PaleRedText, fontSize = 15.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+                    }
                 }
             }
+            // Все боты → блок не показываем, будет нижняя кнопка «НАЧАТЬ ИГРУ»
 
             Spacer(Modifier.height(24.dp))
         }
 
-        Box(
-            modifier = Modifier.fillMaxWidth()
-                .clip(RoundedCornerShape(16.dp))
-                .background(Accent)
-                .clickable {
-                    val players: List<CricketPlayer> = if (isPairGame) {
-                        listOf(
-                            CricketPlayer(name = if (slots[0].isBot) slots[0].bot.name else slots[0].name,
-                                isBot = slots[0].isBot, botLevel = if (slots[0].isBot) slots[0].bot.id else 0, teamIndex = 0),
-                            CricketPlayer(name = if (slots[1].isBot) slots[1].bot.name else slots[1].name,
-                                isBot = slots[1].isBot, botLevel = if (slots[1].isBot) slots[1].bot.id else 0, teamIndex = 1),
-                            CricketPlayer(name = if (slots[2].isBot) slots[2].bot.name else slots[2].name,
-                                isBot = slots[2].isBot, botLevel = if (slots[2].isBot) slots[2].bot.id else 0, teamIndex = 0),
-                            CricketPlayer(name = if (slots[3].isBot) slots[3].bot.name else slots[3].name,
-                                isBot = slots[3].isBot, botLevel = if (slots[3].isBot) slots[3].bot.id else 0, teamIndex = 1)
-                        ).also {
-                            slots.forEach { s -> if (!s.isBot) PlayerNamesStorage.saveName(context, s.name) }
-                        }
-                    } else {
-                        val a = slots[0]; val b = slots[1]
-                        listOf(
-                            CricketPlayer(name = if (a.isBot) a.bot.name else a.name,
-                                isBot = a.isBot, botLevel = if (a.isBot) a.bot.id else 0, teamIndex = 0),
-                            CricketPlayer(name = if (b.isBot) b.bot.name else b.name,
-                                isBot = b.isBot, botLevel = if (b.isBot) b.bot.id else 0, teamIndex = 1)
-                        ).also {
-                            if (!a.isBot) PlayerNamesStorage.saveName(context, a.name)
-                            if (!b.isBot) PlayerNamesStorage.saveName(context, b.name)
-                            if (!a.isBot) PlayerNamesStorage.setLastPlayer1(context, a.name)
-                            if (!b.isBot) PlayerNamesStorage.setLastPlayer2(context, b.name)
-                        }
-                    }
-                    onStartGame(cricketType, players, legsPerSet, setsPerMatch, isPairGame, startingTeam)
-                }
-                .padding(vertical = 18.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Text("НАЧАТЬ ИГРУ", color = Color(0xFF121212), fontSize = 16.sp, fontWeight = FontWeight.Bold)
+        // Нижняя кнопка — только если все боты
+        if (allBots) {
+            Box(
+                modifier = Modifier.fillMaxWidth()
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(Accent)
+                    .clickable { startGame(0) }
+                    .padding(vertical = 18.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text("НАЧАТЬ ИГРУ", color = Color(0xFF121212), fontSize = 16.sp, fontWeight = FontWeight.Bold)
+            }
         }
     }
 
@@ -365,15 +392,12 @@ fun CricketSetupScreen(
         val humanSlotIndex = activeSlots.indexOfFirst { !it.isBot }
         val humanTeam = if (humanSlotIndex < 0) 0 else {
             if (isPairGame) {
-                // В парной: слоты 0 и 2 — команда A, слоты 1 и 3 — команда B
-                // activeSlots при парной = все 4 слота, порядок: A1 (0), B1 (1), A2 (2), B2 (3)
                 if (humanSlotIndex == 0 || humanSlotIndex == 2) 0 else 1
             } else {
-                // Одиночная: слот 0 — команда A, слот 1 — команда B
                 humanSlotIndex
             }
         }
-        val humanName = activeSlots.first { !it.isBot }.let { if (it.isBot) it.bot.name else it.name }
+        val humanName = activeSlots.first { !it.isBot }.let { it.name }
         val botName = activeSlots.first { it.isBot }.bot.name
 
         val humanLabel = when (humanBullResult) { 2 -> "Красный (50)"; 1 -> "Зелёный (25)"; else -> "Мимо (0)" }
@@ -396,9 +420,10 @@ fun CricketSetupScreen(
                     }) { Text("Перебросить", color = Accent) }
                 } else {
                     TextButton(onClick = {
-                        startingTeam = if (humanWins) humanTeam else 1 - humanTeam
+                        val winnerTeam = if (humanWins) humanTeam else 1 - humanTeam
                         showBullResultDialog = false
-                    }) { Text("OK", color = Accent) }
+                        startGame(winnerTeam)
+                    }) { Text("Начать игру", color = Accent) }
                 }
             },
             title = { Text(if (draw) "Ничья — переброс" else "Результат розыгрыша", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold) },
