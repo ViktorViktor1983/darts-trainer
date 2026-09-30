@@ -3,10 +3,8 @@ package com.lodkin.dartstrainer.ui.cricket
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -121,32 +119,37 @@ fun CricketGameScreen(
             }
         )
 
+        // Сетка секторов — растягивается на всё оставшееся место
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f)
-                .verticalScroll(rememberScrollState())
         ) {
             CricketSector.ALL.forEach { sector ->
-                SectorRow(
-                    sector = sector,
-                    game = game,
-                    onThrow = { result ->
-                        val currentPlayer = game.players.getOrNull(game.currentPlayerIndex)
-                        if (currentPlayer?.isBot == true) return@SectorRow
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                ) {
+                    SectorRow(
+                        sector = sector,
+                        game = game,
+                        onThrow = { result ->
+                            val currentPlayer = game.players.getOrNull(game.currentPlayerIndex)
+                            if (currentPlayer?.isBot == true) return@SectorRow
 
-                        saveHistory()
-                        val currentPlayerIndex = game.currentPlayerIndex
-                        game = CricketLogic.applyThrow(
-                            game = game,
-                            sector = sector,
-                            result = result,
-                            playerIndex = currentPlayerIndex
-                        )
-                    }
-                )
+                            saveHistory()
+                            val currentPlayerIndex = game.currentPlayerIndex
+                            game = CricketLogic.applyThrow(
+                                game = game,
+                                sector = sector,
+                                result = result,
+                                playerIndex = currentPlayerIndex
+                            )
+                        }
+                    )
+                }
             }
-            Spacer(Modifier.height(8.dp))
         }
     }
 
@@ -237,6 +240,9 @@ private fun TeamScoresList(game: CricketGame, showLegs: Boolean) {
     }
 }
 
+// ─────────────────────────────────────────────
+// ВЕРХНЯЯ ПАНЕЛЬ
+// ─────────────────────────────────────────────
 @Composable
 private fun TopBar(game: CricketGame, onBack: () -> Unit) {
     val modeLabel = if (game.type == CricketType.AMERICAN) "Американский" else "Без очков"
@@ -268,6 +274,9 @@ private fun TopBar(game: CricketGame, onBack: () -> Unit) {
     }
 }
 
+// ─────────────────────────────────────────────
+// ПАРАМЕТРЫ ИГРЫ
+// ─────────────────────────────────────────────
 @Composable
 private fun ParamsRow(game: CricketGame) {
     Row(
@@ -286,7 +295,7 @@ private fun ParamsRow(game: CricketGame) {
 }
 
 // ─────────────────────────────────────────────
-// ШАПКА: ИМЕНА + СР + ЛЕГ + СЕТЫ (+30% к предыдущему)
+// ШАПКА: ИМЕНА + СР + ЛЕГ + СЕТЫ
 // ─────────────────────────────────────────────
 @Composable
 private fun TeamsHeaderRow(game: CricketGame) {
@@ -377,6 +386,9 @@ private fun SetBadge(sets: Int) {
     }
 }
 
+// ─────────────────────────────────────────────
+// СЧЁТЧИК ДРОТИКОВ + РАЗНИЦА + ХОД НАЗАД (×2) + OK
+// ─────────────────────────────────────────────
 @Composable
 private fun ScoreControlRow(
     game: CricketGame,
@@ -498,6 +510,9 @@ private fun ScoreDiffBadge(text: String, positive: Boolean) {
     }
 }
 
+// ─────────────────────────────────────────────
+// СТРОКА СЕКТОРА
+// ─────────────────────────────────────────────
 @Composable
 private fun SectorRow(
     sector: CricketSector,
@@ -513,9 +528,9 @@ private fun SectorRow(
 
     Row(
         modifier = Modifier
-            .fillMaxWidth()
+            .fillMaxSize()
             .background(if (allClosed) Color(0xFF1A1A1A) else Color(0xFF16202C))
-            .padding(horizontal = 4.dp, vertical = 6.dp),
+            .padding(horizontal = 6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         TeamSectorCell(
@@ -547,14 +562,14 @@ private fun CenterCell(sector: CricketSector) {
     if (sector == CricketSector.BULL) {
         Box(
             modifier = Modifier
-                .size(36.dp)
+                .size(48.dp)
                 .clip(CircleShape)
                 .background(Color(0xFF2E7D32)),
             contentAlignment = Alignment.Center
         ) {
             Box(
                 modifier = Modifier
-                    .size(16.dp)
+                    .size(22.dp)
                     .clip(CircleShape)
                     .background(Color(0xFFD32F2F))
             )
@@ -563,9 +578,9 @@ private fun CenterCell(sector: CricketSector) {
         Text(
             sector.label,
             color = Color.White,
-            fontSize = 20.sp,
+            fontSize = 26.sp,
             fontWeight = FontWeight.Bold,
-            modifier = Modifier.width(44.dp),
+            modifier = Modifier.width(56.dp),
             textAlign = TextAlign.Center
         )
     }
@@ -609,42 +624,46 @@ private fun TeamSectorCell(
         horizontalArrangement = if (mirror) Arrangement.End else Arrangement.Start
     ) {
         if (!mirror) {
-            // T | (12dp gap) | S-квадрат | очки
+            // Слева: T | 18dp | очки | 18dp | S-квадрат
             ThrowCircleButton(buttonLabel, canThrow) { onThrow(ThrowResult.TRIPLE) }
-            Spacer(Modifier.width(14.dp))
+            Spacer(Modifier.width(18.dp))
+            if (scoreText.isNotEmpty()) {
+                Text(
+                    scoreText,
+                    color = scoreColor,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(Modifier.width(18.dp))
+            } else {
+                Spacer(Modifier.width(18.dp))
+            }
             HitsSquare(
                 hits = displayHits,
                 hasScore = myScore > 0,
                 enabled = canThrow,
                 onClick = { onThrow(ThrowResult.SINGLE) }
             )
-            Spacer(Modifier.width(6.dp))
-            if (scoreText.isNotEmpty()) {
-                Text(
-                    scoreText,
-                    color = scoreColor,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold
-                )
-            }
         } else {
-            // очки | S-квадрат | (12dp gap) | T
-            if (scoreText.isNotEmpty()) {
-                Text(
-                    scoreText,
-                    color = scoreColor,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-            Spacer(Modifier.width(6.dp))
+            // Справа (зеркально): S-квадрат | 18dp | очки | 18dp | T
             HitsSquare(
                 hits = displayHits,
                 hasScore = myScore > 0,
                 enabled = canThrow,
                 onClick = { onThrow(ThrowResult.SINGLE) }
             )
-            Spacer(Modifier.width(14.dp))
+            Spacer(Modifier.width(18.dp))
+            if (scoreText.isNotEmpty()) {
+                Text(
+                    scoreText,
+                    color = scoreColor,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(Modifier.width(18.dp))
+            } else {
+                Spacer(Modifier.width(18.dp))
+            }
             ThrowCircleButton(buttonLabel, canThrow) { onThrow(ThrowResult.TRIPLE) }
         }
     }
@@ -654,7 +673,7 @@ private fun TeamSectorCell(
 private fun ThrowCircleButton(label: String, enabled: Boolean, onClick: () -> Unit) {
     Box(
         modifier = Modifier
-            .size(38.dp)
+            .size(48.dp)
             .clip(CircleShape)
             .background(if (enabled) Accent.copy(alpha = 0.9f) else TileBgDark)
             .clickable(enabled = enabled) { onClick() },
@@ -663,7 +682,7 @@ private fun ThrowCircleButton(label: String, enabled: Boolean, onClick: () -> Un
         Text(
             label,
             color = if (enabled) Color(0xFF121212) else Accent.copy(alpha = 0.4f),
-            fontSize = 16.sp,
+            fontSize = 20.sp,
             fontWeight = FontWeight.Bold
         )
     }
@@ -691,14 +710,14 @@ private fun HitsSquare(
         else -> "S"
     }
     val labelColor = when {
-        hits == 0 -> Color(0xFF78909C)   // серая S
-        hits >= 3 -> Color.White          // белый на красном/фиолетовом
-        else -> Color(0xFF121212)         // чёрный на зелёном/жёлтом
+        hits == 0 -> Color(0xFF78909C)
+        hits >= 3 -> Color.White
+        else -> Color(0xFF121212)
     }
 
     Box(
         modifier = Modifier
-            .size(38.dp)
+            .size(48.dp)
             .clip(RoundedCornerShape(8.dp))
             .background(color)
             .clickable(enabled = enabled) { onClick() },
@@ -707,7 +726,7 @@ private fun HitsSquare(
         Text(
             label,
             color = labelColor,
-            fontSize = if (hits == 0) 16.sp else 15.sp,
+            fontSize = if (hits == 0) 20.sp else 18.sp,
             fontWeight = FontWeight.Bold
         )
     }
@@ -725,6 +744,9 @@ private fun avgPerLeg(game: CricketGame, team: Int): Double {
     return marks.toDouble() / (darts / 3.0)
 }
 
+// ─────────────────────────────────────────────
+// ДИАЛОГ ПОБЕДЫ
+// ─────────────────────────────────────────────
 @Composable
 private fun WinDialog(
     game: CricketGame,
