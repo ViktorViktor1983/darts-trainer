@@ -34,6 +34,7 @@ import com.lodkin.dartstrainer.ui.cricket.CricketSetupScreen
 import com.lodkin.dartstrainer.ui.cricket.CricketStatsScreen
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlin.random.Random
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -56,6 +57,12 @@ fun DartsTrainerApp() {
     val cricketRepository = remember {
         CricketRepository(CricketDatabase.get(context).cricketDao())
     }
+
+    // ── Сессия ──
+    // Время старта сессии: фиксируется один раз при запуске приложения
+    val sessionStartTime = remember { System.currentTimeMillis() }
+    // Форма дня: одна на всю сессию для всех ботов (0.85..1.15)
+    val sessionForm = remember { 0.85 + Random.nextDouble() * 0.30 }
 
     var onboardingDone by remember { mutableStateOf(SettingsStorage.isOnboardingDone(context)) }
     var stage by remember { mutableStateOf(if (onboardingDone) "loading" else "welcome") }
@@ -116,7 +123,9 @@ fun DartsTrainerApp() {
                         setsPerMatch = setsPerMatch,
                         isPairGame = isPairGame,
                         startingTeamIndex = startingTeam,
-                        autoOkSeconds = autoOkSeconds
+                        autoOkSeconds = autoOkSeconds,
+                        sessionStartTime = sessionStartTime,
+                        sessionForm = sessionForm
                     )
                     screen = "cricket_game"
                 },
