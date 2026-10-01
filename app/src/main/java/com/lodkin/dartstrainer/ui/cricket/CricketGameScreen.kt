@@ -25,6 +25,7 @@ import com.lodkin.dartstrainer.theme.GoldAccent
 import com.lodkin.dartstrainer.theme.TileBg
 import com.lodkin.dartstrainer.theme.TileBgDark
 import kotlinx.coroutines.delay
+import java.util.Locale
 
 @Composable
 fun CricketGameScreen(
@@ -39,6 +40,7 @@ fun CricketGameScreen(
     var showSetWonDialog by remember { mutableStateOf(false) }
     var legWinnerLabel by remember { mutableStateOf("") }
     var setWinnerLabel by remember { mutableStateOf("") }
+    var dartsSelected by remember { mutableStateOf(0) }
 
     val history = remember { mutableStateListOf<CricketGame>() }
 
@@ -53,7 +55,53 @@ fun CricketGameScreen(
         }
     }
 
-    // ─── Автоход бота ───
+    // Локальная корректировка дротиков (в обе стороны)
+    fun applyDartsCorrection(g: CricketGame, realDarts: Int): CricketGame {
+        val winnerIdx = g.lastLegWinnerPlayerIndex ?: return g
+        if (winnerIdx !in g.players.indices) return g
+        val programDarts = g.lastLegDartsClicked
+        val diff = realDarts - programDarts
+        if (diff == 0) return g
+
+        val updated = g.players.toMutableList()
+        val player = updated[winnerIdx]
+
+        val newDarts = (player.dartsThrown + diff).coerceAtLeast(0)
+        val newMatchDarts = (player.matchDartsThrown + diff).coerceAtLeast(0)
+        val newLegMisses: Int
+        val newMatchMisses: Int
+        if (diff > 0) {
+            newLegMisses = player.legMisses + diff
+            newMatchMisses = player.matchMissesThrown + diff
+        } else {
+            newLegMisses = (player.legMisses + diff).coerceAtLeast(0)
+            newMatchMisses = (player.matchMissesThrown + diff).coerceAtLeast(0)
+        }
+
+        updated[winnerIdx] = player.copy(
+            dartsThrown = newDarts,
+            matchDartsThrown = newMatchDarts,
+            legMisses = newLegMisses,
+            matchMissesThrown = newMatchMisses
+        )
+
+        val newHistory = if (g.legHistory.isNotEmpty()) {
+            val last = g.legHistory.last()
+            val newPlayers = last.players.mapIndexed { i, snap ->
+                if (i == winnerIdx) {
+                    val newSnapDarts = (snap.darts + diff).coerceAtLeast(0)
+                    val newSnapMisses = if (diff > 0) snap.misses + diff
+                    else (snap.misses + diff).coerceAtLeast(0)
+                    snap.copy(darts = newSnapDarts, misses = newSnapMisses)
+                } else snap
+            }
+            g.legHistory.dropLast(1) + last.copy(players = newPlayers)
+        } else g.legHistory
+
+        return g.copy(players = updated, legHistory = newHistory)
+    }
+
+    // Автоход бота
     LaunchedEffect(
         game.currentPlayerIndex,
         game.isFinished,
@@ -76,9 +124,7 @@ fun CricketGameScreen(
         game = CricketBotAI.performTurn(game, game.currentPlayerIndex)
     }
 
-    // ─── АвтоОК для человека ───
-    // Таймер запускается только после первого нажатия в подходе.
-    // При каждом новом нажатии (currentTurnDarts меняется) — таймер сбрасывается.
+    // АвтоОК для человека
     LaunchedEffect(
         game.currentTurnDarts,
         game.currentPlayerIndex,
@@ -93,15 +139,11 @@ fun CricketGameScreen(
 
         val currentPlayer = game.players.getOrNull(game.currentPlayerIndex) ?: return@LaunchedEffect
         if (currentPlayer.isBot) return@LaunchedEffect
-
-        // Таймер работает только если уже сделано хотя бы 1 нажатие
         if (game.currentTurnDarts <= 0) return@LaunchedEffect
-        // Если уже 3 нажатия — автопереход срабатывает сам, таймер не нужен
         if (game.currentTurnDarts >= 3) return@LaunchedEffect
 
         delay(game.autoOkSeconds * 1000L)
 
-        // Повторная проверка на случай изменений за время задержки
         if (game.isFinished) return@LaunchedEffect
         if (showLegWonDialog || showSetWonDialog || showWinDialog) return@LaunchedEffect
         if (game.players.getOrNull(game.currentPlayerIndex)?.isBot != false) return@LaunchedEffect
@@ -115,6 +157,7 @@ fun CricketGameScreen(
         val teamIdx = game.lastLegWinnerIndex
         if (teamIdx != null && !game.isFinished) {
             legWinnerLabel = teamName(game, teamIdx)
+            dartsSelected = 0
             showLegWonDialog = true
         }
     }
@@ -193,25 +236,81 @@ fun CricketGameScreen(
         }
     }
 
+    // ─── Диалог завершения ЛЕГА ───
     if (showLegWonDialog) {
+        val winnerTeam = game.lastLegWinnerIndex ?: 0
+        val humanWon = game.playersOfTeam(winnerTeam).any { !it.isBot }
+        val needsAnswer = humanWon && dartsSelected == 0
+
         AlertDialog(
             onDismissRequest = { },
             confirmButton = {
-                TextButton(onClick = {
-                    showLegWonDialog = false
-                    game = game.copy(lastLegWinnerIndex = null)
-                }) { Text("Продолжить", color = Accent) }
+                if (!needsAnswer) {
+                    TextButton(onClick = {
+                        showLegWonDialog = false
+                        game = game.copy(lastLegWinnerIndex = null)
+                    }) { Text("Продолжить", color = Accent) }
+                }
             },
             title = {
-                Text("ЛЕГ ЗАВЕРШЁН", color = Accent, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                Column {
+                    Text("ЛЕГ ЗАВЕРШЁН", color = Accent, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        "Сет ${game.currentSetNumber}/${game.setsPerMatch}  •  Лег ${game.currentLegNumber}/${game.legsPerSet}",
+                        color = Color.White.copy(alpha = 0.7f),
+                        fontSize = 12.sp
+                    )
+                }
             },
             text = {
                 Column {
                     Text("Победитель:", color = Color.White, fontSize = 14.sp)
-                    Text(legWinnerLabel, color = GoldAccent, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                    Text(legWinnerLabel, color = GoldAccent, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+
                     Spacer(Modifier.height(12.dp))
-                    Text("Счёт по легам в сете:", color = Color.White, fontSize = 14.sp)
-                    TeamScoresList(game, showLegs = true)
+
+                    if (needsAnswer) {
+                        Text(
+                            "Сколько дротиков ушло на закрытие лега?",
+                            color = Color.White,
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                        Spacer(Modifier.height(12.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            listOf(1, 2, 3).forEach { n ->
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .background(Accent)
+                                        .clickable {
+                                            dartsSelected = n
+                                            game = applyDartsCorrection(game, n)
+                                        }
+                                        .padding(vertical = 14.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        "$n",
+                                        color = Color(0xFF121212),
+                                        fontSize = 20.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+                        }
+                    } else {
+                        // Показываем статистику лега по игрокам
+                        val snapshot = game.legHistory.lastOrNull()
+                        if (snapshot != null) {
+                            LegStatsDisplay(snapshot = snapshot)
+                        }
+                    }
                 }
             }
         )
@@ -268,6 +367,52 @@ fun CricketGameScreen(
     }
 }
 
+// ─────────────────────────────────────────────
+// Отображение статистики лега по игрокам
+// ─────────────────────────────────────────────
+@Composable
+private fun LegStatsDisplay(snapshot: LegSnapshot) {
+    Column {
+        snapshot.players.forEachIndexed { idx, p ->
+            if (idx > 0) {
+                Spacer(Modifier.height(8.dp))
+            }
+            val mpr = if (p.darts < 3) 0.0 else {
+                p.legMarks.toDouble() / (p.darts / 3.0)
+            }
+            val missPct = if (p.darts <= 0) 0.0 else p.misses.toDouble() / p.darts * 100.0
+            val triplesPct = if (p.darts <= 0) 0.0 else p.triples.toDouble() / p.darts * 100.0
+
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(TileBg)
+                    .padding(10.dp)
+            ) {
+                Text(p.name, color = Accent, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(4.dp))
+                StatLine("Средний набор", String.format(Locale.US, "%.2f", mpr))
+                StatLine("Промахи", String.format(Locale.US, "%.1f%%", missPct))
+                StatLine("Утроения", String.format(Locale.US, "%.1f%%", triplesPct))
+                StatLine("Очки", p.score.toString())
+                StatLine("Дротиков", p.darts.toString())
+            }
+        }
+    }
+}
+
+@Composable
+private fun StatLine(label: String, value: String) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Text(label, color = Color.White.copy(alpha = 0.8f), fontSize = 12.sp)
+        Text(value, color = GoldAccent, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+    }
+}
+
 private fun teamName(game: CricketGame, teamIdx: Int): String {
     return game.playersOfTeam(teamIdx).joinToString("/") { it.name }
 }
@@ -306,12 +451,7 @@ private fun TopBar(game: CricketGame, onBack: () -> Unit) {
                 .padding(horizontal = 24.dp, vertical = 10.dp),
             contentAlignment = Alignment.Center
         ) {
-            Text(
-                "← Назад",
-                color = Accent,
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Bold
-            )
+            Text("← Назад", color = Accent, fontSize = 16.sp, fontWeight = FontWeight.Bold)
         }
     }
 }
@@ -377,7 +517,7 @@ private fun TeamsHeaderRow(game: CricketGame) {
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
-                Text("ср. %.2f".format(avgA), color = Color(0xFF99AABB), fontSize = 18.sp)
+                Text("ср. %.2f".format(Locale.US, avgA), color = Color(0xFF99AABB), fontSize = 18.sp)
             }
 
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -400,7 +540,7 @@ private fun TeamsHeaderRow(game: CricketGame) {
                     overflow = TextOverflow.Ellipsis,
                     textAlign = TextAlign.End
                 )
-                Text("ср. %.2f".format(avgB), color = Color(0xFF99AABB), fontSize = 18.sp)
+                Text("ср. %.2f".format(Locale.US, avgB), color = Color(0xFF99AABB), fontSize = 18.sp)
             }
             Spacer(Modifier.width(8.dp))
             SetBadge(setsB)
