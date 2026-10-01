@@ -158,21 +158,37 @@ fun Game501SetupScreen(
 
             if (isPairGame) {
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Top) {
-                    TeamColumn501("КОМАНДА A", slots[0], slots[2], "1", "3", savedNames, context,
-                        { slots = slots.toMutableList().also { it[0] = it2 -> it2 } },
-                        { slots = slots.toMutableList().also { it[2] = it2 -> it2 } },
-                        Modifier.weight(1f))
-                    TeamColumn501("КОМАНДА B", slots[1], slots[3], "2", "4", savedNames, context,
-                        { slots = slots.toMutableList().also { it[1] = it2 -> it2 } },
-                        { slots = slots.toMutableList().also { it[3] = it2 -> it2 } },
-                        Modifier.weight(1f))
+                    TeamColumn501(
+                        teamLabel = "КОМАНДА A",
+                        slot1 = slots[0], slot2 = slots[2],
+                        slot1Label = "1", slot2Label = "3",
+                        savedNames = savedNames, context = context,
+                        onSlot1Change = { newSlot -> slots = slots.toMutableList().also { it[0] = newSlot } },
+                        onSlot2Change = { newSlot -> slots = slots.toMutableList().also { it[2] = newSlot } },
+                        modifier = Modifier.weight(1f)
+                    )
+                    TeamColumn501(
+                        teamLabel = "КОМАНДА B",
+                        slot1 = slots[1], slot2 = slots[3],
+                        slot1Label = "2", slot2Label = "4",
+                        savedNames = savedNames, context = context,
+                        onSlot1Change = { newSlot -> slots = slots.toMutableList().also { it[1] = newSlot } },
+                        onSlot2Change = { newSlot -> slots = slots.toMutableList().also { it[3] = newSlot } },
+                        modifier = Modifier.weight(1f)
+                    )
                 }
             } else {
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Top) {
-                    PlayerCell501(1, slots[0], savedNames, context,
-                        { slots = slots.toMutableList().also { it[0] = it2 -> it2 } }, Modifier.weight(1f))
-                    PlayerCell501(2, slots[1], savedNames, context,
-                        { slots = slots.toMutableList().also { it[1] = it2 -> it2 } }, Modifier.weight(1f))
+                    PlayerCell501(
+                        number = 1, slot = slots[0], savedNames = savedNames, context = context,
+                        onSlotChange = { newSlot -> slots = slots.toMutableList().also { it[0] = newSlot } },
+                        modifier = Modifier.weight(1f)
+                    )
+                    PlayerCell501(
+                        number = 2, slot = slots[1], savedNames = savedNames, context = context,
+                        onSlotChange = { newSlot -> slots = slots.toMutableList().also { it[1] = newSlot } },
+                        modifier = Modifier.weight(1f)
+                    )
                 }
             }
 
@@ -226,7 +242,6 @@ fun Game501SetupScreen(
                 }
             }
 
-            // ─── КТО НАЧИНАЕТ ───
             if (hasHuman && !allHumans) {
                 Spacer(Modifier.height(24.dp))
                 Text("КТО НАЧИНАЕТ", color = Accent, fontSize = 13.sp, fontWeight = FontWeight.Medium,
@@ -268,7 +283,6 @@ fun Game501SetupScreen(
         }
     }
 
-    // Bull input dialog
     if (showBullInputDialog) {
         AlertDialog(
             onDismissRequest = { showBullInputDialog = false },
@@ -351,9 +365,6 @@ fun Game501SetupScreen(
     }
 }
 
-// ─────────────────────────────────────────────
-// Загрузка слотов
-// ─────────────────────────────────────────────
 private fun loadSlots(context: android.content.Context, playerName: String): List<Slot501> {
     val bots = Game501SettingsStorage.getSlotIsBot(context)
     val names = Game501SettingsStorage.getSlotNames(context)
@@ -389,9 +400,6 @@ private fun generateBotBullResult(bot: CricketBot): Int {
     }
 }
 
-// ─────────────────────────────────────────────
-// Компоненты
-// ─────────────────────────────────────────────
 @Composable
 private fun ModeSelector(currentMode: Game501Mode, onModeChange: (Game501Mode) -> Unit) {
     Column {
