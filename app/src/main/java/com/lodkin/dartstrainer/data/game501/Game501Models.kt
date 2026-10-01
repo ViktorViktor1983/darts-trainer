@@ -1,13 +1,21 @@
 package com.lodkin.dartstrainer.data.game501
 
 // ─────────────────────────────────────────────
-// Режим игры
+// Тип игры (что играем)
 // ─────────────────────────────────────────────
-enum class Game501Mode(val label: String, val startScore: Int) {
-    X501_DOUBLE_OUT("501 Double Out", 501),
-    X501_DOUBLE_IN_OUT("501 Double In / Out", 501),
-    X301("301", 301),
-    STRAIGHT_OUT("Упрощённый", 501)
+enum class GameType(val startScore: Int, val label: String) {
+    X501(501, "501"),
+    X301(301, "301"),
+    X1001(1001, "1001")
+}
+
+// ─────────────────────────────────────────────
+// Формат закрытия (как закрываем)
+// ─────────────────────────────────────────────
+enum class OutMode(val label: String, val shortLabel: String) {
+    DOUBLE_OUT("Double Out", "DO"),
+    DOUBLE_IN_OUT("Double In / Double Out", "DI/DO"),
+    STRAIGHT_OUT("Упрощённый", "SO")
 }
 
 // ─────────────────────────────────────────────
@@ -39,10 +47,10 @@ data class LegPlayerSnapshot501(
     val name: String,
     val teamIndex: Int,
     val isBot: Boolean,
-    val darts: Int,             // дротиков за лег
-    val scoreGained: Int,       // очков набрано за лег
-    val doublesHit: Int,        // попаданий в удвоения
-    val doublesAttempted: Int   // попыток в удвоения
+    val darts: Int,
+    val scoreGained: Int,
+    val doublesHit: Int,
+    val doublesAttempted: Int
 )
 
 // Снимок одного лега
@@ -67,9 +75,9 @@ data class Player501(
     var botStreakLeft: Int = 0,
 
     // ── Текущее состояние ──
-    var score: Int = 501,           // текущий остаток
-    var turnScore: Int = 0,         // набрано за текущий подход
-    var turnDarts: Int = 0,         // дротиков в текущем подходе
+    var score: Int = 501,
+    var turnScore: Int = 0,
+    var turnDarts: Int = 0,
 
     // ── Накопительные за лег ──
     var legDarts: Int = 0,
@@ -92,7 +100,8 @@ data class Player501(
 // Состояние игры
 // ─────────────────────────────────────────────
 data class Game501(
-    val mode: Game501Mode = Game501Mode.X501_DOUBLE_OUT,
+    val gameType: GameType = GameType.X501,
+    val outMode: OutMode = OutMode.DOUBLE_OUT,
     val players: List<Player501> = emptyList(),
     val currentPlayerIndex: Int = 0,
     val isFinished: Boolean = false,
@@ -106,12 +115,10 @@ data class Game501(
     val lastLegWinnerIndex: Int? = null,
     val lastSetWinnerIndex: Int? = null,
 
-    // Кто начинал текущий лег
     val lastLegStartingTeam: Int = 0,
 
     val autoOkSeconds: Int = 0,
 
-    // Сессия (общие на весь запуск приложения)
     val sessionStartTime: Long = 0L,
     val sessionForm: Double = 1.0,
 
@@ -126,4 +133,8 @@ data class Game501(
 
     fun playersOfTeam(team: Int): List<Player501> =
         players.filter { it.teamIndex == team }
+
+    // Краткий лейбл для заголовка: "501 Double Out"
+    val modeLabel: String
+        get() = "${gameType.label} ${outMode.label}"
 }
