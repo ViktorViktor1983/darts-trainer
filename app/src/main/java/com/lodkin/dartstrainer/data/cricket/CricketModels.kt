@@ -25,6 +25,30 @@ enum class CricketType {
     NO_SCORE         // без набора очков
 }
 
+// ─────────────────────────────────────────────
+// Снимок статистики одного игрока за один лег
+// ─────────────────────────────────────────────
+data class LegPlayerSnapshot(
+    val name: String,
+    val teamIndex: Int,
+    val isBot: Boolean,
+    val legMarks: Int,       // все метки за лег
+    val darts: Int,          // дротиков за лег
+    val misses: Int,         // промахов за лег
+    val triples: Int,        // утроений за лег
+    val score: Int           // очков за лег
+)
+
+// ─────────────────────────────────────────────
+// Снимок одного лега (сохраняется при завершении лега)
+// ─────────────────────────────────────────────
+data class LegSnapshot(
+    val setNumber: Int,
+    val legNumber: Int,
+    val winningTeam: Int,
+    val players: List<LegPlayerSnapshot>
+)
+
 // Один игрок
 data class CricketPlayer(
     val name: String,
@@ -37,14 +61,19 @@ data class CricketPlayer(
     var botStreakLeft: Int = 0,
 
     // ── Текущий подход ──
-    // Метки, набранные за текущий подход (обнуляется при смене игрока)
     var turnMarks: Int = 0,
+    // Сколько промахов было в текущем подходе
+    var turnMisses: Int = 0,
+    // Сколько утроений было в текущем подходе
+    var turnTriples: Int = 0,
 
     // ── Накопительные за матч ──
-    // Идеальные подходы: T+T+T (9) или T+T+D-Bull (8)
     var matchPerfectRounds: Int = 0,
-    // Сильные подходы: 6 или 7 меток
     var matchStrongRounds: Int = 0,
+
+    // ── Статистика текущего лега ──
+    var legMisses: Int = 0,
+    var legTriples: Int = 0,
 
     val hits: MutableMap<CricketSector, Int> = CricketSector.ALL.associateWith { 0 }.toMutableMap(),
     val scores: MutableMap<CricketSector, Int> = CricketSector.ALL.associateWith { 0 }.toMutableMap(),
@@ -87,9 +116,12 @@ data class CricketGame(
     val lastLegStartingTeam: Int = 0,
     val autoOkSeconds: Int = 0,
 
-    // ── Сессия (общее на весь запуск приложения) ──
+    // ── Сессия ──
     val sessionStartTime: Long = 0L,
     val sessionForm: Double = 1.0,
+
+    // ── История легов ──
+    val legHistory: List<LegSnapshot> = emptyList(),
 
     val isPairGame: Boolean = false,
     val teamCount: Int = 2,
