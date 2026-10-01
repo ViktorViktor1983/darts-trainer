@@ -34,6 +34,7 @@ import androidx.compose.ui.unit.sp
 import com.lodkin.dartstrainer.data.cricket.CRICKET_BOTS
 import com.lodkin.dartstrainer.data.cricket.CricketBot
 import com.lodkin.dartstrainer.data.cricket.CricketPlayer
+import com.lodkin.dartstrainer.data.cricket.CricketSettingsStorage
 import com.lodkin.dartstrainer.data.cricket.CricketType
 import com.lodkin.dartstrainer.data.cricket.PlayerNamesStorage
 import com.lodkin.dartstrainer.theme.Accent
@@ -61,34 +62,43 @@ fun CricketSetupScreen(
     val context = LocalContext.current
     val savedNames = remember { PlayerNamesStorage.getSavedNames(context).toMutableList() }
 
-    var isPairGame by remember { mutableStateOf(false) }
-    var cricketType by remember { mutableStateOf(CricketType.AMERICAN) }
-    var autoOkSeconds by remember { mutableStateOf(3) }
-    var legsPerSet by remember { mutableStateOf(1) }
-    var setsPerMatch by remember { mutableStateOf(1) }
+    // ── Загрузка сохранённых настроек ──
+    var isPairGame by remember { mutableStateOf(CricketSettingsStorage.isPairGame(context)) }
+    var cricketType by remember { mutableStateOf(CricketSettingsStorage.getCricketType(context)) }
+    var autoOkSeconds by remember { mutableStateOf(CricketSettingsStorage.getAutoOk(context)) }
+    var legsPerSet by remember { mutableStateOf(CricketSettingsStorage.getLegsPerSet(context)) }
+    var setsPerMatch by remember { mutableStateOf(CricketSettingsStorage.getSetsPerMatch(context)) }
 
     var showBullInputDialog by remember { mutableStateOf(false) }
     var showBullResultDialog by remember { mutableStateOf(false) }
     var humanBullResult by remember { mutableStateOf(-1) }
     var botBullResult by remember { mutableStateOf(-1) }
 
+    // ── Слоты игроков с восстановлением ──
     var slots by remember {
-        mutableStateOf(
-            listOf(
-                PlayerSlot(false, PlayerNamesStorage.getLastPlayer1(context).ifBlank {
-                    playerName.ifBlank { "Игрок 1" }
-                }, CRICKET_BOTS[2]),
-                PlayerSlot(true, PlayerNamesStorage.getLastPlayer2(context).ifBlank { "Игрок 2" }, CRICKET_BOTS[2]),
-                PlayerSlot(true, "Игрок 3", CRICKET_BOTS[2]),
-                PlayerSlot(true, "Игрок 4", CRICKET_BOTS[2])
-            )
-        )
+        mutableStateOf(loadSlots(context, playerName))
     }
 
     val activeSlots = if (isPairGame) slots else slots.take(2)
     val allBots = activeSlots.all { it.isBot }
     val allHumans = activeSlots.all { !it.isBot }
     val hasHuman = activeSlots.any { !it.isBot }
+
+    // Сохраняем настройки при каждом изменении
+    LaunchedEffect(isPairGame, cricketType, autoOkSeconds, legsPerSet, setsPerMatch) {
+        CricketSettingsStorage.setPairGame(context, isPairGame)
+        CricketSettingsStorage.setCricketType(context, cricketType)
+        CricketSettingsStorage.setAutoOk(context, autoOkSeconds)
+        CricketSettingsStorage.setLegsPerSet(context, legsPerSet)
+        CricketSettingsStorage.setSetsPerMatch(context, setsPerMatch)
+    }
+
+    // Сохраняем слоты при изменении
+    LaunchedEffect(slots) {
+        CricketSettingsStorage.setSlotIsBot(context, slots.map { it.isBot })
+        CricketSettingsStorage.setSlotNames(context, slots.map { it.name })
+        CricketSettingsStorage.setSlotBotIds(context, slots.map { it.bot.id })
+    }
 
     fun startGame(startingTeam: Int) {
         val players: List<CricketPlayer> = if (isPairGame) {
@@ -437,6 +447,34 @@ fun CricketSetupScreen(
                 }
             }
         )
+    }
+}
+
+// ─────────────────────────────────────────────
+// Загрузка слотов из сохранённых настроек
+// ─────────────────────────────────────────────
+private fun loadSlots(context: android.content.Context, playerName: String): List<PlayerSlot> {
+    val bots = CricketSettingsStorage.getSlotIsBot(context)
+    val names = CricketSettingsStorage.getSlotNames(context)
+    val botIds = CricketSettingsStorage.getSlotBotIds(context)
+
+    val defaults = listOf(
+        PlayerSlot(false, PlayerNamesStorage.getLastPlayer1(context).ifBlank {
+            playerName.ifBlank { "Игрок 1" }
+        }, CRICKET_BOTS[2]),
+        PlayerSlot(true, PlayerNamesStorage.getLastPlayer2(context).ifBlank { "Игрок 2" }, CRICKET_BOTS[2]),
+        PlayerSlot(true, "Игрок 3", CRICKET_BOTS[2]),
+        PlayerSlot(true, "Игрок 4", CRICKET_BOTS[2])
+    )
+
+    if (bots.size < 4 || names.size < 4 || botIds.size < 4) return defaults
+
+    return List(4) { i ->
+        val botIdx = (botIds[i] - 1).coerceIn(0, CRICKET_BOTS.lastIndex)
+        val bot = CRICKET_BOTS[botIdx]
+        val isBot = bots[i]
+        val name = if (isBot) bot.name else names[i]
+        PlayerSlot(isBot, name, bot)
     }
 }
 
