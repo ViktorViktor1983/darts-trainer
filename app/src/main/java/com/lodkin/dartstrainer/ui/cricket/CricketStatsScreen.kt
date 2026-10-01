@@ -17,11 +17,12 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.lodkin.dartstrainer.data.cricket.CricketGame
-import com.lodkin.dartstrainer.data.cricket.CricketSector
+import com.lodkin.dartstrainer.data.cricket.LegSnapshot
 import com.lodkin.dartstrainer.theme.Accent
 import com.lodkin.dartstrainer.theme.GoldAccent
 import com.lodkin.dartstrainer.theme.TileBg
 import com.lodkin.dartstrainer.theme.TileBgDark
+import java.util.Locale
 
 @Composable
 fun CricketStatsScreen(
@@ -38,7 +39,7 @@ fun CricketStatsScreen(
         Text(
             "ОТЧЁТ О МАТЧЕ",
             color = Accent,
-            fontSize = 13.sp,
+            fontSize = 14.sp,
             fontWeight = FontWeight.Medium,
             letterSpacing = 3.sp,
             modifier = Modifier.fillMaxWidth(),
@@ -55,47 +56,45 @@ fun CricketStatsScreen(
         ) {
             // Победитель
             if (game.winnerIndex != null) {
-                val winner = game.players[game.winnerIndex]
+                val winnerName = game.playersOfTeam(game.winnerIndex).joinToString("/") { it.name }
                 WinnerCard(
-                    name = winner.name,
-                    matchScore = winner.matchTotalScore,
-                    setsWon = winner.setsWon,
+                    name = winnerName,
+                    setsWon = game.playersOfTeam(game.winnerIndex).firstOrNull()?.setsWon ?: 0,
                     setsTotal = game.setsPerMatch
                 )
                 Spacer(Modifier.height(20.dp))
             }
 
-            // Счёт по игрокам (за весь матч)
-            SectionTitle("ИГРОКИ")
+            // Итоги за матч по игрокам
+            SectionTitle("ИТОГИ МАТЧА")
             Spacer(Modifier.height(8.dp))
-            game.players.forEach { player ->
-                PlayerStatsRow(
-                    name = player.name,
-                    matchScore = player.matchTotalScore,
-                    matchDarts = player.matchDartsThrown,
-                    setsWon = player.setsWon,
-                    setsTotal = game.setsPerMatch
+            game.players.forEach { p ->
+                MatchPlayerCard(
+                    name = p.name,
+                    darts = p.matchDartsThrown,
+                    marks = p.matchHits.values.sum(),
+                    misses = p.matchMissesThrown,
+                    triples = p.matchTriplesHit,
+                    score = p.matchTotalScore
                 )
                 Spacer(Modifier.height(6.dp))
             }
 
-            Spacer(Modifier.height(20.dp))
+            Spacer(Modifier.height(24.dp))
 
-            // Детализация по секторам (за весь матч)
-            SectionTitle("ПО СЕКТОРАМ (ЗА МАТЧ)")
-            Spacer(Modifier.height(8.dp))
-
-            SectorStatsHeader(game)
-
-            CricketSector.ALL.forEach { sector ->
-                SectorStatsRow(sector, game)
-                Spacer(Modifier.height(4.dp))
+            // Разбивка по легам (от последнего к первому)
+            if (game.legHistory.isNotEmpty()) {
+                SectionTitle("ПО ЛЕГАМ")
+                Spacer(Modifier.height(8.dp))
+                game.legHistory.reversed().forEach { snapshot ->
+                    LegCard(snapshot = snapshot)
+                    Spacer(Modifier.height(8.dp))
+                }
             }
         }
 
         Spacer(Modifier.height(12.dp))
 
-        // Кнопки
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -121,12 +120,7 @@ fun CricketStatsScreen(
                     .padding(vertical = 14.dp),
                 contentAlignment = Alignment.Center
             ) {
-                Text(
-                    "Ещё раз",
-                    color = Color(0xFF121212),
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Bold
-                )
+                Text("Ещё раз", color = Color(0xFF121212), fontSize = 14.sp, fontWeight = FontWeight.Bold)
             }
         }
     }
@@ -144,12 +138,7 @@ private fun SectionTitle(text: String) {
 }
 
 @Composable
-private fun WinnerCard(
-    name: String,
-    matchScore: Int,
-    setsWon: Int,
-    setsTotal: Int
-) {
+private fun WinnerCard(name: String, setsWon: Int, setsTotal: Int) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -159,10 +148,7 @@ private fun WinnerCard(
         contentAlignment = Alignment.Center
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(
-                "🏆",
-                fontSize = 40.sp
-            )
+            Text("🏆", fontSize = 40.sp)
             Spacer(Modifier.height(8.dp))
             Text(
                 "ПОБЕДА В МАТЧЕ",
@@ -175,19 +161,13 @@ private fun WinnerCard(
             Text(
                 name,
                 color = GoldAccent,
-                fontSize = 24.sp,
+                fontSize = 22.sp,
                 fontWeight = FontWeight.Bold,
                 textAlign = TextAlign.Center
             )
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(6.dp))
             Text(
                 "Сеты: $setsWon из $setsTotal",
-                color = Color.White,
-                fontSize = 15.sp,
-                fontWeight = FontWeight.Medium
-            )
-            Text(
-                "Очки за матч: $matchScore",
                 color = Color.White,
                 fontSize = 14.sp
             )
@@ -195,122 +175,106 @@ private fun WinnerCard(
     }
 }
 
+// ─────────────────────────────────────────────
+// Карточка игрока за весь матч
+// ─────────────────────────────────────────────
 @Composable
-private fun PlayerStatsRow(
+private fun MatchPlayerCard(
     name: String,
-    matchScore: Int,
-    matchDarts: Int,
-    setsWon: Int,
-    setsTotal: Int
+    darts: Int,
+    marks: Int,
+    misses: Int,
+    triples: Int,
+    score: Int
 ) {
-    Row(
+    val mpr = if (darts < 3) 0.0 else marks.toDouble() / (darts / 3.0)
+    val missPct = if (darts <= 0) 0.0 else misses.toDouble() / darts * 100.0
+    val triplesPct = if (darts <= 0) 0.0 else triples.toDouble() / darts * 100.0
+
+    Column(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
             .background(TileBgDark)
-            .padding(horizontal = 14.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically
+            .padding(12.dp)
     ) {
-        Column(modifier = Modifier.weight(1f)) {
+        Text(name, color = Accent, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(6.dp))
+        StatLine("Средний набор (MPR)", String.format(Locale.US, "%.2f", mpr))
+        StatLine("Промахи", String.format(Locale.US, "%.1f%%", missPct))
+        StatLine("Утроения", String.format(Locale.US, "%.1f%%", triplesPct))
+        StatLine("Очки за матч", score.toString())
+        StatLine("Дротиков за матч", darts.toString())
+    }
+}
+
+// ─────────────────────────────────────────────
+// Карточка одного лега
+// ─────────────────────────────────────────────
+@Composable
+private fun LegCard(snapshot: LegSnapshot) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(TileBg)
+            .padding(12.dp)
+    ) {
+        // Шапка лега
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             Text(
-                name,
-                color = Color.White,
-                fontSize = 15.sp,
-                fontWeight = FontWeight.Medium
-            )
-            Text(
-                "Сеты: $setsWon из $setsTotal",
+                "Сет ${snapshot.setNumber} • Лег ${snapshot.legNumber}",
                 color = Accent,
-                fontSize = 11.sp
-            )
-        }
-        Column(horizontalAlignment = Alignment.End) {
-            Text(
-                "Очки: $matchScore",
-                color = GoldAccent,
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Bold
             )
             Text(
-                "Бросков: $matchDarts",
-                color = Color.White.copy(alpha = 0.7f),
-                fontSize = 11.sp
+                "Победа: команда ${if (snapshot.winningTeam == 0) "A" else "B"}",
+                color = GoldAccent,
+                fontSize = 12.sp
             )
         }
-    }
-}
 
-@Composable
-private fun SectorStatsHeader(game: CricketGame) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(8.dp))
-            .background(TileBg)
-            .padding(horizontal = 8.dp, vertical = 6.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(
-            "Сектор",
-            color = Color.White,
-            fontSize = 12.sp,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.width(60.dp)
-        )
-        game.players.forEach { player ->
-            Text(
-                player.name.take(8),
-                color = Accent,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.weight(1f),
-                textAlign = TextAlign.Center
-            )
-        }
-    }
-}
+        Spacer(Modifier.height(8.dp))
 
-@Composable
-private fun SectorStatsRow(sector: CricketSector, game: CricketGame) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(8.dp))
-            .background(TileBgDark)
-            .padding(horizontal = 8.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(
-            sector.label,
-            color = Color.White,
-            fontSize = 14.sp,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.width(60.dp)
-        )
+        // Метрики по каждому игроку
+        snapshot.players.forEachIndexed { idx, p ->
+            if (idx > 0) Spacer(Modifier.height(6.dp))
 
-        game.players.forEach { player ->
-            val hits = player.matchHits[sector] ?: 0
-            val score = player.matchScores[sector] ?: 0
+            val mpr = if (p.darts < 3) 0.0 else p.legMarks.toDouble() / (p.darts / 3.0)
+            val missPct = if (p.darts <= 0) 0.0 else p.misses.toDouble() / p.darts * 100.0
+            val triplesPct = if (p.darts <= 0) 0.0 else p.triples.toDouble() / p.darts * 100.0
+
             Column(
-                modifier = Modifier.weight(1f),
-                horizontalAlignment = Alignment.CenterHorizontally
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(TileBgDark)
+                    .padding(10.dp)
             ) {
-                Text(
-                    "$hits",
-                    color = if (hits >= 3) Accent else Color.White,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Bold
-                )
-                if (score > 0) {
-                    Text(
-                        "+$score",
-                        color = GoldAccent,
-                        fontSize = 10.sp
-                    )
-                } else {
-                    Spacer(Modifier.height(12.dp))
-                }
+                Text(p.name, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(4.dp))
+                StatLine("Средний набор", String.format(Locale.US, "%.2f", mpr))
+                StatLine("Промахи", String.format(Locale.US, "%.1f%%", missPct))
+                StatLine("Утроения", String.format(Locale.US, "%.1f%%", triplesPct))
+                StatLine("Очки", p.score.toString())
+                StatLine("Дротиков", p.darts.toString())
             }
         }
+    }
+}
+
+@Composable
+private fun StatLine(label: String, value: String) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Text(label, color = Color.White.copy(alpha = 0.8f), fontSize = 13.sp)
+        Text(value, color = GoldAccent, fontSize = 13.sp, fontWeight = FontWeight.Bold)
     }
 }
