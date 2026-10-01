@@ -1,14 +1,7 @@
 package com.lodkin.dartstrainer.data.cricket
 
-// Результат одного броска
-enum class ThrowResult {
-    SINGLE,     // S — попал в сектор (1 раз)
-    DOUBLE,     // D — попал в удвоение (2 раза)
-    TRIPLE,     // T — попал в утроение (3 раза)
-    MISS        // мимо (0 раз)
-}
+enum class ThrowResult { SINGLE, DOUBLE, TRIPLE, MISS }
 
-// Логика крикета — чистые функции без UI
 object CricketLogic {
 
     fun multiplierOf(result: ThrowResult): Int = when (result) {
@@ -18,30 +11,23 @@ object CricketLogic {
         ThrowResult.MISS -> 0
     }
 
-    fun isClosed(player: CricketPlayer, sector: CricketSector): Boolean {
-        return (player.hits[sector] ?: 0) >= 3
-    }
+    fun isClosed(player: CricketPlayer, sector: CricketSector): Boolean =
+        (player.hits[sector] ?: 0) >= 3
 
-    fun isClosedByTeam(game: CricketGame, team: Int, sector: CricketSector): Boolean {
-        val totalHits = game.playersOfTeam(team).sumOf { it.hits[sector] ?: 0 }
-        return totalHits >= 3
-    }
+    fun isClosedByTeam(game: CricketGame, team: Int, sector: CricketSector): Boolean =
+        game.playersOfTeam(team).sumOf { it.hits[sector] ?: 0 } >= 3
 
-    fun isClosedByAllTeams(game: CricketGame, sector: CricketSector): Boolean {
-        return (0 until game.teamCount).all { isClosedByTeam(game, it, sector) }
-    }
+    fun isClosedByAllTeams(game: CricketGame, sector: CricketSector): Boolean =
+        (0 until game.teamCount).all { isClosedByTeam(game, it, sector) }
 
-    fun hasClosedAllTeam(game: CricketGame, team: Int): Boolean {
-        return CricketSector.ALL.all { isClosedByTeam(game, team, it) }
-    }
+    fun hasClosedAllTeam(game: CricketGame, team: Int): Boolean =
+        CricketSector.ALL.all { isClosedByTeam(game, team, it) }
 
-    fun teamTotalScore(game: CricketGame, team: Int): Int {
-        return game.playersOfTeam(team).sumOf { it.totalScore }
-    }
+    fun teamTotalScore(game: CricketGame, team: Int): Int =
+        game.playersOfTeam(team).sumOf { it.totalScore }
 
-    fun teamMatchScore(game: CricketGame, team: Int): Int {
-        return game.playersOfTeam(team).sumOf { it.matchTotalScore }
-    }
+    fun teamMatchScore(game: CricketGame, team: Int): Int =
+        game.playersOfTeam(team).sumOf { it.matchTotalScore }
 
     private fun finalizeTurn(player: CricketPlayer): CricketPlayer {
         if (player.turnMarks <= 0 && player.turnMisses <= 0) {
@@ -50,9 +36,7 @@ object CricketLogic {
         val perfect = if (player.turnMarks >= 8) 1 else 0
         val strong = if (player.turnMarks in 6..7) 1 else 0
         return player.copy(
-            turnMarks = 0,
-            turnMisses = 0,
-            turnTriples = 0,
+            turnMarks = 0, turnMisses = 0, turnTriples = 0,
             matchPerfectRounds = player.matchPerfectRounds + perfect,
             matchStrongRounds = player.matchStrongRounds + strong
         )
@@ -63,23 +47,13 @@ object CricketLogic {
         return finalized.copy(
             hits = CricketSector.ALL.associateWith { 0 }.toMutableMap(),
             scores = CricketSector.ALL.associateWith { 0 }.toMutableMap(),
-            totalScore = 0,
-            dartsThrown = 0,
-            legMarks = 0,
-            legMisses = 0,
-            legTriples = 0,
-            turnMarks = 0,
-            turnMisses = 0,
-            turnTriples = 0
+            totalScore = 0, dartsThrown = 0, legMarks = 0,
+            legMisses = 0, legTriples = 0,
+            turnMarks = 0, turnMisses = 0, turnTriples = 0
         )
     }
 
-    fun applyThrow(
-        game: CricketGame,
-        sector: CricketSector,
-        result: ThrowResult,
-        playerIndex: Int
-    ): CricketGame {
+    fun applyThrow(game: CricketGame, sector: CricketSector, result: ThrowResult, playerIndex: Int): CricketGame {
         if (result == ThrowResult.MISS) {
             val updatedPlayers = game.players.toMutableList()
             val player = updatedPlayers[playerIndex]
@@ -90,29 +64,19 @@ object CricketLogic {
                 legMisses = player.legMisses + 1,
                 turnMisses = player.turnMisses + 1
             )
-            return game.copy(
-                players = updatedPlayers,
-                currentTurnDarts = game.currentTurnDarts + 1
-            )
+            return game.copy(players = updatedPlayers, currentTurnDarts = game.currentTurnDarts + 1)
         }
 
         val multiplier = multiplierOf(result)
         val updatedPlayers = game.players.toMutableList()
         val player = updatedPlayers[playerIndex]
 
-        val teamHitsBefore = game.playersOfTeam(player.teamIndex)
-            .sumOf { it.hits[sector] ?: 0 }
+        val teamHitsBefore = game.playersOfTeam(player.teamIndex).sumOf { it.hits[sector] ?: 0 }
         val teamAlreadyClosed = teamHitsBefore >= 3
-
-        val overflow: Int = if (teamAlreadyClosed) {
-            multiplier
-        } else {
-            maxOf(0, teamHitsBefore + multiplier - 3)
-        }
+        val overflow = if (teamAlreadyClosed) multiplier else maxOf(0, teamHitsBefore + multiplier - 3)
 
         val currentHits = player.hits[sector] ?: 0
         val newHits = minOf(currentHits + multiplier, 3)
-
         val newHitsMap = player.hits.toMutableMap()
         newHitsMap[sector] = newHits
 
@@ -122,9 +86,7 @@ object CricketLogic {
         if (game.type == CricketType.AMERICAN && overflow > 0) {
             val myTeam = player.teamIndex
             val otherTeams = (0 until game.teamCount).filter { it != myTeam }
-            val anyOtherTeamClosed = otherTeams.any { isClosedByTeam(game, it, sector) }
-
-            if (!anyOtherTeamClosed) {
+            if (otherTeams.none { isClosedByTeam(game, it, sector) }) {
                 val sectorValue = if (sector == CricketSector.BULL) 25 else sector.number
                 scoreGained = overflow * sectorValue
                 newScores[sector] = (newScores[sector] ?: 0) + scoreGained
@@ -133,41 +95,28 @@ object CricketLogic {
 
         val newMatchHits = player.matchHits.toMutableMap()
         newMatchHits[sector] = (newMatchHits[sector] ?: 0) + multiplier
-
         val newMatchScores = player.matchScores.toMutableMap()
-        if (scoreGained > 0) {
-            newMatchScores[sector] = (newMatchScores[sector] ?: 0) + scoreGained
-        }
+        if (scoreGained > 0) newMatchScores[sector] = (newMatchScores[sector] ?: 0) + scoreGained
 
         val isTriple = result == ThrowResult.TRIPLE
 
         updatedPlayers[playerIndex] = player.copy(
-            hits = newHitsMap,
-            scores = newScores,
+            hits = newHitsMap, scores = newScores,
             totalScore = player.totalScore + scoreGained,
             dartsThrown = player.dartsThrown + 1,
             legMarks = player.legMarks + multiplier,
             legTriples = if (isTriple) player.legTriples + 1 else player.legTriples,
             turnMarks = player.turnMarks + multiplier,
             turnTriples = if (isTriple) player.turnTriples + 1 else player.turnTriples,
-            matchHits = newMatchHits,
-            matchScores = newMatchScores,
+            matchHits = newMatchHits, matchScores = newMatchScores,
             matchTotalScore = player.matchTotalScore + scoreGained,
             matchDartsThrown = player.matchDartsThrown + 1,
             matchTriplesHit = if (isTriple) player.matchTriplesHit + 1 else player.matchTriplesHit
         )
 
-        val updatedGame = game.copy(
-            players = updatedPlayers,
-            currentTurnDarts = game.currentTurnDarts + 1
-        )
-
+        val updatedGame = game.copy(players = updatedPlayers, currentTurnDarts = game.currentTurnDarts + 1)
         val legWinnerTeam = checkLegWinner(updatedGame)
-        if (legWinnerTeam != null) {
-            return awardLegWin(updatedGame, legWinnerTeam)
-        }
-
-        return updatedGame
+        return if (legWinnerTeam != null) awardLegWin(updatedGame, legWinnerTeam) else updatedGame
     }
 
     fun finishTurn(game: CricketGame): CricketGame {
@@ -176,7 +125,6 @@ object CricketLogic {
         val updatedPlayers = game.players.toMutableList()
         val playerIndex = game.currentPlayerIndex
         val player = updatedPlayers[playerIndex]
-
         if (missing > 0) {
             updatedPlayers[playerIndex] = player.copy(
                 dartsThrown = player.dartsThrown + missing,
@@ -186,52 +134,32 @@ object CricketLogic {
                 turnMisses = player.turnMisses + missing
             )
         }
-
         return nextPlayer(game.copy(players = updatedPlayers))
     }
 
-    // ─────────────────────────────────────────────
-    // Корректировка после диалога «Сколько дротиков ушло на закрытие?»
-    // realDarts = сколько реально потратил игрок (1, 2 или 3)
-    // Убирает лишние промахи из статистики игрока И из снимка лега
-    // ─────────────────────────────────────────────
     fun adjustLastLegDarts(game: CricketGame, realDarts: Int): CricketGame {
         val winningPlayerIndex = game.lastLegWinnerPlayerIndex ?: return game
         if (winningPlayerIndex !in game.players.indices) return game
-
         val updated = game.players.toMutableList()
         val player = updated[winningPlayerIndex]
-
-        val programDarts = game.lastLegDartsClicked
-        val extra = programDarts - realDarts
+        val extra = game.lastLegDartsClicked - realDarts
         if (extra <= 0) return game
-
-        val newDarts = (player.dartsThrown - extra).coerceAtLeast(0)
-        val newMatchDarts = (player.matchDartsThrown - extra).coerceAtLeast(0)
-        val newMisses = (player.legMisses - extra).coerceAtLeast(0)
-        val newMatchMisses = (player.matchMissesThrown - extra).coerceAtLeast(0)
-
         updated[winningPlayerIndex] = player.copy(
-            dartsThrown = newDarts,
-            matchDartsThrown = newMatchDarts,
-            legMisses = newMisses,
-            matchMissesThrown = newMatchMisses
+            dartsThrown = (player.dartsThrown - extra).coerceAtLeast(0),
+            matchDartsThrown = (player.matchDartsThrown - extra).coerceAtLeast(0),
+            legMisses = (player.legMisses - extra).coerceAtLeast(0),
+            matchMissesThrown = (player.matchMissesThrown - extra).coerceAtLeast(0)
         )
-
-        // Корректируем последний снимок в истории (только что добавленный)
         val newHistory = if (game.legHistory.isNotEmpty()) {
             val last = game.legHistory.last()
             val newPlayers = last.players.mapIndexed { i, snap ->
-                if (i == winningPlayerIndex) {
-                    snap.copy(
-                        darts = (snap.darts - extra).coerceAtLeast(0),
-                        misses = (snap.misses - extra).coerceAtLeast(0)
-                    )
-                } else snap
+                if (i == winningPlayerIndex) snap.copy(
+                    darts = (snap.darts - extra).coerceAtLeast(0),
+                    misses = (snap.misses - extra).coerceAtLeast(0)
+                ) else snap
             }
             game.legHistory.dropLast(1) + last.copy(players = newPlayers)
         } else game.legHistory
-
         return game.copy(players = updated, legHistory = newHistory)
     }
 
@@ -246,7 +174,6 @@ object CricketLogic {
 
     fun awardLegWin(game: CricketGame, winningTeam: Int): CricketGame {
         val updatedPlayers = game.players.toMutableList()
-
         val lastPlayerIdx = game.currentPlayerIndex
         if (lastPlayerIdx in updatedPlayers.indices) {
             updatedPlayers[lastPlayerIdx] = finalizeTurn(updatedPlayers[lastPlayerIdx])
@@ -258,14 +185,9 @@ object CricketLogic {
             winningTeam = winningTeam,
             players = updatedPlayers.map { p ->
                 LegPlayerSnapshot(
-                    name = p.name,
-                    teamIndex = p.teamIndex,
-                    isBot = p.isBot,
-                    legMarks = p.legMarks,
-                    darts = p.dartsThrown,
-                    misses = p.legMisses,
-                    triples = p.legTriples,
-                    score = p.totalScore
+                    name = p.name, teamIndex = p.teamIndex, isBot = p.isBot,
+                    legMarks = p.legMarks, darts = p.dartsThrown,
+                    misses = p.legMisses, triples = p.legTriples, score = p.totalScore
                 )
             }
         )
@@ -275,8 +197,7 @@ object CricketLogic {
         val setWon = newLegsInCurrentSet >= game.legsPerSet
 
         val nextStartingTeam = 1 - game.lastLegStartingTeam
-        val nextStartingPlayerIndex = game.players
-            .indexOfFirst { it.teamIndex == nextStartingTeam }
+        val nextStartingPlayerIndex = game.players.indexOfFirst { it.teamIndex == nextStartingTeam }
             .let { if (it >= 0) it else 0 }
 
         val newHistory = game.legHistory + snapshot
@@ -288,17 +209,17 @@ object CricketLogic {
             for (i in updatedPlayers.indices) {
                 if (updatedPlayers[i].teamIndex == winningTeam) {
                     updatedPlayers[i] = updatedPlayers[i].copy(
-                        legsInCurrentSet = newLegsInCurrentSet,
-                        setsWon = newSetsWon
+                        legsInCurrentSet = newLegsInCurrentSet, setsWon = newSetsWon
                     )
                 }
             }
             if (newSetsWon >= game.setsPerMatch) {
+                // Победа в МАТЧЕ — оставляем lastLegWinnerIndex, чтобы показать диалог лега с вопросом
                 return game.copy(
                     players = updatedPlayers,
                     isFinished = true,
                     winnerIndex = winningTeam,
-                    lastLegWinnerIndex = null,
+                    lastLegWinnerIndex = winningTeam,
                     lastSetWinnerIndex = winningTeam,
                     lastLegWinnerPlayerIndex = winnerPlayerIndex,
                     lastLegDartsClicked = game.currentTurnDarts,
@@ -314,7 +235,7 @@ object CricketLogic {
                 currentTurnDarts = 0,
                 currentLegNumber = 1,
                 currentSetNumber = game.currentSetNumber + 1,
-                lastLegWinnerIndex = null,
+                lastLegWinnerIndex = winningTeam,
                 lastSetWinnerIndex = winningTeam,
                 lastLegStartingTeam = nextStartingTeam,
                 lastLegWinnerPlayerIndex = winnerPlayerIndex,
@@ -350,48 +271,28 @@ object CricketLogic {
             updatedPlayers[playerIndex] = finalizeTurn(updatedPlayers[playerIndex])
         }
         val next = (game.currentPlayerIndex + 1) % game.players.size
-        return game.copy(
-            players = updatedPlayers,
-            currentPlayerIndex = next,
-            currentTurnDarts = 0
-        )
+        return game.copy(players = updatedPlayers, currentPlayerIndex = next, currentTurnDarts = 0)
     }
 
     fun newGame(
-        type: CricketType,
-        players: List<CricketPlayer>,
-        legsPerSet: Int = 1,
-        setsPerMatch: Int = 1,
-        isPairGame: Boolean = false,
-        startingTeamIndex: Int = 0,
-        autoOkSeconds: Int = 0,
-        sessionStartTime: Long = 0L,
-        sessionForm: Double = 1.0
+        type: CricketType, players: List<CricketPlayer>,
+        legsPerSet: Int = 1, setsPerMatch: Int = 1,
+        isPairGame: Boolean = false, startingTeamIndex: Int = 0,
+        autoOkSeconds: Int = 0, sessionStartTime: Long = 0L, sessionForm: Double = 1.0
     ): CricketGame {
-        val startingPlayerIndex = players
-            .indexOfFirst { it.teamIndex == startingTeamIndex }
+        val startingPlayerIndex = players.indexOfFirst { it.teamIndex == startingTeamIndex }
             .let { if (it >= 0) it else 0 }
-
         return CricketGame(
-            type = type,
-            players = players,
-            currentPlayerIndex = startingPlayerIndex,
-            isFinished = false,
-            winnerIndex = null,
-            currentTurnDarts = 0,
-            legsPerSet = legsPerSet,
-            setsPerMatch = setsPerMatch,
-            currentLegNumber = 1,
-            currentSetNumber = 1,
-            lastLegWinnerIndex = null,
-            lastSetWinnerIndex = null,
-            isPairGame = isPairGame,
-            teamCount = 2,
+            type = type, players = players, currentPlayerIndex = startingPlayerIndex,
+            isFinished = false, winnerIndex = null, currentTurnDarts = 0,
+            legsPerSet = legsPerSet, setsPerMatch = setsPerMatch,
+            currentLegNumber = 1, currentSetNumber = 1,
+            lastLegWinnerIndex = null, lastSetWinnerIndex = null,
+            isPairGame = isPairGame, teamCount = 2,
             playersPerTeam = if (isPairGame) 2 else 1,
             lastLegStartingTeam = startingTeamIndex,
             autoOkSeconds = autoOkSeconds,
-            sessionStartTime = sessionStartTime,
-            sessionForm = sessionForm,
+            sessionStartTime = sessionStartTime, sessionForm = sessionForm,
             legHistory = emptyList()
         )
     }
