@@ -20,6 +20,12 @@ import com.lodkin.dartstrainer.data.cricket.CricketLogic
 import com.lodkin.dartstrainer.data.cricket.CricketPlayer
 import com.lodkin.dartstrainer.data.cricket.CricketRepository
 import com.lodkin.dartstrainer.data.cricket.CricketType
+import com.lodkin.dartstrainer.data.game501.Game501
+import com.lodkin.dartstrainer.data.game501.Game501Database
+import com.lodkin.dartstrainer.data.game501.Game501Logic
+import com.lodkin.dartstrainer.data.game501.Game501Mode
+import com.lodkin.dartstrainer.data.game501.Game501Repository
+import com.lodkin.dartstrainer.data.game501.Player501
 import com.lodkin.dartstrainer.theme.Accent
 import com.lodkin.dartstrainer.theme.DarkBg
 import com.lodkin.dartstrainer.ui.GameSelectScreen
@@ -32,6 +38,9 @@ import com.lodkin.dartstrainer.ui.WelcomeScreen
 import com.lodkin.dartstrainer.ui.cricket.CricketGameScreen
 import com.lodkin.dartstrainer.ui.cricket.CricketSetupScreen
 import com.lodkin.dartstrainer.ui.cricket.CricketStatsScreen
+import com.lodkin.dartstrainer.ui.game501.Game501Screen
+import com.lodkin.dartstrainer.ui.game501.Game501SetupScreen
+import com.lodkin.dartstrainer.ui.game501.Game501StatsScreen
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.random.Random
@@ -57,6 +66,9 @@ fun DartsTrainerApp() {
     val cricketRepository = remember {
         CricketRepository(CricketDatabase.get(context).cricketDao())
     }
+    val game501Repository = remember {
+        Game501Repository(Game501Database.get(context).game501Dao())
+    }
 
     // ── Сессия ──
     val sessionStartTime = remember { System.currentTimeMillis() }
@@ -65,7 +77,9 @@ fun DartsTrainerApp() {
     var onboardingDone by remember { mutableStateOf(SettingsStorage.isOnboardingDone(context)) }
     var stage by remember { mutableStateOf(if (onboardingDone) "loading" else "welcome") }
     var screen by remember { mutableStateOf("main") }
+
     var cricketGame by remember { mutableStateOf<CricketGame?>(null) }
+    var game501 by remember { mutableStateOf<Game501?>(null) }
 
     if (stage == "loading") {
         LaunchedEffect(Unit) { delay(3000); stage = "main" }
@@ -103,12 +117,11 @@ fun DartsTrainerApp() {
 
             "game_select" -> GameSelectScreen(
                 onCricket = { screen = "cricket_setup" },
-                on501 = { screen = "placeholder_501" },
+                on501 = { screen = "game501_setup" },
                 onBack = { screen = "main" }
             )
 
-            "placeholder_501" -> PlaceholderScreen("501 — в разработке", { screen = "game_select" })
-
+            // ── Крикет ──
             "cricket_setup" -> CricketSetupScreen(
                 playerName = SettingsStorage.getPlayerName(context),
                 onStartGame = { type: CricketType,
@@ -156,6 +169,58 @@ fun DartsTrainerApp() {
                         game = game,
                         onPlayAgain = { screen = "cricket_setup" },
                         onBackToMenu = { cricketGame = null; screen = "main" }
+                    )
+                } else screen = "main"
+            }
+
+            // ── 501 ──
+            "game501_setup" -> Game501SetupScreen(
+                playerName = SettingsStorage.getPlayerName(context),
+                onStartGame = { mode: Game501Mode,
+                                players: List<Player501>,
+                                legsPerSet: Int,
+                                setsPerMatch: Int,
+                                isPairGame: Boolean,
+                                startingTeam: Int,
+                                autoOkSeconds: Int ->
+                    game501 = Game501Logic.newGame(
+                        mode = mode,
+                        players = players,
+                        legsPerSet = legsPerSet,
+                        setsPerMatch = setsPerMatch,
+                        isPairGame = isPairGame,
+                        startingTeamIndex = startingTeam,
+                        autoOkSeconds = autoOkSeconds,
+                        sessionStartTime = sessionStartTime,
+                        sessionForm = sessionForm
+                    )
+                    screen = "game501_game"
+                },
+                onBack = { screen = "game_select" }
+            )
+
+            "game501_game" -> {
+                val game = game501
+                if (game != null) {
+                    Game501Screen(
+                        initialGame = game,
+                        onGameFinish = { finished: Game501 ->
+                            scope.launch { game501Repository.saveGame(finished) }
+                            game501 = finished
+                            screen = "game501_stats"
+                        },
+                        onBack = { screen = "game_select" }
+                    )
+                } else screen = "game501_setup"
+            }
+
+            "game501_stats" -> {
+                val game = game501
+                if (game != null) {
+                    Game501StatsScreen(
+                        game = game,
+                        onPlayAgain = { screen = "game501_setup" },
+                        onBackToMenu = { game501 = null; screen = "main" }
                     )
                 } else screen = "main"
             }
