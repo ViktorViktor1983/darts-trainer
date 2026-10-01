@@ -43,9 +43,6 @@ object CricketLogic {
         return game.playersOfTeam(team).sumOf { it.matchTotalScore }
     }
 
-    // ─────────────────────────────────────────────
-    // Завершение подхода: подсчёт идеальных/сильных подходов
-    // ─────────────────────────────────────────────
     private fun finalizeTurn(player: CricketPlayer): CricketPlayer {
         if (player.turnMarks <= 0 && player.turnMisses <= 0) {
             return player.copy(turnMarks = 0, turnMisses = 0, turnTriples = 0)
@@ -196,6 +193,7 @@ object CricketLogic {
     // ─────────────────────────────────────────────
     // Корректировка после диалога «Сколько дротиков ушло на закрытие?»
     // realDarts = сколько реально потратил игрок (1, 2 или 3)
+    // Убирает лишние промахи из статистики игрока И из снимка лега
     // ─────────────────────────────────────────────
     fun adjustLastLegDarts(game: CricketGame, realDarts: Int): CricketGame {
         val winningPlayerIndex = game.lastLegWinnerPlayerIndex ?: return game
@@ -204,12 +202,10 @@ object CricketLogic {
         val updated = game.players.toMutableList()
         val player = updated[winningPlayerIndex]
 
-        // Сколько дротиков программа насчитала в победном подходе
         val programDarts = game.lastLegDartsClicked
         val extra = programDarts - realDarts
         if (extra <= 0) return game
 
-        // Убираем лишние дротики (они были ошибочно записаны как промахи)
         val newDarts = (player.dartsThrown - extra).coerceAtLeast(0)
         val newMatchDarts = (player.matchDartsThrown - extra).coerceAtLeast(0)
         val newMisses = (player.legMisses - extra).coerceAtLeast(0)
@@ -222,7 +218,21 @@ object CricketLogic {
             matchMissesThrown = newMatchMisses
         )
 
-        return game.copy(players = updated)
+        // Корректируем последний снимок в истории (только что добавленный)
+        val newHistory = if (game.legHistory.isNotEmpty()) {
+            val last = game.legHistory.last()
+            val newPlayers = last.players.mapIndexed { i, snap ->
+                if (i == winningPlayerIndex) {
+                    snap.copy(
+                        darts = (snap.darts - extra).coerceAtLeast(0),
+                        misses = (snap.misses - extra).coerceAtLeast(0)
+                    )
+                } else snap
+            }
+            game.legHistory.dropLast(1) + last.copy(players = newPlayers)
+        } else game.legHistory
+
+        return game.copy(players = updated, legHistory = newHistory)
     }
 
     fun checkLegWinner(game: CricketGame): Int? {
@@ -237,13 +247,11 @@ object CricketLogic {
     fun awardLegWin(game: CricketGame, winningTeam: Int): CricketGame {
         val updatedPlayers = game.players.toMutableList()
 
-        // Финализируем подход последнего игрока
         val lastPlayerIdx = game.currentPlayerIndex
         if (lastPlayerIdx in updatedPlayers.indices) {
             updatedPlayers[lastPlayerIdx] = finalizeTurn(updatedPlayers[lastPlayerIdx])
         }
 
-        // Создаём снимок лега ДО сброса
         val snapshot = LegSnapshot(
             setNumber = game.currentSetNumber,
             legNumber = game.currentLegNumber,
@@ -272,8 +280,6 @@ object CricketLogic {
             .let { if (it >= 0) it else 0 }
 
         val newHistory = game.legHistory + snapshot
-
-        // Определяем, кто делал победный бросок — последний игрок
         val winnerPlayerIndex = game.currentPlayerIndex
 
         if (setWon) {
