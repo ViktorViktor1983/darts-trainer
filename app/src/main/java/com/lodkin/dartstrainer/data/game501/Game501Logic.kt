@@ -1,13 +1,14 @@
 package com.lodkin.dartstrainer.data.game501
 
-// Логика игры 501 — чистые функции без UI
+// Логика игры x01 — чистые функции без UI
 object Game501Logic {
 
     // ─────────────────────────────────────────────
     // Начать новый матч
     // ─────────────────────────────────────────────
     fun newGame(
-        mode: Game501Mode,
+        gameType: GameType,
+        outMode: OutMode,
         players: List<Player501>,
         legsPerSet: Int = 1,
         setsPerMatch: Int = 1,
@@ -22,7 +23,7 @@ object Game501Logic {
 
         val prepared = players.map { p ->
             p.copy(
-                score = mode.startScore,
+                score = gameType.startScore,
                 turnScore = 0,
                 turnDarts = 0,
                 legDarts = 0,
@@ -33,7 +34,8 @@ object Game501Logic {
         }
 
         return Game501(
-            mode = mode,
+            gameType = gameType,
+            outMode = outMode,
             players = prepared,
             currentPlayerIndex = startingPlayerIndex,
             legsPerSet = legsPerSet,
@@ -58,7 +60,6 @@ object Game501Logic {
         val playerIndex = game.currentPlayerIndex
         val player = game.players[playerIndex]
 
-        // Если бросок мимо — просто тратим дротик
         if (multiplier == ThrowMultiplier.MISS) {
             return registerMiss(game, playerIndex)
         }
@@ -67,19 +68,16 @@ object Game501Logic {
         val newScore = player.score - points
         val isDouble = multiplier == ThrowMultiplier.DOUBLE
 
-        // Проверяем условия закрытия
-        val canFinishOnThisThrow = when (game.mode) {
-            Game501Mode.X501_DOUBLE_OUT -> isDouble && newScore == 0
-            Game501Mode.X501_DOUBLE_IN_OUT -> isDouble && newScore == 0 && player.turnScore > 0
-            Game501Mode.X301 -> isDouble && newScore == 0
-            Game501Mode.STRAIGHT_OUT -> newScore == 0
+        val canFinishOnThisThrow = when (game.outMode) {
+            OutMode.DOUBLE_OUT -> isDouble && newScore == 0
+            OutMode.DOUBLE_IN_OUT -> isDouble && newScore == 0 && player.turnScore > 0
+            OutMode.STRAIGHT_OUT -> newScore == 0
         }
 
-        // Перебор (bust) в Double Out / 301 / Double In
         val isBust = when {
             newScore < 0 -> true
-            newScore == 1 && requiresDoubleOut(game.mode) -> true
-            newScore == 0 && !canFinishOnThisThrow && requiresDoubleOut(game.mode) -> true
+            newScore == 1 && requiresDoubleOut(game.outMode) -> true
+            newScore == 0 && !canFinishOnThisThrow && requiresDoubleOut(game.outMode) -> true
             else -> false
         }
 
@@ -87,7 +85,6 @@ object Game501Logic {
             return registerBust(game, playerIndex)
         }
 
-        // Обновляем игрока
         val updatedPlayers = game.players.toMutableList()
         val updatedPlayer = player.copy(
             score = newScore,
@@ -106,7 +103,6 @@ object Game501Logic {
 
         var updatedGame = game.copy(players = updatedPlayers)
 
-        // Победа в леге?
         if (newScore == 0 && canFinishOnThisThrow) {
             updatedGame = finishLeg(updatedGame, updatedPlayer.teamIndex)
             return updatedGame
@@ -126,13 +122,7 @@ object Game501Logic {
         val newScore = player.score - gained
 
         // Bust: ушли в минус или оставили 1 (в Double Out)
-        if (newScore < 0 || (newScore == 1 && requiresDoubleOut(game.mode))) {
-            return registerBust(game, playerIndex)
-        }
-
-        // Нельзя закрыть лег через ввод суммы — только через бросок в удвоение
-        // Поэтому при newScore == 0 — тоже bust
-        if (newScore == 0 && requiresDoubleOut(game.mode)) {
+        if (newScore < 0 || (newScore == 1 && requiresDoubleOut(game.outMode))) {
             return registerBust(game, playerIndex)
         }
 
@@ -146,11 +136,17 @@ object Game501Logic {
             matchDarts = player.matchDarts + 3,
             matchScoreGained = player.matchScoreGained + gained
         )
+
+        // Если остаток 0 — лег закрыт (игрок сообщил сумму закрытия)
+        if (newScore == 0) {
+            return finishLeg(game.copy(players = updatedPlayers), player.teamIndex)
+        }
+
         return game.copy(players = updatedPlayers)
     }
 
     // ─────────────────────────────────────────────
-    // Ввод через «Остаток» (программа сама считает сумму)
+    // Ввод через «Остаток»
     // ─────────────────────────────────────────────
     fun applyTurnRemaining(game: Game501, remaining: Int): Game501 {
         val player = game.currentPlayer ?: return game
@@ -184,7 +180,7 @@ object Game501Logic {
     }
 
     // ─────────────────────────────────────────────
-    // Промах (тратим дротик)
+    // Промах
     // ─────────────────────────────────────────────
     private fun registerMiss(game: Game501, playerIndex: Int): Game501 {
         val updatedPlayers = game.players.toMutableList()
@@ -198,34 +194,30 @@ object Game501Logic {
     }
 
     // ─────────────────────────────────────────────
-    // Перебор (bust) — сбрасываем подход
+    // Перебор (bust)
     // ─────────────────────────────────────────────
     private fun registerBust(game: Game501, playerIndex: Int): Game501 {
-        // Уже накопили turnDarts за этот подход? Считаем их все в статистику
         val updatedPlayers = game.players.toMutableList()
         val player = updatedPlayers[playerIndex]
-        val dartsUsedInTurn = (3 - (3 - player.turnDarts)).coerceIn(0, 3)
+        val missing = (3 - player.turnDarts).coerceAtLeast(0)
 
         updatedPlayers[playerIndex] = player.copy(
-            // Счёт возвращается к тому, что был в начале подхода
-            score = player.score + player.turnScore,  // turnScore не увеличивали, но на всякий
             turnScore = 0,
-            turnDarts = 3,  // считаем, что подход закончен
-            legDarts = player.legDarts + (3 - player.turnDarts).coerceAtLeast(0),
-            matchDarts = player.matchDarts + (3 - player.turnDarts).coerceAtLeast(0)
+            turnDarts = 0,
+            legDarts = player.legDarts + missing,
+            matchDarts = player.matchDarts + missing
         )
-        return game.copy(players = updatedPlayers)
+        return nextPlayer(game.copy(players = updatedPlayers))
     }
 
     // ─────────────────────────────────────────────
-    // Завершение подхода (кнопка OK / АвтоОК)
+    // Завершение подхода
     // ─────────────────────────────────────────────
     fun finishTurn(game: Game501): Game501 {
         if (game.isFinished) return game
         val playerIndex = game.currentPlayerIndex
         val player = game.players[playerIndex]
 
-        // Если вручную ввели сумму — turnDarts уже = 3. Иначе добавляем недостающие промахи.
         val missing = (3 - player.turnDarts).coerceAtLeast(0)
         val updatedPlayers = game.players.toMutableList()
         updatedPlayers[playerIndex] = player.copy(
@@ -247,10 +239,9 @@ object Game501Logic {
     }
 
     // ─────────────────────────────────────────────
-    // Завершение лега: победа + сброс
+    // Завершение лега
     // ─────────────────────────────────────────────
     private fun finishLeg(game: Game501, winningTeam: Int): Game501 {
-        // Снимок лега до сброса
         val snapshot = LegSnapshot501(
             setNumber = game.currentSetNumber,
             legNumber = game.currentLegNumber,
@@ -300,10 +291,9 @@ object Game501Logic {
                     legHistory = newHistory
                 )
             }
-            // Новый сет: сброс легов, счёт 501
             val resetPlayers = updatedPlayers.map { p ->
                 p.copy(
-                    score = game.mode.startScore,
+                    score = game.gameType.startScore,
                     turnScore = 0,
                     turnDarts = 0,
                     legDarts = 0,
@@ -325,7 +315,6 @@ object Game501Logic {
             )
         }
 
-        // Новый лег: сброс счёта
         for (i in updatedPlayers.indices) {
             if (updatedPlayers[i].teamIndex == winningTeam) {
                 updatedPlayers[i] = updatedPlayers[i].copy(legsInCurrentSet = newLegsInCurrentSet)
@@ -333,7 +322,7 @@ object Game501Logic {
         }
         val resetPlayers = updatedPlayers.map { p ->
             p.copy(
-                score = game.mode.startScore,
+                score = game.gameType.startScore,
                 turnScore = 0,
                 turnDarts = 0,
                 legDarts = 0,
@@ -356,24 +345,19 @@ object Game501Logic {
     // ─────────────────────────────────────────────
     // Утилиты
     // ─────────────────────────────────────────────
-    private fun requiresDoubleOut(mode: Game501Mode): Boolean =
-        mode == Game501Mode.X501_DOUBLE_OUT ||
-        mode == Game501Mode.X501_DOUBLE_IN_OUT ||
-        mode == Game501Mode.X301
+    private fun requiresDoubleOut(outMode: OutMode): Boolean =
+        outMode == OutMode.DOUBLE_OUT || outMode == OutMode.DOUBLE_IN_OUT
 
-    // Средний набор за лег (PPR) по игроку
     fun legPpr(player: Player501): Double {
         if (player.legDarts < 3) return 0.0
         return player.legScoreGained.toDouble() / (player.legDarts / 3.0)
     }
 
-    // Средний набор за матч
     fun matchPpr(player: Player501): Double {
         if (player.matchDarts < 3) return 0.0
         return player.matchScoreGained.toDouble() / (player.matchDarts / 3.0)
     }
 
-    // Точность удвоений за матч
     fun doublesAccuracy(player: Player501): Double {
         if (player.matchDoublesAttempted <= 0) return 0.0
         return player.matchDoublesHit.toDouble() / player.matchDoublesAttempted * 100.0
