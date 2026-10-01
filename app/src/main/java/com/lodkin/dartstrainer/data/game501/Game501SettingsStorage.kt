@@ -2,12 +2,15 @@ package com.lodkin.dartstrainer.data.game501
 
 import android.content.Context
 
-// Хранилище настроек игры 501
+// Хранилище настроек игры x01
 object Game501SettingsStorage {
     private const val PREFS = "game501_settings"
 
     private const val KEY_PAIR_GAME = "pair_game"
-    private const val KEY_MODE = "mode"
+    private const val KEY_GAME_TYPE = "game_type"           // X501 / X301 / X1001
+    private const val KEY_OUT_MODE_501 = "out_mode_501"     // формат для 501
+    private const val KEY_OUT_MODE_301 = "out_mode_301"     // формат для 301
+    private const val KEY_OUT_MODE_1001 = "out_mode_1001"   // формат для 1001
     private const val KEY_AUTO_OK = "auto_ok"
     private const val KEY_LEGS_PER_SET = "legs_per_set"
     private const val KEY_SETS_PER_MATCH = "sets_per_match"
@@ -16,10 +19,9 @@ object Game501SettingsStorage {
     private const val KEY_SLOT_NAMES = "slot_names"
     private const val KEY_SLOT_BOT_IDS = "slot_bot_ids"
 
-    // Быстрые кнопки (сохранённые 11 сумм)
     private const val KEY_QUICK_SUMS = "quick_sums"
     private const val KEY_GAMES_COUNTER = "games_counter"
-    private const val KEY_SUM_FREQ = "sum_freq"   // "60:12|100:8|..."
+    private const val KEY_SUM_FREQ = "sum_freq"
 
     val DEFAULT_QUICK_SUMS = listOf(140, 100, 95, 85, 81, 120, 60, 57, 45, 41, 26)
 
@@ -31,14 +33,34 @@ object Game501SettingsStorage {
         prefs(context).edit().putBoolean(KEY_PAIR_GAME, value).apply()
     }
 
-    // ── Режим игры ──
-    fun getMode(context: Context): Game501Mode {
-        val name = prefs(context).getString(KEY_MODE, Game501Mode.X501_DOUBLE_OUT.name)
-        return runCatching { Game501Mode.valueOf(name ?: "") }.getOrDefault(Game501Mode.X501_DOUBLE_OUT)
+    // ── Тип игры ──
+    fun getGameType(context: Context): GameType {
+        val name = prefs(context).getString(KEY_GAME_TYPE, GameType.X501.name)
+        return runCatching { GameType.valueOf(name ?: "") }.getOrDefault(GameType.X501)
     }
 
-    fun setMode(context: Context, mode: Game501Mode) {
-        prefs(context).edit().putString(KEY_MODE, mode.name).apply()
+    fun setGameType(context: Context, type: GameType) {
+        prefs(context).edit().putString(KEY_GAME_TYPE, type.name).apply()
+    }
+
+    // ── Формат (отдельно для каждого типа игры) ──
+    fun getOutMode(context: Context, gameType: GameType): OutMode {
+        val key = when (gameType) {
+            GameType.X501 -> KEY_OUT_MODE_501
+            GameType.X301 -> KEY_OUT_MODE_301
+            GameType.X1001 -> KEY_OUT_MODE_1001
+        }
+        val name = prefs(context).getString(key, OutMode.DOUBLE_OUT.name)
+        return runCatching { OutMode.valueOf(name ?: "") }.getOrDefault(OutMode.DOUBLE_OUT)
+    }
+
+    fun setOutMode(context: Context, gameType: GameType, mode: OutMode) {
+        val key = when (gameType) {
+            GameType.X501 -> KEY_OUT_MODE_501
+            GameType.X301 -> KEY_OUT_MODE_301
+            GameType.X1001 -> KEY_OUT_MODE_1001
+        }
+        prefs(context).edit().putString(key, mode.name).apply()
     }
 
     // ── АвтоОК ──
@@ -103,7 +125,6 @@ object Game501SettingsStorage {
         prefs(context).edit().putInt(KEY_GAMES_COUNTER, value).apply()
     }
 
-    // Частоты сумм: map сумма -> количество
     fun getSumFreq(context: Context): MutableMap<Int, Int> {
         val raw = prefs(context).getString(KEY_SUM_FREQ, "") ?: ""
         val map = mutableMapOf<Int, Int>()
@@ -124,21 +145,16 @@ object Game501SettingsStorage {
         prefs(context).edit().putString(KEY_SUM_FREQ, raw).apply()
     }
 
-    // ─────────────────────────────────────────────
-    // Обновление быстрых кнопок раз в 3 игры
-    // ─────────────────────────────────────────────
     fun updateQuickSumsIfNeeded(context: Context) {
         val counter = getGamesCounter(context) + 1
         if (counter >= 3) {
             val freq = getSumFreq(context)
             if (freq.isNotEmpty()) {
-                // Топ-11 самых частых
                 val top = freq.entries
                     .sortedByDescending { it.value }
                     .take(11)
                     .map { it.key }
                     .toMutableList()
-                // Если меньше 11 — добираем стандартными
                 for (def in DEFAULT_QUICK_SUMS) {
                     if (top.size >= 11) break
                     if (def !in top) top.add(def)
@@ -152,7 +168,6 @@ object Game501SettingsStorage {
         }
     }
 
-    // Записать сумму в частоты (только для людей)
     fun recordHumanSum(context: Context, sum: Int) {
         if (sum < 0 || sum > 180) return
         val freq = getSumFreq(context)
