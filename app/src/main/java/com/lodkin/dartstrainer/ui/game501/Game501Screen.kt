@@ -42,6 +42,8 @@ fun Game501Screen(
     var showLegWonDialog by remember { mutableStateOf(false) }
     var showSetWonDialog by remember { mutableStateOf(false) }
     var showLegQuestionDialog by remember { mutableStateOf(false) }
+    var showDoublesQuestionDialog by remember { mutableStateOf(false) }
+    var chosenDarts by remember { mutableStateOf(0) }
     var showBustMessage by remember { mutableStateOf(false) }
 
     var quickSums by remember { mutableStateOf(Game501SettingsStorage.getQuickSums(context)) }
@@ -61,7 +63,7 @@ fun Game501Screen(
     }
 
     // ─────────────────────────────────────────────
-    // ВАЖНО: applySum объявлена ПЕРВОЙ — до тех, кто её вызывает
+    // Обработка суммы
     // ─────────────────────────────────────────────
     fun applySum(value: Int) {
         if (value <= 0 || value > 180) return
@@ -70,13 +72,13 @@ fun Game501Screen(
 
         saveHistory()
 
-        // Случай 1: сумма == остаток → закрытие лега через удвоение
+        // Сумма == остаток → закрытие лега
         if (value == currentPlayer.score) {
+            chosenDarts = 0
             showLegQuestionDialog = true
             return
         }
 
-        // Случай 2: обычный ввод (в т.ч. перебор)
         val before = game
         val updated = Game501Logic.applyTurnScore(game, value)
         val playerBefore = before.players[before.currentPlayerIndex]
@@ -115,6 +117,7 @@ fun Game501Screen(
         saveHistory()
 
         if (value == 0) {
+            chosenDarts = 0
             showLegQuestionDialog = true
             return
         }
@@ -135,28 +138,25 @@ fun Game501Screen(
     fun pressLeg() {
         val currentPlayer = game.players.getOrNull(game.currentPlayerIndex) ?: return
         if (currentPlayer.isBot || game.isFinished) return
+        chosenDarts = 0
         showLegQuestionDialog = true
     }
 
     // Автоход бота
-    LaunchedEffect(game.currentPlayerIndex, game.isFinished, showLegWonDialog, showSetWonDialog, showWinDialog, showLegQuestionDialog) {
+    LaunchedEffect(game.currentPlayerIndex, game.isFinished, showLegWonDialog, showSetWonDialog, showWinDialog, showLegQuestionDialog, showDoublesQuestionDialog) {
         val currentPlayer = game.players.getOrNull(game.currentPlayerIndex) ?: return@LaunchedEffect
-        if (game.isFinished || showLegWonDialog || showSetWonDialog || showWinDialog || showLegQuestionDialog) return@LaunchedEffect
+        if (game.isFinished || showLegWonDialog || showSetWonDialog || showWinDialog || showLegQuestionDialog || showDoublesQuestionDialog) return@LaunchedEffect
         if (!currentPlayer.isBot) return@LaunchedEffect
         delay(900L)
-        if (game.isFinished || showLegWonDialog || showSetWonDialog || showWinDialog || showLegQuestionDialog) return@LaunchedEffect
+        if (game.isFinished || showLegWonDialog || showSetWonDialog || showWinDialog || showLegQuestionDialog || showDoublesQuestionDialog) return@LaunchedEffect
         if (game.players.getOrNull(game.currentPlayerIndex)?.isBot != true) return@LaunchedEffect
 
         saveHistory()
         game = botPerformTurn(game)
     }
 
-    // Показать Bust на 1.5 сек
     LaunchedEffect(showBustMessage) {
-        if (showBustMessage) {
-            delay(1500L)
-            showBustMessage = false
-        }
+        if (showBustMessage) { delay(1500L); showBustMessage = false }
     }
 
     LaunchedEffect(game.lastLegWinnerIndex) {
@@ -226,6 +226,9 @@ fun Game501Screen(
         }
     }
 
+    // ─────────────────────────────────────────────
+    // ДИАЛОГ 1: Сколько дротиков ушло на закрытие?
+    // ─────────────────────────────────────────────
     if (showLegQuestionDialog) {
         AlertDialog(
             onDismissRequest = { },
@@ -237,13 +240,48 @@ fun Game501Screen(
                         Box(
                             modifier = Modifier.weight(1f).clip(RoundedCornerShape(10.dp)).background(Accent)
                                 .clickable {
-                                    saveHistory()
-                                    game = Game501Logic.closeLegManually(game, n)
+                                    chosenDarts = n
                                     showLegQuestionDialog = false
+                                    showDoublesQuestionDialog = true
                                 }.padding(vertical = 14.dp),
                             contentAlignment = Alignment.Center
                         ) { Text("$n", color = Color(0xFF121212), fontSize = 20.sp, fontWeight = FontWeight.Bold) }
                     }
+                }
+            }
+        )
+    }
+
+    // ─────────────────────────────────────────────
+    // ДИАЛОГ 2: Сколько попыток в удвоение?
+    // ─────────────────────────────────────────────
+    if (showDoublesQuestionDialog) {
+        AlertDialog(
+            onDismissRequest = { },
+            confirmButton = {},
+            title = { Text("Сколько попыток в удвоение было?", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold) },
+            text = {
+                Column {
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        listOf(0, 1, 2, 3).forEach { n ->
+                            Box(
+                                modifier = Modifier.weight(1f).clip(RoundedCornerShape(10.dp)).background(Accent)
+                                    .clickable {
+                                        saveHistory()
+                                        game = Game501Logic.closeLegManually(game, chosenDarts, n)
+                                        showDoublesQuestionDialog = false
+                                        chosenDarts = 0
+                                    }.padding(vertical = 14.dp),
+                                contentAlignment = Alignment.Center
+                            ) { Text("$n", color = Color(0xFF121212), fontSize = 20.sp, fontWeight = FontWeight.Bold) }
+                        }
+                    }
+                    Spacer(Modifier.height(10.dp))
+                    Text(
+                        "0 — если в этом подходе ты вообще не целился в удвоение",
+                        color = Color.White.copy(alpha = 0.6f),
+                        fontSize = 12.sp
+                    )
                 }
             }
         )
@@ -279,7 +317,7 @@ fun Game501Screen(
                                 Spacer(Modifier.height(4.dp))
                                 StatLine501("Средний набор", String.format(Locale.US, "%.2f", ppr))
                                 StatLine501("Дротиков", p.darts.toString())
-                                StatLine501("Удвоения", String.format(Locale.US, "%.1f%%", dblPct))
+                                StatLine501("Удвоения", "${p.doublesHit} из ${p.doublesAttempted} (${String.format(Locale.US, "%.1f%%", dblPct)})")
                             }
                         }
                     }
@@ -348,7 +386,10 @@ private fun botPerformTurn(game: Game501): Game501 {
     if (requiresDouble && canCloseNow) {
         val closeChance = 0.15 + (botLevel - 1) * 0.025
         if (Random.nextDouble() < closeChance) {
-            return Game501Logic.closeLegManually(game, Random.nextInt(1, 4))
+            // Бот закрыл: 1-3 дротика, из них 1-3 попытки в дабл (минимум 1)
+            val darts = Random.nextInt(1, 4)
+            val attempts = Random.nextInt(1, darts + 1)
+            return Game501Logic.closeLegManually(game, darts, attempts)
         }
     }
 
