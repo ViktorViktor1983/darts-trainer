@@ -28,6 +28,9 @@ import kotlinx.coroutines.delay
 import java.util.Locale
 import kotlin.random.Random
 
+private val PaleYellow = Color(0xFFFFE082)
+private val PaleYellowText = Color(0xFF3E2723)
+
 @Composable
 fun Game501Screen(
     initialGame: Game501,
@@ -54,6 +57,10 @@ fun Game501Screen(
 
     fun saveHistory() { history.add(game); if (history.size > 300) history.removeAt(0) }
     fun undo() { if (history.isNotEmpty()) game = history.removeAt(history.lastIndex) }
+
+    val dialogOpen = showLegWonDialog || showSetWonDialog || showWinDialog ||
+        showLegQuestionDialog || showDoublesQuestionDialog || showDoublesOnlyDialog
+    val canUndo = history.isNotEmpty() && !dialogOpen
 
     LaunchedEffect(Unit) { quickSums = Game501SettingsStorage.getQuickSums(context) }
 
@@ -191,7 +198,6 @@ fun Game501Screen(
             )
         }
 
-        // Быстрые кнопки + ЛЕГ в 12-й клетке
         QuickButtonsWithLeg(
             sums = quickSums,
             enabled = !game.isFinished && game.currentPlayer?.isBot != true,
@@ -199,7 +205,6 @@ fun Game501Screen(
             onLeg = { pressLeg() }
         )
 
-        // Ряд: Остаток (2 клетки) + OK (4 клетки)
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 4.dp),
             horizontalArrangement = Arrangement.spacedBy(6.dp)
@@ -218,9 +223,11 @@ fun Game501Screen(
 
         Keyboard501(
             enabled = !game.isFinished && game.currentPlayer?.isBot != true,
+            canUndo = canUndo,
             onDigit = { inputText = if (inputText.length < 3) inputText + it else inputText },
             onBackspace = { inputText = if (inputText.isNotEmpty()) inputText.dropLast(1) else "" },
-            onClear = { inputText = "" }
+            onClear = { inputText = "" },
+            onUndo = { undo() }
         )
     }
 
@@ -448,7 +455,7 @@ private fun generateBotTurnScore(botLevel: Int): Int {
 }
 
 // ─────────────────────────────────────────────
-// Шапка игроков (+25%, с сетами)
+// Шапка игроков
 // ─────────────────────────────────────────────
 @Composable
 private fun PlayersHeader501(game: Game501) {
@@ -471,12 +478,10 @@ private fun PlayersHeader501(game: Game501) {
                 modifier = Modifier.weight(1f)
             )
             Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(horizontal = 8.dp)) {
-                // Счёт по сетам (сверху, меньше)
                 Text("СЕТ", color = Color(0xFF99AABB), fontSize = 10.sp, fontWeight = FontWeight.Bold)
                 Text("$setsA : $setsB", color = Color.White.copy(alpha = 0.85f),
                     fontSize = 16.sp, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.height(4.dp))
-                // Счёт по легам (ниже, крупнее)
                 Text("ЛЕГ", color = Color(0xFF99AABB), fontSize = 14.sp, fontWeight = FontWeight.Bold)
                 Text("$legsA : $legsB",
                     color = Color.White, fontSize = 34.sp, fontWeight = FontWeight.Bold)
@@ -545,13 +550,9 @@ private fun QuickButtonsWithLeg(
                         contentAlignment = Alignment.Center
                     ) { Text("$sum", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Medium) }
                 }
-                // Если это последний ряд и в нём меньше 6 элементов — добавляем ЛЕГ в свободную клетку
                 if (rowIdx == rows.lastIndex) {
                     val freeSlots = 6 - row.size
-                    if (freeSlots > 1) {
-                        repeat(freeSlots - 1) { Spacer(Modifier.weight(1f)) }
-                    }
-                    // Кнопка ЛЕГ (компактная)
+                    if (freeSlots > 1) repeat(freeSlots - 1) { Spacer(Modifier.weight(1f)) }
                     Box(
                         modifier = Modifier.weight(1f).height(48.dp).clip(RoundedCornerShape(8.dp))
                             .background(if (enabled) ErrorColor else ErrorColor.copy(alpha = 0.4f))
@@ -578,14 +579,16 @@ private fun BigActionButton(
 }
 
 // ─────────────────────────────────────────────
-// Клавиатура (без OK снизу)
+// Клавиатура (C/0/⌫ + новый ряд с Ход назад)
 // ─────────────────────────────────────────────
 @Composable
 private fun Keyboard501(
     enabled: Boolean,
+    canUndo: Boolean,
     onDigit: (String) -> Unit,
     onBackspace: () -> Unit,
-    onClear: () -> Unit
+    onClear: () -> Unit,
+    onUndo: () -> Unit
 ) {
     Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 4.dp)) {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -618,6 +621,20 @@ private fun Keyboard501(
                     .background(TileBgDark).clickable(enabled = enabled) { onBackspace() },
                 contentAlignment = Alignment.Center
             ) { Text("⌫", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold) }
+        }
+        Spacer(Modifier.height(6.dp))
+        // Новый ряд: [пусто] [Ход назад] [пусто] — под кнопкой «0»
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Spacer(Modifier.weight(1f))
+            Box(
+                modifier = Modifier.weight(1f).height(60.dp).clip(RoundedCornerShape(10.dp))
+                    .background(if (canUndo) PaleYellow else PaleYellow.copy(alpha = 0.35f))
+                    .clickable(enabled = canUndo) { onUndo() },
+                contentAlignment = Alignment.Center
+            ) {
+                Text("↶", color = PaleYellowText, fontSize = 26.sp, fontWeight = FontWeight.Bold)
+            }
+            Spacer(Modifier.weight(1f))
         }
         Spacer(Modifier.height(8.dp))
     }
