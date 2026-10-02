@@ -63,48 +63,35 @@ fun Game501Screen(
         recordSum = null
     }
 
-    // ─────────────────────────────────────────────
-    // Обработка суммы за подход
-    // ─────────────────────────────────────────────
     fun applySum(value: Int) {
         if (value < 0 || value > 180) return
         val currentPlayer = game.players.getOrNull(game.currentPlayerIndex) ?: return
         if (currentPlayer.isBot || game.isFinished) return
 
         saveHistory()
-
         val scoreBefore = currentPlayer.score
 
-        // Закрытие лега (сумма равна остатку)
         if (value == scoreBefore && value > 0) {
             chosenDarts = 0
             showLegQuestionDialog = true
             return
         }
 
-        // Перебор (сумма больше остатка)
         if (value > scoreBefore) {
             val updated = Game501Logic.applyTurnScore(game, value)
             showBustMessage = true
             game = updated
-            if (scoreBefore <= 50) {
-                showDoublesOnlyDialog = true
-            } else {
-                game = Game501Logic.finishTurn(game)
-            }
+            if (scoreBefore <= 50) showDoublesOnlyDialog = true
+            else game = Game501Logic.finishTurn(game)
             return
         }
 
-        // Обычный ввод (в т.ч. 0)
         val updated = Game501Logic.applyTurnScore(game, value)
         if (!updated.isFinished) recordSum = value
         game = updated
 
-        if (scoreBefore <= 50) {
-            showDoublesOnlyDialog = true
-        } else {
-            game = Game501Logic.finishTurn(game)
-        }
+        if (scoreBefore <= 50) showDoublesOnlyDialog = true
+        else game = Game501Logic.finishTurn(game)
     }
 
     fun submitSum() {
@@ -118,9 +105,6 @@ fun Game501Screen(
         applySum(sum)
     }
 
-    // ─────────────────────────────────────────────
-    // Ввод остатка
-    // ─────────────────────────────────────────────
     fun submitRemaining() {
         val value = inputText.toIntOrNull() ?: return
         inputText = ""
@@ -144,11 +128,8 @@ fun Game501Screen(
             val updated = Game501Logic.applyTurnRemaining(game, value)
             showBustMessage = true
             game = updated
-            if (scoreBefore <= 50) {
-                showDoublesOnlyDialog = true
-            } else {
-                game = Game501Logic.finishTurn(game)
-            }
+            if (scoreBefore <= 50) showDoublesOnlyDialog = true
+            else game = Game501Logic.finishTurn(game)
             return
         }
 
@@ -156,11 +137,8 @@ fun Game501Screen(
         recordSum = gained
         game = updated
 
-        if (scoreBefore <= 50) {
-            showDoublesOnlyDialog = true
-        } else {
-            game = Game501Logic.finishTurn(game)
-        }
+        if (scoreBefore <= 50) showDoublesOnlyDialog = true
+        else game = Game501Logic.finishTurn(game)
     }
 
     fun pressLeg() {
@@ -170,7 +148,6 @@ fun Game501Screen(
         showLegQuestionDialog = true
     }
 
-    // Автоход бота
     LaunchedEffect(game.currentPlayerIndex, game.isFinished, showLegWonDialog, showSetWonDialog, showWinDialog, showLegQuestionDialog, showDoublesQuestionDialog, showDoublesOnlyDialog) {
         val currentPlayer = game.players.getOrNull(game.currentPlayerIndex) ?: return@LaunchedEffect
         if (game.isFinished || showLegWonDialog || showSetWonDialog || showWinDialog || showLegQuestionDialog || showDoublesQuestionDialog || showDoublesOnlyDialog) return@LaunchedEffect
@@ -214,34 +191,36 @@ fun Game501Screen(
             )
         }
 
-        QuickButtons(
+        // Быстрые кнопки + ЛЕГ в 12-й клетке
+        QuickButtonsWithLeg(
             sums = quickSums,
             enabled = !game.isFinished && game.currentPlayer?.isBot != true,
-            onPress = { pressQuickButton(it) }
+            onQuick = { pressQuickButton(it) },
+            onLeg = { pressLeg() }
         )
 
+        // Ряд: Остаток (2 клетки) + OK (4 клетки)
         Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             BigActionButton(
                 label = "Остаток",
                 enabled = !game.isFinished && game.currentPlayer?.isBot != true,
-                color = TileBg, textColor = Accent, modifier = Modifier.weight(1f)
+                color = TileBg, textColor = Accent, modifier = Modifier.weight(2f)
             ) { submitRemaining() }
             BigActionButton(
-                label = "ЛЕГ",
+                label = "OK",
                 enabled = !game.isFinished && game.currentPlayer?.isBot != true,
-                color = ErrorColor, textColor = Color.White, modifier = Modifier.weight(1f)
-            ) { pressLeg() }
+                color = Accent, textColor = Color(0xFF121212), modifier = Modifier.weight(4f)
+            ) { submitSum() }
         }
 
         Keyboard501(
             enabled = !game.isFinished && game.currentPlayer?.isBot != true,
             onDigit = { inputText = if (inputText.length < 3) inputText + it else inputText },
             onBackspace = { inputText = if (inputText.isNotEmpty()) inputText.dropLast(1) else "" },
-            onClear = { inputText = "" },
-            onOk = { submitSum() }
+            onClear = { inputText = "" }
         )
     }
 
@@ -254,7 +233,6 @@ fun Game501Screen(
         }
     }
 
-    // ДИАЛОГ 1: Сколько дротиков?
     if (showLegQuestionDialog) {
         AlertDialog(
             onDismissRequest = { },
@@ -278,7 +256,6 @@ fun Game501Screen(
         )
     }
 
-    // ДИАЛОГ 2: Сколько попыток в удвоение? (при закрытии)
     if (showDoublesQuestionDialog) {
         AlertDialog(
             onDismissRequest = { },
@@ -308,7 +285,6 @@ fun Game501Screen(
         )
     }
 
-    // ДИАЛОГ попыток в удвоение (без закрытия — при остатке ≤ 50)
     if (showDoublesOnlyDialog) {
         AlertDialog(
             onDismissRequest = { },
@@ -433,7 +409,6 @@ private fun botPerformTurn(game: Game501): Game501 {
     val botLevel = player.botLevel
     val requiresDouble = game.outMode == OutMode.DOUBLE_OUT || game.outMode == OutMode.DOUBLE_IN_OUT
 
-    // Если остаток ≤ 50 — бот пытается закрыть
     if (requiresDouble && player.score <= 50) {
         val closeChance = 0.15 + (botLevel - 1) * 0.025
         if (Random.nextDouble() < closeChance) {
@@ -473,7 +448,7 @@ private fun generateBotTurnScore(botLevel: Int): Int {
 }
 
 // ─────────────────────────────────────────────
-// Шапка игроков
+// Шапка игроков (+25%, с сетами)
 // ─────────────────────────────────────────────
 @Composable
 private fun PlayersHeader501(game: Game501) {
@@ -481,7 +456,12 @@ private fun PlayersHeader501(game: Game501) {
     val teamA = game.playersOfTeam(0)
     val teamB = game.playersOfTeam(1)
 
-    Column(modifier = Modifier.fillMaxWidth().background(Color(0xFF16202C)).padding(vertical = 10.dp)) {
+    val legsA = teamA.firstOrNull()?.legsInCurrentSet ?: 0
+    val legsB = teamB.firstOrNull()?.legsInCurrentSet ?: 0
+    val setsA = teamA.firstOrNull()?.setsWon ?: 0
+    val setsB = teamB.firstOrNull()?.setsWon ?: 0
+
+    Column(modifier = Modifier.fillMaxWidth().background(Color(0xFF16202C)).padding(vertical = 14.dp)) {
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             PlayerScoreCol(
                 name = teamA.joinToString("/") { it.name },
@@ -491,9 +471,15 @@ private fun PlayersHeader501(game: Game501) {
                 modifier = Modifier.weight(1f)
             )
             Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(horizontal = 8.dp)) {
-                Text("ЛЕГ", color = Color(0xFF99AABB), fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                Text("${teamA.firstOrNull()?.legsInCurrentSet ?: 0} : ${teamB.firstOrNull()?.legsInCurrentSet ?: 0}",
-                    color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.Bold)
+                // Счёт по сетам (сверху, меньше)
+                Text("СЕТ", color = Color(0xFF99AABB), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                Text("$setsA : $setsB", color = Color.White.copy(alpha = 0.85f),
+                    fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(4.dp))
+                // Счёт по легам (ниже, крупнее)
+                Text("ЛЕГ", color = Color(0xFF99AABB), fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                Text("$legsA : $legsB",
+                    color = Color.White, fontSize = 34.sp, fontWeight = FontWeight.Bold)
             }
             PlayerScoreCol(
                 name = teamB.joinToString("/") { it.name },
@@ -511,12 +497,12 @@ private fun PlayerScoreCol(
     name: String, score: Int, ppr: Double, isActive: Boolean, modifier: Modifier
 ) {
     Column(modifier = modifier, horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(name, color = if (isActive) Accent else Color.White, fontSize = 16.sp,
+        Text(name, color = if (isActive) Accent else Color.White, fontSize = 20.sp,
             fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
         Text("$score", color = if (isActive) GoldAccent else Color.White,
-            fontSize = 44.sp, fontWeight = FontWeight.Bold)
+            fontSize = 55.sp, fontWeight = FontWeight.Bold)
         Text("ср. ${String.format(Locale.US, "%.1f", ppr)}",
-            color = Color.White.copy(alpha = 0.6f), fontSize = 12.sp)
+            color = Color.White.copy(alpha = 0.6f), fontSize = 15.sp)
     }
 }
 
@@ -537,21 +523,42 @@ private fun TopBar501(game: Game501, onBack: () -> Unit) {
     }
 }
 
+// ─────────────────────────────────────────────
+// Быстрые кнопки + ЛЕГ в 12-й клетке
+// ─────────────────────────────────────────────
 @Composable
-private fun QuickButtons(sums: List<Int>, enabled: Boolean, onPress: (Int) -> Unit) {
+private fun QuickButtonsWithLeg(
+    sums: List<Int>,
+    enabled: Boolean,
+    onQuick: (Int) -> Unit,
+    onLeg: () -> Unit
+) {
     val rows = sums.chunked(6)
     Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 4.dp)) {
-        rows.forEach { row ->
+        rows.forEachIndexed { rowIdx, row ->
             Row(modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
                 horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 row.forEach { sum ->
                     Box(
                         modifier = Modifier.weight(1f).height(48.dp).clip(RoundedCornerShape(8.dp))
-                            .background(TileBg).clickable(enabled = enabled) { onPress(sum) },
+                            .background(TileBg).clickable(enabled = enabled) { onQuick(sum) },
                         contentAlignment = Alignment.Center
                     ) { Text("$sum", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Medium) }
                 }
-                if (row.size < 6) repeat(6 - row.size) { Spacer(Modifier.weight(1f)) }
+                // Если это последний ряд и в нём меньше 6 элементов — добавляем ЛЕГ в свободную клетку
+                if (rowIdx == rows.lastIndex) {
+                    val freeSlots = 6 - row.size
+                    if (freeSlots > 1) {
+                        repeat(freeSlots - 1) { Spacer(Modifier.weight(1f)) }
+                    }
+                    // Кнопка ЛЕГ (компактная)
+                    Box(
+                        modifier = Modifier.weight(1f).height(48.dp).clip(RoundedCornerShape(8.dp))
+                            .background(if (enabled) ErrorColor else ErrorColor.copy(alpha = 0.4f))
+                            .clickable(enabled = enabled) { onLeg() },
+                        contentAlignment = Alignment.Center
+                    ) { Text("ЛЕГ", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold) }
+                }
             }
         }
     }
@@ -563,17 +570,22 @@ private fun BigActionButton(
     modifier: Modifier, onClick: () -> Unit
 ) {
     Box(
-        modifier = modifier.height(52.dp).clip(RoundedCornerShape(10.dp))
+        modifier = modifier.height(68.dp).clip(RoundedCornerShape(10.dp))
             .background(if (enabled) color else color.copy(alpha = 0.4f))
             .clickable(enabled = enabled) { onClick() },
         contentAlignment = Alignment.Center
-    ) { Text(label, color = textColor, fontSize = 17.sp, fontWeight = FontWeight.Bold) }
+    ) { Text(label, color = textColor, fontSize = 20.sp, fontWeight = FontWeight.Bold) }
 }
 
+// ─────────────────────────────────────────────
+// Клавиатура (без OK снизу)
+// ─────────────────────────────────────────────
 @Composable
 private fun Keyboard501(
-    enabled: Boolean, onDigit: (String) -> Unit, onBackspace: () -> Unit,
-    onClear: () -> Unit, onOk: () -> Unit
+    enabled: Boolean,
+    onDigit: (String) -> Unit,
+    onBackspace: () -> Unit,
+    onClear: () -> Unit
 ) {
     Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 4.dp)) {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -596,26 +608,16 @@ private fun Keyboard501(
         Spacer(Modifier.height(6.dp))
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             Box(
-                modifier = Modifier.weight(1f).height(56.dp).clip(RoundedCornerShape(10.dp))
+                modifier = Modifier.weight(1f).height(60.dp).clip(RoundedCornerShape(10.dp))
                     .background(TileBgDark).clickable(enabled = enabled) { onClear() },
                 contentAlignment = Alignment.Center
-            ) { Text("C", color = ErrorColor, fontSize = 20.sp, fontWeight = FontWeight.Bold) }
+            ) { Text("C", color = ErrorColor, fontSize = 22.sp, fontWeight = FontWeight.Bold) }
             DigitKey("0", enabled, onDigit, Modifier.weight(1f))
             Box(
-                modifier = Modifier.weight(1f).height(56.dp).clip(RoundedCornerShape(10.dp))
+                modifier = Modifier.weight(1f).height(60.dp).clip(RoundedCornerShape(10.dp))
                     .background(TileBgDark).clickable(enabled = enabled) { onBackspace() },
                 contentAlignment = Alignment.Center
-            ) { Text("⌫", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold) }
-        }
-        Spacer(Modifier.height(8.dp))
-        Box(
-            modifier = Modifier.fillMaxWidth().height(60.dp).clip(RoundedCornerShape(12.dp))
-                .background(if (enabled) Accent else TileBgDark)
-                .clickable(enabled = enabled) { onOk() },
-            contentAlignment = Alignment.Center
-        ) {
-            Text("OK", color = if (enabled) Color(0xFF121212) else Accent.copy(alpha = 0.5f),
-                fontSize = 22.sp, fontWeight = FontWeight.Bold)
+            ) { Text("⌫", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold) }
         }
         Spacer(Modifier.height(8.dp))
     }
@@ -624,10 +626,10 @@ private fun Keyboard501(
 @Composable
 private fun DigitKey(digit: String, enabled: Boolean, onDigit: (String) -> Unit, modifier: Modifier) {
     Box(
-        modifier = modifier.height(56.dp).clip(RoundedCornerShape(10.dp))
+        modifier = modifier.height(60.dp).clip(RoundedCornerShape(10.dp))
             .background(TileBg).clickable(enabled = enabled) { onDigit(digit) },
         contentAlignment = Alignment.Center
-    ) { Text(digit, color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold) }
+    ) { Text(digit, color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold) }
 }
 
 @Composable
