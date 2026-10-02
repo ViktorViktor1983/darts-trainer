@@ -11,12 +11,13 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import java.util.Locale
 
-// Сохранённая игра 501
+// Сохранённая игра x01
 @Entity(tableName = "games_501")
 data class Game501Entity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val dateMillis: Long,
-    val modeName: String,              // "X501_DOUBLE_OUT" и т.д.
+    val gameTypeName: String,          // "X501" / "X301" / "X1001"
+    val outModeName: String,           // "DOUBLE_OUT" / "DOUBLE_IN_OUT" / "STRAIGHT_OUT"
     val isPairGame: Boolean,
     val playerNames: String,           // "Виктор|Бот Любитель"
     val playerIsBot: String,           // "0|1"
@@ -25,7 +26,7 @@ data class Game501Entity(
 
     // Строки через "|" — по игрокам
     val matchDarts: String,            // "45|42"
-    val matchScore: String,            // "501|498" — всего набрано очков
+    val matchScore: String,            // "501|498"
     val doublesHit: String,            // "3|1"
     val doublesAttempted: String,      // "8|5"
     val ppr: String                    // "62.15|55.30"
@@ -52,7 +53,7 @@ interface Game501Dao {
 
 @Database(
     entities = [Game501Entity::class],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 abstract class Game501Database : RoomDatabase() {
@@ -81,7 +82,8 @@ class Game501Repository(
         val legsPlayed = (game.currentSetNumber - 1) * game.legsPerSet + game.currentLegNumber
         val entity = Game501Entity(
             dateMillis = System.currentTimeMillis(),
-            modeName = game.mode.name,
+            gameTypeName = game.gameType.name,
+            outModeName = game.outMode.name,
             isPairGame = game.isPairGame,
             playerNames = game.players.joinToString("|") { it.name },
             playerIsBot = game.players.joinToString("|") { if (it.isBot) "1" else "0" },
