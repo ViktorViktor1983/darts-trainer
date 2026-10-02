@@ -60,6 +60,84 @@ fun Game501Screen(
         recordSum = null
     }
 
+    // ─────────────────────────────────────────────
+    // ВАЖНО: applySum объявлена ПЕРВОЙ — до тех, кто её вызывает
+    // ─────────────────────────────────────────────
+    fun applySum(value: Int) {
+        if (value <= 0 || value > 180) return
+        val currentPlayer = game.players.getOrNull(game.currentPlayerIndex) ?: return
+        if (currentPlayer.isBot || game.isFinished) return
+
+        saveHistory()
+
+        // Случай 1: сумма == остаток → закрытие лега через удвоение
+        if (value == currentPlayer.score) {
+            showLegQuestionDialog = true
+            return
+        }
+
+        // Случай 2: обычный ввод (в т.ч. перебор)
+        val before = game
+        val updated = Game501Logic.applyTurnScore(game, value)
+        val playerBefore = before.players[before.currentPlayerIndex]
+        val playerAfter = updated.players.getOrNull(before.currentPlayerIndex)
+        val isBust = playerAfter != null && playerAfter.score == playerBefore.score && value > playerBefore.score
+
+        if (isBust) {
+            showBustMessage = true
+        } else {
+            recordSum = value
+        }
+
+        game = if (!updated.isFinished && !isBust) Game501Logic.finishTurn(updated) else updated
+    }
+
+    fun submitSum() {
+        val value = inputText.toIntOrNull() ?: return
+        inputText = ""
+        applySum(value)
+    }
+
+    fun pressQuickButton(sum: Int) {
+        inputText = ""
+        applySum(sum)
+    }
+
+    fun submitRemaining() {
+        val value = inputText.toIntOrNull() ?: return
+        inputText = ""
+        val currentPlayer = game.players.getOrNull(game.currentPlayerIndex) ?: return
+        if (currentPlayer.isBot || game.isFinished) return
+        if (value < 0 || value > currentPlayer.score) return
+        val gained = currentPlayer.score - value
+        if (gained <= 0) return
+
+        saveHistory()
+
+        if (value == 0) {
+            showLegQuestionDialog = true
+            return
+        }
+
+        val requiresDouble = game.outMode == OutMode.DOUBLE_OUT || game.outMode == OutMode.DOUBLE_IN_OUT
+        if (value == 1 && requiresDouble) {
+            val updated = Game501Logic.applyTurnRemaining(game, value)
+            showBustMessage = true
+            game = updated
+            return
+        }
+
+        val updated = Game501Logic.applyTurnRemaining(game, value)
+        recordSum = gained
+        game = if (!updated.isFinished) Game501Logic.finishTurn(updated) else updated
+    }
+
+    fun pressLeg() {
+        val currentPlayer = game.players.getOrNull(game.currentPlayerIndex) ?: return
+        if (currentPlayer.isBot || game.isFinished) return
+        showLegQuestionDialog = true
+    }
+
     // Автоход бота
     LaunchedEffect(game.currentPlayerIndex, game.isFinished, showLegWonDialog, showSetWonDialog, showWinDialog, showLegQuestionDialog) {
         val currentPlayer = game.players.getOrNull(game.currentPlayerIndex) ?: return@LaunchedEffect
@@ -91,101 +169,10 @@ fun Game501Screen(
         if (game.isFinished && !showLegWonDialog && !showSetWonDialog && !showWinDialog) showWinDialog = true
     }
 
-    // ─────────────────────────────────────────────
-    // Ввод суммы через OK
-    // ─────────────────────────────────────────────
-    fun submitSum() {
-        val value = inputText.toIntOrNull() ?: return
-        inputText = ""
-        applySum(value)
-    }
-
-    // ─────────────────────────────────────────────
-    // Быстрая кнопка → сразу применить
-    // ─────────────────────────────────────────────
-    fun pressQuickButton(sum: Int) {
-        inputText = ""
-        applySum(sum)
-    }
-
-    // ─────────────────────────────────────────────
-    // Общая обработка суммы
-    // ─────────────────────────────────────────────
-    fun applySum(value: Int) {
-        if (value <= 0 || value > 180) return
-        val currentPlayer = game.players.getOrNull(game.currentPlayerIndex) ?: return
-        if (currentPlayer.isBot || game.isFinished) return
-
-        saveHistory()
-
-        // Случай 1: сумма == остаток → закрытие лега через удвоение
-        if (value == currentPlayer.score) {
-            showLegQuestionDialog = true
-            return
-        }
-
-        // Случай 2: обычный ввод (в т.ч. перебор)
-        val before = game
-        val updated = Game501Logic.applyTurnScore(game, value)
-        val playerBefore = before.players[before.currentPlayerIndex]
-        val playerAfter = updated.players.getOrNull(before.currentPlayerIndex)
-        val isBust = playerAfter != null && playerAfter.score == playerBefore.score && value > playerBefore.score
-
-        if (isBust) {
-            showBustMessage = true
-        } else {
-            recordSum = value
-        }
-
-        game = if (!updated.isFinished && !isBust) Game501Logic.finishTurn(updated) else updated
-    }
-
-    // ─────────────────────────────────────────────
-    // Ввод остатка
-    // ─────────────────────────────────────────────
-    fun submitRemaining() {
-        val value = inputText.toIntOrNull() ?: return
-        inputText = ""
-        val currentPlayer = game.players.getOrNull(game.currentPlayerIndex) ?: return
-        if (currentPlayer.isBot || game.isFinished) return
-        if (value < 0 || value > currentPlayer.score) return
-        val gained = currentPlayer.score - value
-        if (gained <= 0) return
-
-        saveHistory()
-
-        // Случай 1: остаток == 0 → закрытие лега
-        if (value == 0) {
-            showLegQuestionDialog = true
-            return
-        }
-
-        // Случай 2: остаток == 1 и Double Out → перебор
-        val requiresDouble = game.outMode == OutMode.DOUBLE_OUT || game.outMode == OutMode.DOUBLE_IN_OUT
-        if (value == 1 && requiresDouble) {
-            val updated = Game501Logic.applyTurnRemaining(game, value)
-            showBustMessage = true
-            game = updated
-            return
-        }
-
-        // Случай 3: обычный ввод
-        val updated = Game501Logic.applyTurnRemaining(game, value)
-        recordSum = gained
-        game = if (!updated.isFinished) Game501Logic.finishTurn(updated) else updated
-    }
-
-    fun pressLeg() {
-        val currentPlayer = game.players.getOrNull(game.currentPlayerIndex) ?: return
-        if (currentPlayer.isBot || game.isFinished) return
-        showLegQuestionDialog = true
-    }
-
     Column(modifier = Modifier.fillMaxSize().background(Color(0xFF0D1117))) {
         TopBar501(game = game, onBack = { showBackConfirm = true })
         PlayersHeader501(game = game)
 
-        // Поле ввода
         Row(
             modifier = Modifier.fillMaxWidth().background(Color(0xFF16202C))
                 .padding(horizontal = 12.dp, vertical = 8.dp),
@@ -239,7 +226,6 @@ fun Game501Screen(
         }
     }
 
-    // Диалог «Сколько дротиков ушло на закрытие?»
     if (showLegQuestionDialog) {
         AlertDialog(
             onDismissRequest = { },
@@ -263,7 +249,6 @@ fun Game501Screen(
         )
     }
 
-    // Диалог лега
     if (showLegWonDialog) {
         AlertDialog(
             onDismissRequest = { },
