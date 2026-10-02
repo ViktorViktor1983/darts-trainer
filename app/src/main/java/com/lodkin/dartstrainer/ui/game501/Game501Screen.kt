@@ -40,7 +40,11 @@ fun Game501Screen(
     val context = LocalContext.current
     var game by remember { mutableStateOf(initialGame) }
     var inputText by remember { mutableStateOf("") }
-    var lastTurnScore by remember { mutableStateOf<Int?>(null) }
+
+    // Последний ввод для каждой команды
+    var lastScoreA by remember { mutableStateOf<Int?>(null) }
+    var lastScoreB by remember { mutableStateOf<Int?>(null) }
+
     var showWinDialog by remember { mutableStateOf(false) }
     var showBackConfirm by remember { mutableStateOf(false) }
     var showLegWonDialog by remember { mutableStateOf(false) }
@@ -71,6 +75,12 @@ fun Game501Screen(
         recordSum = null
     }
 
+    // Обновить последний ввод для текущего игрока
+    fun setLastScore(value: Int) {
+        val team = game.currentPlayer?.teamIndex ?: 0
+        if (team == 0) lastScoreA = value else lastScoreB = value
+    }
+
     fun applySum(value: Int) {
         if (value < 0 || value > 180) return
         val currentPlayer = game.players.getOrNull(game.currentPlayerIndex) ?: return
@@ -97,7 +107,7 @@ fun Game501Screen(
         val updated = Game501Logic.applyTurnScore(game, value)
         if (!updated.isFinished) {
             recordSum = value
-            lastTurnScore = value
+            setLastScore(value)
         }
         game = updated
 
@@ -146,7 +156,7 @@ fun Game501Screen(
 
         val updated = Game501Logic.applyTurnRemaining(game, value)
         recordSum = gained
-        lastTurnScore = gained
+        setLastScore(gained)
         game = updated
 
         if (scoreBefore <= 50) showDoublesOnlyDialog = true
@@ -186,34 +196,40 @@ fun Game501Screen(
         if (game.isFinished && !showLegWonDialog && !showSetWonDialog && !showWinDialog) showWinDialog = true
     }
 
+    val activeTeam = game.currentPlayer?.teamIndex ?: 0
+
     Column(modifier = Modifier.fillMaxSize().background(Color(0xFF0D1117))) {
         TopBar501(game = game, onBack = { showBackConfirm = true })
         PlayersHeader501(game = game)
 
-        // Поле ввода + последний ввод справа
+        // Поле ввода + «Пред.» слева и справа (для каждой команды)
         Row(
             modifier = Modifier.fillMaxWidth().background(Color(0xFF16202C))
                 .padding(horizontal = 12.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Spacer(Modifier.width(60.dp))
+            // Пред. для команды A (слева)
+            PrevScoreBlock(
+                label = "Пред.",
+                value = lastScoreA,
+                isActive = activeTeam == 0,
+                alignment = Alignment.Start
+            )
+
             Text(
                 if (inputText.isEmpty()) "—" else inputText,
                 color = if (inputText.isEmpty()) Color.White.copy(alpha = 0.3f) else GoldAccent,
                 fontSize = 32.sp, fontWeight = FontWeight.Bold,
                 modifier = Modifier.weight(1f), textAlign = TextAlign.Center
             )
-            Column(
-                horizontalAlignment = Alignment.End,
-                modifier = Modifier.width(60.dp)
-            ) {
-                val last = lastTurnScore
-                if (last != null) {
-                    Text("Пред.", color = Color.White.copy(alpha = 0.5f), fontSize = 10.sp)
-                    Text("$last", color = Color.White.copy(alpha = 0.85f),
-                        fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                }
-            }
+
+            // Пред. для команды B (справа)
+            PrevScoreBlock(
+                label = "Пред.",
+                value = lastScoreB,
+                isActive = activeTeam == 1,
+                alignment = Alignment.End
+            )
         }
 
         QuickButtonsWithLeg(
@@ -427,6 +443,33 @@ fun Game501Screen(
 }
 
 // ─────────────────────────────────────────────
+// Блок «Пред.» — последний ввод для команды
+// ─────────────────────────────────────────────
+@Composable
+private fun PrevScoreBlock(
+    label: String,
+    value: Int?,
+    isActive: Boolean,
+    alignment: Alignment.Horizontal
+) {
+    val nameColor = if (isActive) Accent else Color.White.copy(alpha = 0.45f)
+    val valueColor = if (isActive) Color.White else Color.White.copy(alpha = 0.55f)
+
+    Column(
+        modifier = Modifier.width(60.dp),
+        horizontalAlignment = alignment
+    ) {
+        Text(label, color = nameColor, fontSize = 10.sp)
+        Text(
+            if (value != null) "$value" else "—",
+            color = valueColor,
+            fontSize = 18.sp,
+            fontWeight = FontWeight.Bold
+        )
+    }
+}
+
+// ─────────────────────────────────────────────
 // Ход бота
 // ─────────────────────────────────────────────
 private fun botPerformTurn(game: Game501): Game501 {
@@ -473,7 +516,7 @@ private fun generateBotTurnScore(botLevel: Int): Int {
 }
 
 // ─────────────────────────────────────────────
-// Шапка игроков (+25%, с сетами, с дротиками за лег)
+// Шапка игроков
 // ─────────────────────────────────────────────
 @Composable
 private fun PlayersHeader501(game: Game501) {
@@ -552,9 +595,6 @@ private fun TopBar501(game: Game501, onBack: () -> Unit) {
     }
 }
 
-// ─────────────────────────────────────────────
-// Быстрые кнопки + ЛЕГ в 12-й клетке
-// ─────────────────────────────────────────────
 @Composable
 private fun QuickButtonsWithLeg(
     sums: List<Int>,
@@ -602,9 +642,6 @@ private fun BigActionButton(
     ) { Text(label, color = textColor, fontSize = 20.sp, fontWeight = FontWeight.Bold) }
 }
 
-// ─────────────────────────────────────────────
-// Клавиатура
-// ─────────────────────────────────────────────
 @Composable
 private fun Keyboard501(
     enabled: Boolean,
@@ -647,7 +684,6 @@ private fun Keyboard501(
             ) { Text("⌫", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold) }
         }
         Spacer(Modifier.height(6.dp))
-        // Ряд «Ход назад» — под кнопкой «0»
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             Spacer(Modifier.weight(1f))
             Box(
