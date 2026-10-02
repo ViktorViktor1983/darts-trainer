@@ -3,9 +3,6 @@ package com.lodkin.dartstrainer.data.game501
 // Логика игры x01 — чистые функции без UI
 object Game501Logic {
 
-    // ─────────────────────────────────────────────
-    // Новый матч
-    // ─────────────────────────────────────────────
     fun newGame(
         gameType: GameType,
         outMode: OutMode,
@@ -58,9 +55,6 @@ object Game501Logic {
         )
     }
 
-    // ─────────────────────────────────────────────
-    // Классификация суммы за подход
-    // ─────────────────────────────────────────────
     private fun applyCategory(player: Player501, gained: Int): Player501 {
         var p = player
         p = when {
@@ -92,10 +86,6 @@ object Game501Logic {
         return p
     }
 
-    // ─────────────────────────────────────────────
-    // Регистрация подхода (сумма, дротики, остаток до подхода)
-    // Используется и в обычных подходах, и в закрывающих
-    // ─────────────────────────────────────────────
     private fun registerApproach(
         player: Player501,
         gained: Int,
@@ -103,8 +93,6 @@ object Game501Logic {
         scoreBefore: Int
     ): Player501 {
         var p = player
-
-        // Первые 9 дротиков
         if (p.first9Darts < 9) {
             val remainingSlots = (9 - p.first9Darts).coerceAtLeast(0)
             val dartsToAdd = dartsUsed.coerceAtMost(remainingSlots)
@@ -113,29 +101,20 @@ object Game501Logic {
                 first9Darts = p.first9Darts + dartsToAdd
             )
         }
-
-        // Набор без закрытия: остаток ДО подхода был > 170
         if (scoreBefore > 170) {
             p = p.copy(
                 nonCloseScore = p.nonCloseScore + gained,
                 nonCloseDarts = p.nonCloseDarts + dartsUsed
             )
         }
-
-        // Категории суммы
         p = applyCategory(p, gained)
-
         return p
     }
 
-    // ─────────────────────────────────────────────
-    // Один бросок (S/D/T/Miss) — оставляем на будущее
-    // ─────────────────────────────────────────────
     fun applyThrow(game: Game501, sector: Int, multiplier: ThrowMultiplier): Game501 {
         if (game.isFinished) return game
         val playerIndex = game.currentPlayerIndex
         val player = game.players[playerIndex]
-
         if (multiplier == ThrowMultiplier.MISS) return registerMiss(game, playerIndex)
 
         val points = sector * multiplier.value
@@ -154,7 +133,6 @@ object Game501Logic {
             newScore == 0 && !canFinish && requiresDoubleOut(game.outMode) -> true
             else -> false
         }
-
         if (isBust) return registerBust(game, playerIndex)
 
         val updatedPlayers = game.players.toMutableList()
@@ -191,9 +169,6 @@ object Game501Logic {
         return updatedGame
     }
 
-    // ─────────────────────────────────────────────
-    // Ввод суммы за подход
-    // ─────────────────────────────────────────────
     fun applyTurnScore(game: Game501, gained: Int): Game501 {
         if (game.isFinished) return game
         if (gained <= 0) return game
@@ -228,13 +203,9 @@ object Game501Logic {
             updatedPlayers[playerIndex] = pWithClose
             return finishLeg(game.copy(players = updatedPlayers), player.teamIndex)
         }
-
         return game.copy(players = updatedPlayers)
     }
 
-    // ─────────────────────────────────────────────
-    // Ввод остатка
-    // ─────────────────────────────────────────────
     fun applyTurnRemaining(game: Game501, remaining: Int): Game501 {
         val player = game.currentPlayer ?: return game
         val gained = player.score - remaining
@@ -242,16 +213,24 @@ object Game501Logic {
     }
 
     // ─────────────────────────────────────────────
-    // Ручное закрытие (кнопка «Лег» или ответ 1/2/3)
-    // ВАЖНО: теперь учитывает категории, первые 9, набор без закрытия
+    // Ручное закрытие (кнопка «Лег» или ответ в диалоге)
+    // dartsUsed — сколько дротиков ушло на закрытие (1/2/3)
+    // doublesAttempted — сколько попыток в удвоение было (0/1/2/3)
     // ─────────────────────────────────────────────
-    fun closeLegManually(game: Game501, dartsUsed: Int): Game501 {
+    fun closeLegManually(
+        game: Game501,
+        dartsUsed: Int,
+        doublesAttempted: Int
+    ): Game501 {
         if (game.isFinished) return game
         val playerIndex = game.currentPlayerIndex
         val player = game.players[playerIndex]
 
         val gained = player.score
         val scoreBefore = player.score
+
+        // Автоправка: если игрок ввёл 0 попыток, но лег закрыт — попытка была минимум 1
+        val attemptsFixed = if (doublesAttempted < 1) 1 else doublesAttempted
 
         val updatedPlayers = game.players.toMutableList()
         var updatedPlayer = player.copy(
@@ -261,30 +240,22 @@ object Game501Logic {
             legDarts = player.legDarts + dartsUsed,
             legScoreGained = player.legScoreGained + gained,
             legDoublesHit = player.legDoublesHit + 1,
-            legDoublesAttempted = player.legDoublesAttempted + 1,
+            legDoublesAttempted = player.legDoublesAttempted + attemptsFixed,
             matchDarts = player.matchDarts + dartsUsed,
             matchScoreGained = player.matchScoreGained + gained,
             matchDoublesHit = player.matchDoublesHit + 1,
-            matchDoublesAttempted = player.matchDoublesAttempted + 1
+            matchDoublesAttempted = player.matchDoublesAttempted + attemptsFixed
         )
-
-        // Расширенная статистика: первые 9, набор без закрытия, категории
         updatedPlayer = registerApproach(updatedPlayer, gained, dartsUsed, scoreBefore)
-
-        // Записываем значение, с которого игрок закрыл лег
         updatedPlayer = updatedPlayer.copy(
             listOfCloseValues = updatedPlayer.listOfCloseValues.toMutableList().also {
                 it.add(scoreBefore)
             }
         )
         updatedPlayers[playerIndex] = updatedPlayer
-
         return finishLeg(game.copy(players = updatedPlayers), player.teamIndex)
     }
 
-    // ─────────────────────────────────────────────
-    // Промах
-    // ─────────────────────────────────────────────
     private fun registerMiss(game: Game501, playerIndex: Int): Game501 {
         val updatedPlayers = game.players.toMutableList()
         val player = updatedPlayers[playerIndex]
@@ -299,14 +270,10 @@ object Game501Logic {
         return game.copy(players = updatedPlayers)
     }
 
-    // ─────────────────────────────────────────────
-    // Перебор
-    // ─────────────────────────────────────────────
     private fun registerBust(game: Game501, playerIndex: Int): Game501 {
         val updatedPlayers = game.players.toMutableList()
         val player = updatedPlayers[playerIndex]
         val missing = (3 - player.turnDarts).coerceAtLeast(0)
-
         var p = player.copy(
             turnScore = 0,
             turnDarts = 0,
@@ -317,24 +284,17 @@ object Game501Logic {
             val dartsToAdd = missing.coerceAtMost(9 - p.first9Darts)
             p = p.copy(first9Darts = p.first9Darts + dartsToAdd)
         }
-        if (player.score > 170) {
-            p = p.copy(nonCloseDarts = p.nonCloseDarts + missing)
-        }
+        if (player.score > 170) p = p.copy(nonCloseDarts = p.nonCloseDarts + missing)
         updatedPlayers[playerIndex] = p
         return nextPlayer(game.copy(players = updatedPlayers))
     }
 
-    // ─────────────────────────────────────────────
-    // Завершение подхода
-    // ─────────────────────────────────────────────
     fun finishTurn(game: Game501): Game501 {
         if (game.isFinished) return game
         val playerIndex = game.currentPlayerIndex
         val player = game.players[playerIndex]
-
         val missing = (3 - player.turnDarts).coerceAtLeast(0)
         val updatedPlayers = game.players.toMutableList()
-
         var p = player.copy(
             turnDarts = 0,
             turnScore = 0,
@@ -349,7 +309,6 @@ object Game501Logic {
             p = p.copy(nonCloseDarts = p.nonCloseDarts + missing)
         }
         updatedPlayers[playerIndex] = p
-
         return nextPlayer(game.copy(players = updatedPlayers))
     }
 
@@ -358,9 +317,6 @@ object Game501Logic {
         return game.copy(currentPlayerIndex = next)
     }
 
-    // ─────────────────────────────────────────────
-    // Завершение лега
-    // ─────────────────────────────────────────────
     private fun finishLeg(game: Game501, winningTeam: Int): Game501 {
         val updatedPlayers = game.players.toMutableList()
         for (i in updatedPlayers.indices) {
