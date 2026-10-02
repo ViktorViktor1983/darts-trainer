@@ -40,6 +40,7 @@ fun Game501Screen(
     val context = LocalContext.current
     var game by remember { mutableStateOf(initialGame) }
     var inputText by remember { mutableStateOf("") }
+    var lastTurnScore by remember { mutableStateOf<Int?>(null) }
     var showWinDialog by remember { mutableStateOf(false) }
     var showBackConfirm by remember { mutableStateOf(false) }
     var showLegWonDialog by remember { mutableStateOf(false) }
@@ -94,7 +95,10 @@ fun Game501Screen(
         }
 
         val updated = Game501Logic.applyTurnScore(game, value)
-        if (!updated.isFinished) recordSum = value
+        if (!updated.isFinished) {
+            recordSum = value
+            lastTurnScore = value
+        }
         game = updated
 
         if (scoreBefore <= 50) showDoublesOnlyDialog = true
@@ -142,6 +146,7 @@ fun Game501Screen(
 
         val updated = Game501Logic.applyTurnRemaining(game, value)
         recordSum = gained
+        lastTurnScore = gained
         game = updated
 
         if (scoreBefore <= 50) showDoublesOnlyDialog = true
@@ -185,17 +190,30 @@ fun Game501Screen(
         TopBar501(game = game, onBack = { showBackConfirm = true })
         PlayersHeader501(game = game)
 
+        // Поле ввода + последний ввод справа
         Row(
             modifier = Modifier.fillMaxWidth().background(Color(0xFF16202C))
                 .padding(horizontal = 12.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            Spacer(Modifier.width(60.dp))
             Text(
                 if (inputText.isEmpty()) "—" else inputText,
                 color = if (inputText.isEmpty()) Color.White.copy(alpha = 0.3f) else GoldAccent,
                 fontSize = 32.sp, fontWeight = FontWeight.Bold,
                 modifier = Modifier.weight(1f), textAlign = TextAlign.Center
             )
+            Column(
+                horizontalAlignment = Alignment.End,
+                modifier = Modifier.width(60.dp)
+            ) {
+                val last = lastTurnScore
+                if (last != null) {
+                    Text("Пред.", color = Color.White.copy(alpha = 0.5f), fontSize = 10.sp)
+                    Text("$last", color = Color.White.copy(alpha = 0.85f),
+                        fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                }
+            }
         }
 
         QuickButtonsWithLeg(
@@ -455,7 +473,7 @@ private fun generateBotTurnScore(botLevel: Int): Int {
 }
 
 // ─────────────────────────────────────────────
-// Шапка игроков
+// Шапка игроков (+25%, с сетами, с дротиками за лег)
 // ─────────────────────────────────────────────
 @Composable
 private fun PlayersHeader501(game: Game501) {
@@ -474,6 +492,7 @@ private fun PlayersHeader501(game: Game501) {
                 name = teamA.joinToString("/") { it.name },
                 score = if (game.isPairGame) teamA.minOfOrNull { it.score } ?: 0 else teamA.firstOrNull()?.score ?: 0,
                 ppr = teamA.firstOrNull()?.let { Game501Logic.matchPpr(it) } ?: 0.0,
+                legDarts = if (game.isPairGame) teamA.sumOf { it.legDarts } else teamA.firstOrNull()?.legDarts ?: 0,
                 isActive = activeTeam == 0,
                 modifier = Modifier.weight(1f)
             )
@@ -490,6 +509,7 @@ private fun PlayersHeader501(game: Game501) {
                 name = teamB.joinToString("/") { it.name },
                 score = if (game.isPairGame) teamB.minOfOrNull { it.score } ?: 0 else teamB.firstOrNull()?.score ?: 0,
                 ppr = teamB.firstOrNull()?.let { Game501Logic.matchPpr(it) } ?: 0.0,
+                legDarts = if (game.isPairGame) teamB.sumOf { it.legDarts } else teamB.firstOrNull()?.legDarts ?: 0,
                 isActive = activeTeam == 1,
                 modifier = Modifier.weight(1f)
             )
@@ -499,7 +519,8 @@ private fun PlayersHeader501(game: Game501) {
 
 @Composable
 private fun PlayerScoreCol(
-    name: String, score: Int, ppr: Double, isActive: Boolean, modifier: Modifier
+    name: String, score: Int, ppr: Double, legDarts: Int,
+    isActive: Boolean, modifier: Modifier
 ) {
     Column(modifier = modifier, horizontalAlignment = Alignment.CenterHorizontally) {
         Text(name, color = if (isActive) Accent else Color.White, fontSize = 20.sp,
@@ -508,6 +529,9 @@ private fun PlayerScoreCol(
             fontSize = 55.sp, fontWeight = FontWeight.Bold)
         Text("ср. ${String.format(Locale.US, "%.1f", ppr)}",
             color = Color.White.copy(alpha = 0.6f), fontSize = 15.sp)
+        Spacer(Modifier.height(2.dp))
+        Text("🎯 $legDarts",
+            color = Color.White.copy(alpha = 0.75f), fontSize = 14.sp, fontWeight = FontWeight.Medium)
     }
 }
 
@@ -579,7 +603,7 @@ private fun BigActionButton(
 }
 
 // ─────────────────────────────────────────────
-// Клавиатура (C/0/⌫ + новый ряд с Ход назад)
+// Клавиатура
 // ─────────────────────────────────────────────
 @Composable
 private fun Keyboard501(
@@ -623,7 +647,7 @@ private fun Keyboard501(
             ) { Text("⌫", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold) }
         }
         Spacer(Modifier.height(6.dp))
-        // Новый ряд: [пусто] [Ход назад] [пусто] — под кнопкой «0»
+        // Ряд «Ход назад» — под кнопкой «0»
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             Spacer(Modifier.weight(1f))
             Box(
@@ -632,7 +656,7 @@ private fun Keyboard501(
                     .clickable(enabled = canUndo) { onUndo() },
                 contentAlignment = Alignment.Center
             ) {
-                Text("↶", color = PaleYellowText, fontSize = 26.sp, fontWeight = FontWeight.Bold)
+                Text("↶", color = PaleYellowText, fontSize = 36.sp, fontWeight = FontWeight.Black)
             }
             Spacer(Modifier.weight(1f))
         }
