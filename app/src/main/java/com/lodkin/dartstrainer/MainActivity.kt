@@ -23,8 +23,9 @@ import com.lodkin.dartstrainer.data.cricket.CricketType
 import com.lodkin.dartstrainer.data.game501.Game501
 import com.lodkin.dartstrainer.data.game501.Game501Database
 import com.lodkin.dartstrainer.data.game501.Game501Logic
-import com.lodkin.dartstrainer.data.game501.Game501Mode
 import com.lodkin.dartstrainer.data.game501.Game501Repository
+import com.lodkin.dartstrainer.data.game501.GameType
+import com.lodkin.dartstrainer.data.game501.OutMode
 import com.lodkin.dartstrainer.data.game501.Player501
 import com.lodkin.dartstrainer.theme.Accent
 import com.lodkin.dartstrainer.theme.DarkBg
@@ -173,10 +174,11 @@ fun DartsTrainerApp() {
                 } else screen = "main"
             }
 
-            // ── 501 ──
+            // ── x01 ──
             "game501_setup" -> Game501SetupScreen(
                 playerName = SettingsStorage.getPlayerName(context),
-                onStartGame = { mode: Game501Mode,
+                onStartGame = { gameType: GameType,
+                                outMode: OutMode,
                                 players: List<Player501>,
                                 legsPerSet: Int,
                                 setsPerMatch: Int,
@@ -184,7 +186,8 @@ fun DartsTrainerApp() {
                                 startingTeam: Int,
                                 autoOkSeconds: Int ->
                     game501 = Game501Logic.newGame(
-                        mode = mode,
+                        gameType = gameType,
+                        outMode = outMode,
                         players = players,
                         legsPerSet = legsPerSet,
                         setsPerMatch = setsPerMatch,
