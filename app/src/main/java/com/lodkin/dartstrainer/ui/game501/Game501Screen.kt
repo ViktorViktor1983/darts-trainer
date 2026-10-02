@@ -52,17 +52,11 @@ fun Game501Screen(
     fun saveHistory() { history.add(game); if (history.size > 300) history.removeAt(0) }
     fun undo() { if (history.isNotEmpty()) game = history.removeAt(history.lastIndex) }
 
-    // Загрузка быстрых кнопок
-    LaunchedEffect(Unit) {
-        quickSums = Game501SettingsStorage.getQuickSums(context)
-    }
+    LaunchedEffect(Unit) { quickSums = Game501SettingsStorage.getQuickSums(context) }
 
-    // Запись суммы человека в статистику (для обновления кнопок)
     LaunchedEffect(recordSum) {
         val s = recordSum
-        if (s != null && s > 0) {
-            Game501SettingsStorage.recordHumanSum(context, s)
-        }
+        if (s != null && s > 0) Game501SettingsStorage.recordHumanSum(context, s)
         recordSum = null
     }
 
@@ -76,9 +70,7 @@ fun Game501Screen(
         if (game.players.getOrNull(game.currentPlayerIndex)?.isBot != true) return@LaunchedEffect
 
         saveHistory()
-        val botTurnScore = generateBotTurnScore(currentPlayer.botLevel)
-        game = Game501Logic.applyTurnScore(game, botTurnScore)
-        if (!game.isFinished) game = Game501Logic.finishTurn(game)
+        game = botPerformTurn(game, context)
     }
 
     // Показать Bust на 1.5 сек
@@ -89,72 +81,84 @@ fun Game501Screen(
         }
     }
 
-    // Диалоги
     LaunchedEffect(game.lastLegWinnerIndex) {
-        if (game.lastLegWinnerIndex != null) {
-            showLegWonDialog = true
-        }
+        if (game.lastLegWinnerIndex != null) showLegWonDialog = true
     }
     LaunchedEffect(game.lastSetWinnerIndex, showLegWonDialog) {
-        if (game.lastSetWinnerIndex != null && !showLegWonDialog && !showWinDialog) {
-            showSetWonDialog = true
-        }
+        if (game.lastSetWinnerIndex != null && !showLegWonDialog && !showWinDialog) showSetWonDialog = true
     }
     LaunchedEffect(game.isFinished, showLegWonDialog, showSetWonDialog) {
-        if (game.isFinished && !showLegWonDialog && !showSetWonDialog && !showWinDialog) {
-            showWinDialog = true
-        }
+        if (game.isFinished && !showLegWonDialog && !showSetWonDialog && !showWinDialog) showWinDialog = true
     }
 
+    // ─────────────────────────────────────────────
+    // Ввод суммы
+    // ─────────────────────────────────────────────
     fun submitSum() {
         val value = inputText.toIntOrNull() ?: return
         if (value <= 0 || value > 180) { inputText = ""; return }
-        val currentPlayer = game.players.getOrNull(game.currentPlayerIndex)
-        if (currentPlayer?.isBot == true) { inputText = ""; return }
-        if (game.isFinished) { inputText = ""; return }
+        val currentPlayer = game.players.getOrNull(game.currentPlayerIndex) ?: return
+        if (currentPlayer.isBot || game.isFinished) { inputText = ""; return }
 
         saveHistory()
+
+        // Случай 1: сумма == остаток → закрытие лега через удвоение
+        if (value == currentPlayer.score) {
+            inputText = ""
+            showLegQuestionDialog = true
+            return
+        }
+
+        // Случай 2: обычный ввод (в т.ч. перебор)
         val before = game
         val updated = Game501Logic.applyTurnScore(game, value)
-
-        // Проверяем, был ли Bust: если после applyTurnScore у игрока счёт не изменился
-        // (или увеличился, потому что в логике при bust возвращается к старому), и turnDarts = 3
         val playerBefore = before.players[before.currentPlayerIndex]
         val playerAfter = updated.players.getOrNull(before.currentPlayerIndex)
-        val isBust = playerAfter != null && playerAfter.score == playerBefore.score && playerAfter.turnDarts >= 3 && value > 0
+        val isBust = playerAfter != null && playerAfter.score == playerBefore.score && value > playerBefore.score
 
         if (isBust) {
             showBustMessage = true
         } else {
-            // Успешный ввод — записываем для автообновления
-            if (currentPlayer != null && !currentPlayer.isBot) {
-                recordSum = value
-            }
+            recordSum = value
         }
 
         inputText = ""
-        game = if (!updated.isFinished) Game501Logic.finishTurn(updated) else updated
+        game = if (!updated.isFinished && !isBust) Game501Logic.finishTurn(updated) else updated
     }
 
+    // ─────────────────────────────────────────────
+    // Ввод остатка
+    // ─────────────────────────────────────────────
     fun submitRemaining() {
         val value = inputText.toIntOrNull() ?: return
         val currentPlayer = game.players.getOrNull(game.currentPlayerIndex) ?: return
-        if (value < 0 || value >= currentPlayer.score) { inputText = ""; return }
+        if (currentPlayer.isBot || game.isFinished) { inputText = ""; return }
+        if (value < 0 || value > currentPlayer.score) { inputText = ""; return }
         val gained = currentPlayer.score - value
         if (gained <= 0) { inputText = ""; return }
 
         saveHistory()
-        val before = game
-        val updated = Game501Logic.applyTurnRemaining(game, value)
-        val playerBefore = before.players[before.currentPlayerIndex]
-        val playerAfter = updated.players.getOrNull(before.currentPlayerIndex)
-        val isBust = playerAfter != null && playerAfter.score == playerBefore.score && playerAfter.turnDarts >= 3
 
-        if (isBust) {
-            showBustMessage = true
-        } else if (!currentPlayer.isBot) {
-            recordSum = gained
+        // Случай 1: остаток == 0 → закрытие лега
+        if (value == 0) {
+            inputText = ""
+            showLegQuestionDialog = true
+            return
         }
+
+        // Случай 2: остаток == 1 и Double Out → перебор
+        val requiresDouble = game.outMode == OutMode.DOUBLE_OUT || game.outMode == OutMode.DOUBLE_IN_OUT
+        if (value == 1 && requiresDouble) {
+            inputText = ""
+            val updated = Game501Logic.applyTurnRemaining(game, value)
+            showBustMessage = true
+            game = updated
+            return
+        }
+
+        // Случай 3: обычный ввод
+        val updated = Game501Logic.applyTurnRemaining(game, value)
+        recordSum = gained
         inputText = ""
         game = if (!updated.isFinished) Game501Logic.finishTurn(updated) else updated
     }
@@ -178,23 +182,17 @@ fun Game501Screen(
             Text(
                 if (inputText.isEmpty()) "—" else inputText,
                 color = if (inputText.isEmpty()) Color.White.copy(alpha = 0.3f) else GoldAccent,
-                fontSize = 32.sp,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.weight(1f),
-                textAlign = TextAlign.Center
+                fontSize = 32.sp, fontWeight = FontWeight.Bold,
+                modifier = Modifier.weight(1f), textAlign = TextAlign.Center
             )
         }
 
-        // Быстрые кнопки (2 ряда)
         QuickButtons(
             sums = quickSums,
             enabled = !game.isFinished && game.currentPlayer?.isBot != true,
-            onPress = {
-                inputText = if (inputText.length < 3) inputText + it.toString() else inputText
-            }
+            onPress = { inputText = if (inputText.length < 3) inputText + it.toString() else inputText }
         )
 
-        // Кнопки Остаток и Лег
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -202,21 +200,15 @@ fun Game501Screen(
             BigActionButton(
                 label = "Остаток",
                 enabled = !game.isFinished && game.currentPlayer?.isBot != true,
-                color = TileBg,
-                textColor = Accent,
-                modifier = Modifier.weight(1f)
+                color = TileBg, textColor = Accent, modifier = Modifier.weight(1f)
             ) { submitRemaining() }
-
             BigActionButton(
                 label = "ЛЕГ",
                 enabled = !game.isFinished && game.currentPlayer?.isBot != true,
-                color = ErrorColor,
-                textColor = Color.White,
-                modifier = Modifier.weight(1f)
+                color = ErrorColor, textColor = Color.White, modifier = Modifier.weight(1f)
             ) { pressLeg() }
         }
 
-        // Клавиатура
         Keyboard501(
             enabled = !game.isFinished && game.currentPlayer?.isBot != true,
             onDigit = { inputText = if (inputText.length < 3) inputText + it else inputText },
@@ -226,22 +218,16 @@ fun Game501Screen(
         )
     }
 
-    // Сообщение ПЕРЕБОР
     if (showBustMessage) {
-        Box(
-            modifier = Modifier.fillMaxSize(),
-            contentAlignment = Alignment.Center
-        ) {
-            Box(
-                modifier = Modifier.clip(RoundedCornerShape(12.dp)).background(ErrorColor)
-                    .padding(horizontal = 32.dp, vertical = 20.dp)
-            ) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Box(modifier = Modifier.clip(RoundedCornerShape(12.dp)).background(ErrorColor)
+                .padding(horizontal = 32.dp, vertical = 20.dp)) {
                 Text("ПЕРЕБОР", color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Bold)
             }
         }
     }
 
-    // Диалог вопроса «Сколько дротиков?» для Лег
+    // Диалог «Сколько дротиков ушло на закрытие?»
     if (showLegQuestionDialog) {
         AlertDialog(
             onDismissRequest = { },
@@ -306,7 +292,6 @@ fun Game501Screen(
         )
     }
 
-    // Диалог сета
     if (showSetWonDialog) {
         AlertDialog(
             onDismissRequest = { },
@@ -329,7 +314,8 @@ fun Game501Screen(
     }
 
     if (showWinDialog) {
-        WinDialog501(game = game,
+        WinDialog501(
+            game = game,
             onUndo = { undo(); showWinDialog = false },
             onContinue = {
                 showWinDialog = false
@@ -355,6 +341,46 @@ fun Game501Screen(
 }
 
 // ─────────────────────────────────────────────
+// Ход бота
+// ─────────────────────────────────────────────
+private fun botPerformTurn(game: Game501, context: android.content.Context): Game501 {
+    val player = game.currentPlayer ?: return game
+    val botLevel = player.botLevel
+
+    // Если остаток близок к 0 и режим требует удвоение — пытаемся закрыть
+    val requiresDouble = game.outMode == OutMode.DOUBLE_OUT || game.outMode == OutMode.DOUBLE_IN_OUT
+    val canCloseNow = player.score <= 40 && player.score % 2 == 0 && player.score / 2 in 1..20
+
+    if (requiresDouble && canCloseNow) {
+        // Вероятность закрытия зависит от уровня
+        val closeChance = 0.15 + (botLevel - 1) * 0.025
+        if (Random.nextDouble() < closeChance) {
+            return Game501Logic.closeLegManually(game, Random.nextInt(1, 4))
+        }
+    }
+
+    // Обычный подход — генерируем сумму по уровню
+    val gained = generateBotTurnScore(botLevel)
+    val capped = gained.coerceAtMost(player.score)
+
+    val updated = Game501Logic.applyTurnScore(game, capped)
+    return if (!updated.isFinished) Game501Logic.finishTurn(updated) else updated
+}
+
+private fun generateBotTurnScore(botLevel: Int): Int {
+    val lvl = botLevel.coerceIn(1, 16)
+    val basePpr = when (lvl) {
+        1 -> 24; 2 -> 31; 3 -> 38; 4 -> 45
+        5 -> 51; 6 -> 57; 7 -> 62; 8 -> 67
+        9 -> 72; 10 -> 77; 11 -> 82; 12 -> 87
+        13 -> 92; 14 -> 97; 15 -> 102; else -> 110
+    }
+    val min = (basePpr * 0.5).toInt()
+    val max = (basePpr * 1.4).toInt()
+    return Random.nextInt(min, max + 1).coerceIn(0, 180)
+}
+
+// ─────────────────────────────────────────────
 // Шапка игроков
 // ─────────────────────────────────────────────
 @Composable
@@ -365,29 +391,22 @@ private fun PlayersHeader501(game: Game501) {
 
     Column(modifier = Modifier.fillMaxWidth().background(Color(0xFF16202C)).padding(vertical = 10.dp)) {
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            // Команда A
             PlayerScoreCol(
                 name = teamA.joinToString("/") { it.name },
                 score = if (game.isPairGame) teamA.minOfOrNull { it.score } ?: 0 else teamA.firstOrNull()?.score ?: 0,
                 ppr = teamA.firstOrNull()?.let { Game501Logic.matchPpr(it) } ?: 0.0,
-                legs = teamA.firstOrNull()?.legsInCurrentSet ?: 0,
-                sets = teamA.firstOrNull()?.setsWon ?: 0,
                 isActive = activeTeam == 0,
                 modifier = Modifier.weight(1f)
             )
-            // Центр — леги
             Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(horizontal = 8.dp)) {
                 Text("ЛЕГ", color = Color(0xFF99AABB), fontSize = 12.sp, fontWeight = FontWeight.Bold)
                 Text("${teamA.firstOrNull()?.legsInCurrentSet ?: 0} : ${teamB.firstOrNull()?.legsInCurrentSet ?: 0}",
                     color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.Bold)
             }
-            // Команда B
             PlayerScoreCol(
                 name = teamB.joinToString("/") { it.name },
                 score = if (game.isPairGame) teamB.minOfOrNull { it.score } ?: 0 else teamB.firstOrNull()?.score ?: 0,
                 ppr = teamB.firstOrNull()?.let { Game501Logic.matchPpr(it) } ?: 0.0,
-                legs = teamB.firstOrNull()?.legsInCurrentSet ?: 0,
-                sets = teamB.firstOrNull()?.setsWon ?: 0,
                 isActive = activeTeam == 1,
                 modifier = Modifier.weight(1f)
             )
@@ -397,13 +416,7 @@ private fun PlayersHeader501(game: Game501) {
 
 @Composable
 private fun PlayerScoreCol(
-    name: String,
-    score: Int,
-    ppr: Double,
-    legs: Int,
-    sets: Int,
-    isActive: Boolean,
-    modifier: Modifier
+    name: String, score: Int, ppr: Double, isActive: Boolean, modifier: Modifier
 ) {
     Column(modifier = modifier, horizontalAlignment = Alignment.CenterHorizontally) {
         Text(name, color = if (isActive) Accent else Color.White, fontSize = 16.sp,
@@ -421,7 +434,7 @@ private fun TopBar501(game: Game501, onBack: () -> Unit) {
         modifier = Modifier.fillMaxWidth().background(Color(0xFF1A2332)).padding(horizontal = 12.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(game.mode.label, color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold,
+        Text(game.modeLabel, color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold,
             modifier = Modifier.weight(1f))
         Spacer(Modifier.width(12.dp))
         Box(
@@ -432,9 +445,6 @@ private fun TopBar501(game: Game501, onBack: () -> Unit) {
     }
 }
 
-// ─────────────────────────────────────────────
-// Быстрые кнопки сумм — 2 ряда
-// ─────────────────────────────────────────────
 @Composable
 private fun QuickButtons(sums: List<Int>, enabled: Boolean, onPress: (Int) -> Unit) {
     val rows = sums.chunked(6)
@@ -447,14 +457,9 @@ private fun QuickButtons(sums: List<Int>, enabled: Boolean, onPress: (Int) -> Un
                         modifier = Modifier.weight(1f).height(48.dp).clip(RoundedCornerShape(8.dp))
                             .background(TileBg).clickable(enabled = enabled) { onPress(sum) },
                         contentAlignment = Alignment.Center
-                    ) {
-                        Text("$sum", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Medium)
-                    }
+                    ) { Text("$sum", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Medium) }
                 }
-                // Добиваем пустыми местами для ровности
-                if (row.size < 6) {
-                    repeat(6 - row.size) { Spacer(Modifier.weight(1f)) }
-                }
+                if (row.size < 6) repeat(6 - row.size) { Spacer(Modifier.weight(1f)) }
             }
         }
     }
@@ -462,36 +467,23 @@ private fun QuickButtons(sums: List<Int>, enabled: Boolean, onPress: (Int) -> Un
 
 @Composable
 private fun BigActionButton(
-    label: String,
-    enabled: Boolean,
-    color: Color,
-    textColor: Color,
-    modifier: Modifier,
-    onClick: () -> Unit
+    label: String, enabled: Boolean, color: Color, textColor: Color,
+    modifier: Modifier, onClick: () -> Unit
 ) {
     Box(
         modifier = modifier.height(52.dp).clip(RoundedCornerShape(10.dp))
             .background(if (enabled) color else color.copy(alpha = 0.4f))
             .clickable(enabled = enabled) { onClick() },
         contentAlignment = Alignment.Center
-    ) {
-        Text(label, color = textColor, fontSize = 17.sp, fontWeight = FontWeight.Bold)
-    }
+    ) { Text(label, color = textColor, fontSize = 17.sp, fontWeight = FontWeight.Bold) }
 }
 
-// ─────────────────────────────────────────────
-// Клавиатура
-// ─────────────────────────────────────────────
 @Composable
 private fun Keyboard501(
-    enabled: Boolean,
-    onDigit: (String) -> Unit,
-    onBackspace: () -> Unit,
-    onClear: () -> Unit,
-    onOk: () -> Unit
+    enabled: Boolean, onDigit: (String) -> Unit, onBackspace: () -> Unit,
+    onClear: () -> Unit, onOk: () -> Unit
 ) {
     Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 4.dp)) {
-        // Ряд 1-2-3
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             DigitKey("1", enabled, onDigit, Modifier.weight(1f))
             DigitKey("2", enabled, onDigit, Modifier.weight(1f))
@@ -511,16 +503,12 @@ private fun Keyboard501(
         }
         Spacer(Modifier.height(6.dp))
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            // Стереть всё
             Box(
                 modifier = Modifier.weight(1f).height(56.dp).clip(RoundedCornerShape(10.dp))
                     .background(TileBgDark).clickable(enabled = enabled) { onClear() },
                 contentAlignment = Alignment.Center
             ) { Text("C", color = ErrorColor, fontSize = 20.sp, fontWeight = FontWeight.Bold) }
-
             DigitKey("0", enabled, onDigit, Modifier.weight(1f))
-
-            // Backspace
             Box(
                 modifier = Modifier.weight(1f).height(56.dp).clip(RoundedCornerShape(10.dp))
                     .background(TileBgDark).clickable(enabled = enabled) { onBackspace() },
@@ -528,7 +516,6 @@ private fun Keyboard501(
             ) { Text("⌫", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold) }
         }
         Spacer(Modifier.height(8.dp))
-        // OK
         Box(
             modifier = Modifier.fillMaxWidth().height(60.dp).clip(RoundedCornerShape(12.dp))
                 .background(if (enabled) Accent else TileBgDark)
@@ -582,23 +569,4 @@ private fun WinDialog501(game: Game501, onUndo: () -> Unit, onContinue: () -> Un
             }
         }
     )
-}
-
-// ─────────────────────────────────────────────
-// Простая генерация броска бота
-// (временная — детально займёмся позже)
-// ─────────────────────────────────────────────
-private fun generateBotTurnScore(botLevel: Int): Int {
-    val lvl = botLevel.coerceIn(1, 16)
-    // PPR бота по уровню
-    val basePpr = when (lvl) {
-        1 -> 24; 2 -> 31; 3 -> 38; 4 -> 45
-        5 -> 51; 6 -> 57; 7 -> 62; 8 -> 67
-        9 -> 72; 10 -> 77; 11 -> 82; 12 -> 87
-        13 -> 92; 14 -> 97; 15 -> 102; else -> 110
-    }
-    // Небольшой разброс ±30%
-    val min = (basePpr * 0.5).toInt()
-    val max = (basePpr * 1.4).toInt()
-    return Random.nextInt(min, max + 1).coerceIn(0, 180)
 }
