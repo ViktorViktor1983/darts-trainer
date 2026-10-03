@@ -5,10 +5,8 @@ import kotlin.random.Random
 // ИИ бота для игры x01
 object Game501BotAI {
 
-    // ВКЛ/ВЫКЛ формы/серии/усталости (для чистого теста сейчас ВЫКЛ)
     private const val ENABLE_VARIABILITY = false
 
-    // Соседи на дартсборде (по кругу)
     private val NEIGHBORS: Map<Int, Pair<Int, Int>> = mapOf(
         20 to (5 to 1), 1 to (20 to 18), 18 to (1 to 4), 4 to (18 to 13),
         13 to (4 to 6), 6 to (13 to 10), 10 to (6 to 15), 15 to (10 to 2),
@@ -17,9 +15,6 @@ object Game501BotAI {
         14 to (11 to 9), 9 to (14 to 12), 12 to (9 to 5), 5 to (12 to 20)
     )
 
-    // ─────────────────────────────────────────────
-    // Полный ход бота
-    // ─────────────────────────────────────────────
     fun performTurn(game: Game501, playerIndex: Int): Game501 {
         val player = game.players.getOrNull(playerIndex) ?: return game
         if (!player.isBot) return game
@@ -38,7 +33,7 @@ object Game501BotAI {
 
         var dartsThrown = 0
         var previousMissed = false
-        var turnScoreForCategories = 0  // сумма за подход (для категорий)
+        var turnScoreForCategories = 0
 
         while (dartsThrown < 3 && !currentGame.isFinished) {
             if (currentGame.currentLegNumber != startLeg ||
@@ -51,16 +46,12 @@ object Game501BotAI {
             val result = simulateDart(target, multiplier, current.botLevel)
             previousMissed = !result.isHit
 
-            // Если целились в D и промахнулись — записываем попытку в удвоение
             val wasDoubleTarget = target.multiplier == 2
             val hitDouble = result.actualMultiplier == 2 && result.actualSector != 0
-
             if (wasDoubleTarget && !hitDouble) {
-                // Попытка в дабл без попадания
                 currentGame = Game501Logic.recordDoublesAttempts(currentGame, 1)
             }
 
-            // Применяем бросок
             if (result.actualSector == 0) {
                 currentGame = Game501Logic.applyThrow(currentGame, 20, ThrowMultiplier.MISS)
             } else {
@@ -75,7 +66,6 @@ object Game501BotAI {
             dartsThrown++
         }
 
-        // Учёт категорий суммы для бота (после того как набрали сумму)
         if (turnScoreForCategories > 0 && !currentGame.isFinished) {
             currentGame = Game501Logic.recordCategoryForBot(currentGame, playerIndex, turnScoreForCategories)
         }
@@ -90,9 +80,6 @@ object Game501BotAI {
         return currentGame
     }
 
-    // ─────────────────────────────────────────────
-    // Симуляция дротика
-    // ─────────────────────────────────────────────
     private data class SimulatedThrow(
         val actualSector: Int,
         val actualMultiplier: Int,
@@ -121,21 +108,27 @@ object Game501BotAI {
         }
     }
 
-    // Точности по уровням
+    // ─────────────────────────────────────────────
+    // ТОЧНОСТИ ПО УРОВНЯМ (калибровка: Разрядник ~11%)
+    // ─────────────────────────────────────────────
     private fun getTripleAccuracy(botLevel: Int): Double {
         val lvl = botLevel.coerceIn(1, 16)
-        return 0.10 + (lvl - 1) * (0.65 / 15.0)
+        // Новичок 5%, Разрядник (7) 11%, Легенда (16) 20%
+        return 0.05 + (lvl - 1) * 0.01
     }
+
     private fun getDoubleAccuracy(botLevel: Int): Double {
         val lvl = botLevel.coerceIn(1, 16)
-        return 0.10 + (lvl - 1) * (0.65 / 15.0)
+        // Точка попадания в цель D ещё не цель, а кольцо.
+        // Сейчас держим на том же уровне, что и T (для Разрядника ≈ 11%).
+        return 0.05 + (lvl - 1) * 0.01
     }
+
     private fun getSingleAccuracy(botLevel: Int): Double {
         val t = getTripleAccuracy(botLevel)
         return (t * 1.4 + 0.25).coerceAtMost(0.95)
     }
 
-    // Промах при цели в T
     private fun missFromTriple(sector: Int): SimulatedThrow {
         val r = Random.nextDouble()
         if (r < 0.57) return SimulatedThrow(sector, 1, isHit = false)
@@ -156,7 +149,6 @@ object Game501BotAI {
         return SimulatedThrow(0, 0, isHit = false)
     }
 
-    // Промах при цели в D
     private fun missFromDouble(sector: Int): SimulatedThrow {
         val r = Random.nextDouble()
         if (r < 0.50) return SimulatedThrow(0, 0, isHit = false)
@@ -171,7 +163,6 @@ object Game501BotAI {
         return SimulatedThrow(n, 1, isHit = false)
     }
 
-    // Промах при цели в S
     private fun missFromSingle(sector: Int): SimulatedThrow {
         val r = Random.nextDouble()
         if (r < 0.35) {
@@ -188,7 +179,6 @@ object Game501BotAI {
         return SimulatedThrow(0, 0, isHit = false)
     }
 
-    // Выбор цели
     private fun chooseTarget(player: Player501, previousMissed: Boolean): CheckoutThrow? {
         val score = player.score
         if (score > 170 || !CheckoutTable.isCheckoutPossible(score)) {
@@ -203,7 +193,6 @@ object Game501BotAI {
         return path.throws[dartsUsed]
     }
 
-    // Серия
     private fun updateStreak(player: Player501): Player501 {
         if (player.botStreakLeft > 0) {
             return player.copy(botStreakLeft = player.botStreakLeft - 1)
@@ -218,7 +207,6 @@ object Game501BotAI {
         return player.copy(botStreak = 1.0, botStreakLeft = 0)
     }
 
-    // Усталость
     private fun fatigueFactor(sessionStartTime: Long): Double {
         if (sessionStartTime <= 0L) return 1.0
         val minutes = (System.currentTimeMillis() - sessionStartTime) / 60000.0
