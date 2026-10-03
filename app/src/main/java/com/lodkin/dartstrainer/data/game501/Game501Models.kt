@@ -1,17 +1,13 @@
 package com.lodkin.dartstrainer.data.game501
 
-// ─────────────────────────────────────────────
 // Тип игры
-// ─────────────────────────────────────────────
 enum class GameType(val startScore: Int, val label: String) {
     X501(501, "501"),
     X301(301, "301"),
     X1001(1001, "1001")
 }
 
-// ─────────────────────────────────────────────
 // Формат закрытия
-// ─────────────────────────────────────────────
 enum class OutMode(val label: String, val shortLabel: String) {
     DOUBLE_OUT("Double Out", "DO"),
     DOUBLE_IN_OUT("Double In / Double Out", "DI/DO"),
@@ -38,9 +34,7 @@ data class Throw501(
         get() = multiplier == ThrowMultiplier.DOUBLE
 }
 
-// ─────────────────────────────────────────────
 // Снимок одного игрока за один лег
-// ─────────────────────────────────────────────
 data class LegPlayerSnapshot501(
     val name: String,
     val teamIndex: Int,
@@ -49,8 +43,6 @@ data class LegPlayerSnapshot501(
     val scoreGained: Int,
     val doublesHit: Int,
     val doublesAttempted: Int,
-
-    // ── Расширенная статистика за лег ──
     val count180: Int = 0,
     val count170plus: Int = 0,
     val count130plus: Int = 0,
@@ -67,30 +59,27 @@ data class LegSnapshot501(
     val players: List<LegPlayerSnapshot501>
 )
 
-// ─────────────────────────────────────────────
 // Один игрок
-// ─────────────────────────────────────────────
 data class Player501(
     val name: String,
     val isBot: Boolean = false,
     val botLevel: Int = 0,
     val teamIndex: Int = 0,
 
-    // ── Состояние серии бота ──
+    // Состояние серии бота
     var botStreak: Double = 1.0,
     var botStreakLeft: Int = 0,
 
-    // ── Текущее состояние ──
+    // Текущее состояние
     var score: Int = 501,
     var turnScore: Int = 0,
     var turnDarts: Int = 0,
 
-    // ── Накопительные за лег ──
+    // Накопительные за лег
     var legDarts: Int = 0,
     var legScoreGained: Int = 0,
     var legDoublesHit: Int = 0,
     var legDoublesAttempted: Int = 0,
-    // Расширенная статистика за лег
     var legCount180: Int = 0,
     var legCount170plus: Int = 0,
     var legCount130plus: Int = 0,
@@ -98,12 +87,11 @@ data class Player501(
     var legCount57plus: Int = 0,
     var legCount57minus: Int = 0,
 
-    // ── Накопительные за матч ──
+    // Накопительные за матч
     var matchDarts: Int = 0,
     var matchScoreGained: Int = 0,
     var matchDoublesHit: Int = 0,
     var matchDoublesAttempted: Int = 0,
-    // Расширенная статистика за матч
     var matchCount180: Int = 0,
     var matchCount170plus: Int = 0,
     var matchCount130plus: Int = 0,
@@ -111,27 +99,27 @@ data class Player501(
     var matchCount57plus: Int = 0,
     var matchCount57minus: Int = 0,
 
-    // ── Набор без закрытия (остаток > 170) ──
+    // Набор без закрытия (остаток > 170)
     var nonCloseScore: Int = 0,
     var nonCloseDarts: Int = 0,
 
-    // ── Первые 9 дротиков ──
+    // Первые 9 дротиков ТЕКУЩЕГО лега (сбрасывается при новом леге)
     var first9Score: Int = 0,
     var first9Darts: Int = 0,
 
-    // ── По легам (для подробной статистики) ──
-    val listOfCloseValues: MutableList<Int> = mutableListOf(),  // с каких значений закрывал
-    val listOfLegDarts: MutableList<Int> = mutableListOf(),      // дротиков на каждый лег
-    val listOfLegPpr: MutableList<Double> = mutableListOf(),     // средний набор за каждый лег
+    // Списки для усреднения по легам
+    val listOfCloseValues: MutableList<Int> = mutableListOf(),
+    val listOfLegDarts: MutableList<Int> = mutableListOf(),
+    val listOfLegPpr: MutableList<Double> = mutableListOf(),
+    // Список PPR первых 9 дротиков по каждому легу
+    val listOfFirst9Ppr: MutableList<Double> = mutableListOf(),
 
-    // ── Леги/сеты ──
+    // Леги/сеты
     var legsInCurrentSet: Int = 0,
     var setsWon: Int = 0
 )
 
-// ─────────────────────────────────────────────
 // Состояние игры
-// ─────────────────────────────────────────────
 data class Game501(
     val gameType: GameType = GameType.X501,
     val outMode: OutMode = OutMode.DOUBLE_OUT,
