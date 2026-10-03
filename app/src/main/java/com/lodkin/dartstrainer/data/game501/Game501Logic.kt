@@ -23,7 +23,8 @@ object Game501Logic {
                 legDarts = 0, legScoreGained = 0,
                 legDoublesHit = 0, legDoublesAttempted = 0,
                 legCount180 = 0, legCount170plus = 0, legCount130plus = 0,
-                legCount90plus = 0, legCount57plus = 0, legCount57minus = 0
+                legCount90plus = 0, legCount57plus = 0, legCount57minus = 0,
+                first9Score = 0, first9Darts = 0
             )
         }
         return Game501(
@@ -61,7 +62,7 @@ object Game501Logic {
         }
     }
 
-    // Запись категории суммы для бота (после полного хода)
+    // Запись категории суммы для бота
     fun recordCategoryForBot(game: Game501, playerIndex: Int, turnScore: Int): Game501 {
         if (playerIndex !in game.players.indices) return game
         if (turnScore <= 0) return game
@@ -81,13 +82,20 @@ object Game501Logic {
 
     private fun registerApproach(player: Player501, gained: Int, dartsUsed: Int, scoreBefore: Int): Player501 {
         var p = player
+        // Первые 9 дротиков ТЕКУЩЕГО лега
         if (p.first9Darts < 9) {
             val remaining = (9 - p.first9Darts).coerceAtLeast(0)
             val toAdd = dartsUsed.coerceAtMost(remaining)
-            p = p.copy(first9Score = p.first9Score + gained, first9Darts = p.first9Darts + toAdd)
+            p = p.copy(
+                first9Score = p.first9Score + gained,
+                first9Darts = p.first9Darts + toAdd
+            )
         }
         if (scoreBefore > 170) {
-            p = p.copy(nonCloseScore = p.nonCloseScore + gained, nonCloseDarts = p.nonCloseDarts + dartsUsed)
+            p = p.copy(
+                nonCloseScore = p.nonCloseScore + gained,
+                nonCloseDarts = p.nonCloseDarts + dartsUsed
+            )
         }
         return applyCategory(p, gained)
     }
@@ -129,8 +137,19 @@ object Game501Logic {
             matchDoublesAttempted = if (isDouble) player.matchDoublesAttempted + 1 else player.matchDoublesAttempted,
             matchDoublesHit = if (isDouble && newScore == 0) player.matchDoublesHit + 1 else player.matchDoublesHit
         )
+        // Первые 9 дротиков текущего лега
         if (up.first9Darts < 9) {
-            up = up.copy(first9Score = up.first9Score + points, first9Darts = up.first9Darts + 1)
+            up = up.copy(
+                first9Score = up.first9Score + points,
+                first9Darts = up.first9Darts + 1
+            )
+        }
+        // Набор без закрытия (для точности PPR без закрытия)
+        if (player.score > 170) {
+            up = up.copy(
+                nonCloseScore = up.nonCloseScore + points,
+                nonCloseDarts = up.nonCloseDarts + 1
+            )
         }
         updatedPlayers[playerIndex] = up
         var updatedGame = game.copy(players = updatedPlayers)
@@ -226,6 +245,7 @@ object Game501Logic {
         val p = updated[playerIndex]
         var up = p.copy(turnDarts = p.turnDarts + 1, legDarts = p.legDarts + 1, matchDarts = p.matchDarts + 1)
         if (up.first9Darts < 9) up = up.copy(first9Darts = up.first9Darts + 1)
+        if (p.score > 170) up = up.copy(nonCloseDarts = up.nonCloseDarts + 1)
         updated[playerIndex] = up
         return game.copy(players = updated)
     }
@@ -233,7 +253,17 @@ object Game501Logic {
     private fun registerBust(game: Game501, playerIndex: Int): Game501 {
         val updated = game.players.toMutableList()
         val p = updated[playerIndex]
-        updated[playerIndex] = p.copy(turnScore = 0, turnDarts = 0)
+        val missing = (3 - p.turnDarts).coerceAtLeast(0)
+        var up = p.copy(turnScore = 0, turnDarts = 0,
+            legDarts = p.legDarts + missing, matchDarts = p.matchDarts + missing)
+        if (up.first9Darts < 9 && missing > 0) {
+            val toAdd = missing.coerceAtMost(9 - up.first9Darts)
+            up = up.copy(first9Darts = up.first9Darts + toAdd)
+        }
+        if (p.score > 170 && missing > 0) {
+            up = up.copy(nonCloseDarts = up.nonCloseDarts + missing)
+        }
+        updated[playerIndex] = up
         return game.copy(players = updated)
     }
 
@@ -252,6 +282,9 @@ object Game501Logic {
             val toAdd = missing.coerceAtMost(9 - up.first9Darts)
             up = up.copy(first9Darts = up.first9Darts + toAdd)
         }
+        if (p.score > 170 && missing > 0) {
+            up = up.copy(nonCloseDarts = up.nonCloseDarts + missing)
+        }
         updated[idx] = up
         return nextPlayer(game.copy(players = updated))
     }
@@ -266,9 +299,12 @@ object Game501Logic {
         for (i in updated.indices) {
             val p = updated[i]
             val ppr = if (p.legDarts > 0) p.legScoreGained.toDouble() / (p.legDarts / 3.0) else 0.0
+            // PPR первых 9 дротиков текущего лега
+            val f9 = if (p.first9Darts > 0) p.first9Score.toDouble() / (p.first9Darts / 3.0) else 0.0
             updated[i] = p.copy(
                 listOfLegDarts = p.listOfLegDarts.toMutableList().also { it.add(p.legDarts) },
-                listOfLegPpr = p.listOfLegPpr.toMutableList().also { it.add(ppr) }
+                listOfLegPpr = p.listOfLegPpr.toMutableList().also { it.add(ppr) },
+                listOfFirst9Ppr = p.listOfFirst9Ppr.toMutableList().also { it.add(f9) }
             )
         }
         val snapshot = LegSnapshot501(
@@ -330,11 +366,13 @@ object Game501Logic {
         )
     }
 
+    // СБРОС статистики лега (включая first9)
     private fun resetLeg(p: Player501, startScore: Int): Player501 = p.copy(
         score = startScore, turnScore = 0, turnDarts = 0,
         legDarts = 0, legScoreGained = 0, legDoublesHit = 0, legDoublesAttempted = 0,
         legCount180 = 0, legCount170plus = 0, legCount130plus = 0,
-        legCount90plus = 0, legCount57plus = 0, legCount57minus = 0
+        legCount90plus = 0, legCount57plus = 0, legCount57minus = 0,
+        first9Score = 0, first9Darts = 0
     )
 
     private fun requiresDoubleOut(outMode: OutMode): Boolean =
@@ -348,9 +386,10 @@ object Game501Logic {
         if (player.matchDoublesAttempted <= 0) return 0.0
         return player.matchDoublesHit.toDouble() / player.matchDoublesAttempted * 100.0
     }
+    // Средний PPR первых 9 дротиков по всем легам
     fun first9Ppr(player: Player501): Double {
-        if (player.first9Darts < 3) return 0.0
-        return player.first9Score.toDouble() / (player.first9Darts / 3.0)
+        if (player.listOfFirst9Ppr.isEmpty()) return 0.0
+        return player.listOfFirst9Ppr.average()
     }
     fun nonClosePpr(player: Player501): Double {
         if (player.nonCloseDarts < 3) return 0.0
