@@ -7,6 +7,7 @@ object Game501BotAI {
 
     // ─────────────────────────────────────────────
     // Полный ход бота (до 3 дротиков)
+    // Использует Game501Logic.applyThrow — вся логика там.
     // ─────────────────────────────────────────────
     fun performTurn(game: Game501, playerIndex: Int): Game501 {
         val player = game.players.getOrNull(playerIndex) ?: return game
@@ -27,22 +28,41 @@ object Game501BotAI {
         val startSet = currentGame.currentSetNumber
 
         var dartsThrown = 0
-        var previousMissed = false  // был ли промах в предыдущем дротике
+        var previousMissed = false
 
         while (dartsThrown < 3 && !currentGame.isFinished) {
             if (currentGame.currentLegNumber != startLeg ||
                 currentGame.currentSetNumber != startSet
             ) break
 
-            val current = currentGame.players[playerIndex]
-            val target = chooseTarget(current, game.outMode, previousMissed)
-                ?: break  // нет цели — выходим
+            val current = currentGame.players.getOrNull(playerIndex) ?: break
+            val target = chooseTarget(current, previousMissed)
+                ?: break
 
             val result = simulateDart(target, multiplier, current.botLevel)
             previousMissed = !result.isHit
 
-            // Применяем бросок
-            currentGame = applySimulatedThrow(currentGame, playerIndex, result, target)
+            if (result.actualSector == 0) {
+                // Мимо
+                currentGame = Game501Logic.applyThrow(
+                    currentGame,
+                    20,
+                    ThrowMultiplier.MISS,
+                    playerIndex
+                )
+            } else {
+                val mult = when (result.actualMultiplier) {
+                    2 -> ThrowMultiplier.DOUBLE
+                    3 -> ThrowMultiplier.TRIPLE
+                    else -> ThrowMultiplier.SINGLE
+                }
+                currentGame = Game501Logic.applyThrow(
+                    currentGame,
+                    result.actualSector,
+                    mult,
+                    playerIndex
+                )
+            }
             dartsThrown++
         }
 
@@ -63,7 +83,7 @@ object Game501BotAI {
     private data class SimulatedThrow(
         val actualSector: Int,      // 0 если мимо
         val actualMultiplier: Int,  // 1=S, 2=D, 3=T, 0=miss
-        val isHit: Boolean          // попал в цель (не в S из-за промаха)
+        val isHit: Boolean          // попал в цель или нет
     )
 
     private fun simulateDart(
@@ -73,9 +93,9 @@ object Game501BotAI {
     ): SimulatedThrow {
         // Базовая сложность попадания в целевой множитель
         val baseAcc = when (target.multiplier) {
-            1 -> 0.85
-            2 -> 0.35
-            3 -> 0.30
+            1 -> 0.85    // S
+            2 -> 0.35    // D
+            3 -> 0.30    // T
             else -> 0.5
         }
 
@@ -87,138 +107,13 @@ object Game501BotAI {
             return SimulatedThrow(target.sector, target.multiplier, isHit = true)
         }
 
-        // Не попал в цель. Промах рядом (S того же сектора) или мимо?
-        if (Random.nextDouble() < 0.4) {
+        // Не попал. С шансом 40% — попал в S того же сектора (промах рядом)
+        if (Random.nextDouble() < 0.4 && target.sector in 1..20) {
             return SimulatedThrow(target.sector, 1, isHit = false)
         }
 
-        // Мимо
+        // Иначе — мимо (сектор 0)
         return SimulatedThrow(0, 0, isHit = false)
-    }
-
-    // ─────────────────────────────────────────────
-    // Применение симулированного броска
-    // ─────────────────────────────────────────────
-    private fun applySimulatedThrow(
-        game: Game501,
-        playerIndex: Int,
-        result: SimulatedThrow,
-        target: CheckoutThrow
-    ): Game501 {
-        val player = game.players[playerIndex]
-
-        // Мимо
-        if (result.actualSector == 0) {
-            val updated = game.players.toMutableList()
-            updated[playerIndex] = player.copy(
-                turnDarts = player.turnDarts + 1,
-                legDarts = player.legDarts + 1,
-                matchDarts = player.matchDarts + 1
-            )
-            return game.copy(players = updated)
-        }
-
-        val points = result.actualSector * result.actualMultiplier
-        val newScore = player.score - points
-        val isDouble = result.actualMultiplier == 2
-
-        val canFinish = when (game.outMode) {
-            OutMode.DOUBLE_OUT -> isDouble && newScore == 0
-            OutMode.DOUBLE_IN_OUT -> isDouble && newScore == 0 && player.turnScore > 0
-            OutMode.STRAIGHT_OUT -> newScore == 0
-        }
-
-        val isBust = when {
-            newScore < 0 -> true
-            newScore == 1 && requiresDoubleOut(game.outMode) -> true
-            newScore == 0 && !canFinish && requiresDoubleOut(game.outMode) -> true
-            else -> false
-        }
-
-        // Перебор — сбрасываем подход (без учёта в статистике)
-        if (isBust) {
-            val updated = game.players.toMutableList()
-            val missing = (3 - player.turnDarts).coerceAtLeast(0)
-            updated[playerIndex] = player.copy(
-                turnScore = 0,
-                turnDarts = 0,
-                legDarts = player.legDarts + missing,
-                matchDarts = player.matchDarts + missing
-            )
-            return Game501Logic.nextPlayer(game.copy(players = updated))
-        }
-
-        val updated = game.players.toMutableList()
-        var updatedPlayer = player.copy(
-            score = newScore,
-            turnScore = player.turnScore + points,
-            turnDarts = player.turnDarts + 1,
-            legDarts = player.legDarts + 1,
-            legScoreGained = player.legScoreGained + points,
-            matchDarts = player.matchDarts + 1,
-            matchScoreGained = player.matchScoreGained + points,
-            legDoublesAttempted = if (isDouble) player.legDoublesAttempted + 1 else player.legDoublesAttempted,
-            legDoublesHit = if (isDouble && newScore == 0) player.legDoublesHit + 1 else player.legDoublesHit,
-            matchDoublesAttempted = if (isDouble) player.matchDoublesAttempted + 1 else player.matchDoublesAttempted,
-            matchDoublesHit = if (isDouble && newScore == 0) player.matchDoublesHit + 1 else player.matchDoublesHit
-        )
-
-        // Первые 9 дротиков
-        if (updatedPlayer.first9Darts < 9) {
-            updatedPlayer = updatedPlayer.copy(
-                first9Score = updatedPlayer.first9Score + points,
-                first9Darts = updatedPlayer.first9Darts + 1
-            )
-        }
-        // Набор без закрытия
-        if (player.score > 170) {
-            updatedPlayer = updatedPlayer.copy(
-                nonCloseScore = updatedPlayer.nonCloseScore + points,
-                nonCloseDarts = updatedPlayer.nonCloseDarts + 1
-            )
-        }
-
-        updated[playerIndex] = updatedPlayer
-        var updatedGame = game.copy(players = updated)
-
-        // Проверка победы в леге
-        if (newScore == 0 && canFinish) {
-            // Записываем значение закрытия
-            val closingValue = player.score
-            val pWithClose = updatedGame.players[playerIndex].copy(
-                listOfCloseValues = updatedGame.players[playerIndex].listOfCloseValues.toMutableList().also {
-                    it.add(closingValue)
-                }
-            )
-            val finalPlayers = updatedGame.players.toMutableList()
-            finalPlayers[playerIndex] = pWithClose
-            updatedGame = updatedGame.copy(players = finalPlayers)
-
-            updatedGame = awardLegWinForBot(updatedGame, updatedPlayer.teamIndex)
-        }
-
-        return updatedGame
-    }
-
-    // ─────────────────────────────────────────────
-    // Завершение лега (упрощённая версия для бота)
-    // ─────────────────────────────────────────────
-    private fun awardLegWinForBot(game: Game501, winningTeam: Int): Game501 {
-        // Используем стандартный finishLeg через Game501Logic
-        // Но он приватный. Поэтому просто вызываем ещё один applyTurnScore(0)
-        // и надеемся, что finishLeg сработает.
-        // Проще: вызываем внутренний closeLeg с 0 дротиков. Хм.
-
-        // Вместо этого — используем публичный метод через Game501Logic
-        // Нам нужно передать "закрытие" — но applyThrow уже обработает победу.
-
-        // Проблема: applyThrow не закрывает лег автоматически.
-        // Придётся вызывать finishLeg вручную.
-
-        // Пока делаем через хак: вызываем closeLegManually с 0 дротиков,
-        // который внутри вызывает finishLeg.
-
-        return Game501Logic.closeLegManuallyForBot(game, winningTeam)
     }
 
     // ─────────────────────────────────────────────
@@ -226,14 +121,12 @@ object Game501BotAI {
     // ─────────────────────────────────────────────
     private fun chooseTarget(
         player: Player501,
-        outMode: OutMode,
         previousMissed: Boolean
     ): CheckoutThrow? {
         val score = player.score
 
-        // 1. Bogey numbers и набор (>170)
+        // 1. Bogey numbers и большой остаток — T20 или T19 по чётности
         if (score > 170 || !CheckoutTable.isCheckoutPossible(score)) {
-            // Стратегия: чётный → T20, нечётный → T19
             return if (score % 2 == 0) {
                 CheckoutThrow(20, 3)  // T20
             } else {
@@ -244,20 +137,17 @@ object Game501BotAI {
         // 2. Закрытие — есть путь в таблице
         val paths = CheckoutTable.pathsFor(score) ?: return CheckoutThrow(20, 3)
 
-        // Если предыдущий дротик был промахом — берём путь "Промах ..."
+        // Если предыдущий дротик был промахом — берём «Промах ...»
         val path = if (previousMissed) {
             paths.firstOrNull { it.label.startsWith("Промах") } ?: paths.first()
         } else {
             paths.first()
         }
 
-        // Определяем, какой по счёту дротик сейчас в подходе
         val dartsUsed = player.turnDarts
         if (dartsUsed >= path.throws.size) {
-            // Все дротики в пути использованы — берём последний
             return path.throws.last()
         }
-
         return path.throws[dartsUsed]
     }
 
@@ -295,7 +185,4 @@ object Game501BotAI {
             else -> 0.80
         }
     }
-
-    private fun requiresDoubleOut(outMode: OutMode): Boolean =
-        outMode == OutMode.DOUBLE_OUT || outMode == OutMode.DOUBLE_IN_OUT
 }
