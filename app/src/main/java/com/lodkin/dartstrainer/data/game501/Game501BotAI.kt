@@ -2,7 +2,6 @@ package com.lodkin.dartstrainer.data.game501
 
 import kotlin.random.Random
 
-// ИИ бота для игры x01
 object Game501BotAI {
 
     private const val ENABLE_VARIABILITY = false
@@ -109,21 +108,19 @@ object Game501BotAI {
     }
 
     // ─────────────────────────────────────────────
-    // ЭКСПЕРИМЕНТАЛЬНАЯ КАЛИБРОВКА
-    // Цель: PPR 51-55, D-точность 18-20% у Разрядника (7)
+    // КАЛИБРОВКА
+    // Цель для Разрядника (7): PPR 51-55, D-точность 18-20%
     // ─────────────────────────────────────────────
     private fun getTripleAccuracy(botLevel: Int): Double {
         val lvl = botLevel.coerceIn(1, 16)
-        // Чуть опущено, чтобы компенсировать подъём D
-        return 0.05 + (lvl - 1) * 0.010
-        // Новичок 5%, Разрядник (7) 11%, Легенда (16) 20%
+        // Новичок 4%, Разрядник (7) 9.5%, Легенда (16) 18.5%
+        return 0.04 + (lvl - 1) * 0.0095
     }
 
     private fun getDoubleAccuracy(botLevel: Int): Double {
         val lvl = botLevel.coerceIn(1, 16)
-        // Поднято, чтобы реальная точность D была 18-20%
-        return 0.20 + (lvl - 1) * 0.050
-        // Новичок 20%, Разрядник (7) 50%, Легенда (16) 95%
+        // Новичок 25%, Разрядник (7) 60%, Легенда (16) 95%
+        return 0.25 + (lvl - 1) * 0.048
     }
 
     private fun getSingleAccuracy(botLevel: Int): Double {
