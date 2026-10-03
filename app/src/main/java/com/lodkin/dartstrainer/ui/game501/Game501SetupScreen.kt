@@ -30,6 +30,7 @@ import com.lodkin.dartstrainer.data.cricket.CRICKET_BOTS
 import com.lodkin.dartstrainer.data.cricket.CricketBot
 import com.lodkin.dartstrainer.data.cricket.PlayerNamesStorage
 import com.lodkin.dartstrainer.data.game501.Game501SettingsStorage
+import com.lodkin.dartstrainer.data.game501.Game501Simulator
 import com.lodkin.dartstrainer.data.game501.GameType
 import com.lodkin.dartstrainer.data.game501.OutMode
 import com.lodkin.dartstrainer.data.game501.Player501
@@ -38,7 +39,11 @@ import com.lodkin.dartstrainer.theme.DarkBg
 import com.lodkin.dartstrainer.theme.GoldAccent
 import com.lodkin.dartstrainer.theme.TileBg
 import com.lodkin.dartstrainer.theme.TileBgDark
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlin.random.Random
+import java.util.Locale
 
 private val PaleRed = Color(0xFFE57373)
 private val PaleRedText = Color(0xFF3E1010)
@@ -56,11 +61,11 @@ fun Game501SetupScreen(
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val savedNames = remember { PlayerNamesStorage.getSavedNames(context).toMutableList() }
 
     var isPairGame by remember { mutableStateOf(Game501SettingsStorage.isPairGame(context)) }
     var gameType by remember { mutableStateOf(Game501SettingsStorage.getGameType(context)) }
-    // Формат хранится отдельно для каждого типа игры
     var outMode by remember {
         mutableStateOf(Game501SettingsStorage.getOutMode(context, Game501SettingsStorage.getGameType(context)))
     }
@@ -75,12 +80,19 @@ fun Game501SetupScreen(
 
     var slots by remember { mutableStateOf(loadSlots(context, playerName)) }
 
+    // Тестовый режим
+    var showTestDialog by remember { mutableStateOf(false) }
+    var testBotLevel by remember { mutableStateOf(7) }
+    var testLegs by remember { mutableStateOf(200) }
+    var testRunning by remember { mutableStateOf(false) }
+    var testResult by remember { mutableStateOf<Game501Simulator.SimResult?>(null) }
+    var showTestResult by remember { mutableStateOf(false) }
+
     val activeSlots = if (isPairGame) slots else slots.take(2)
     val allBots = activeSlots.all { it.isBot }
     val allHumans = activeSlots.all { !it.isBot }
     val hasHuman = activeSlots.any { !it.isBot }
 
-    // При смене типа игры — подгружаем формат этого типа
     fun changeGameType(newType: GameType) {
         Game501SettingsStorage.setOutMode(context, gameType, outMode)
         gameType = newType
@@ -109,46 +121,50 @@ fun Game501SetupScreen(
     fun startGame(startingTeam: Int) {
         val players: List<Player501> = if (isPairGame) {
             listOf(
-                Player501(
-                    name = if (slots[0].isBot) slots[0].bot.name else slots[0].name,
+                Player501(name = if (slots[0].isBot) slots[0].bot.name else slots[0].name,
                     isBot = slots[0].isBot, botLevel = if (slots[0].isBot) slots[0].bot.id else 0,
-                    teamIndex = 0, score = gameType.startScore
-                ),
-                Player501(
-                    name = if (slots[1].isBot) slots[1].bot.name else slots[1].name,
+                    teamIndex = 0, score = gameType.startScore),
+                Player501(name = if (slots[1].isBot) slots[1].bot.name else slots[1].name,
                     isBot = slots[1].isBot, botLevel = if (slots[1].isBot) slots[1].bot.id else 0,
-                    teamIndex = 1, score = gameType.startScore
-                ),
-                Player501(
-                    name = if (slots[2].isBot) slots[2].bot.name else slots[2].name,
+                    teamIndex = 1, score = gameType.startScore),
+                Player501(name = if (slots[2].isBot) slots[2].bot.name else slots[2].name,
                     isBot = slots[2].isBot, botLevel = if (slots[2].isBot) slots[2].bot.id else 0,
-                    teamIndex = 0, score = gameType.startScore
-                ),
-                Player501(
-                    name = if (slots[3].isBot) slots[3].bot.name else slots[3].name,
+                    teamIndex = 0, score = gameType.startScore),
+                Player501(name = if (slots[3].isBot) slots[3].bot.name else slots[3].name,
                     isBot = slots[3].isBot, botLevel = if (slots[3].isBot) slots[3].bot.id else 0,
-                    teamIndex = 1, score = gameType.startScore
-                )
+                    teamIndex = 1, score = gameType.startScore)
             ).also { slots.forEach { s -> if (!s.isBot) PlayerNamesStorage.saveName(context, s.name) } }
         } else {
             val a = slots[0]; val b = slots[1]
             listOf(
-                Player501(
-                    name = if (a.isBot) a.bot.name else a.name,
+                Player501(name = if (a.isBot) a.bot.name else a.name,
                     isBot = a.isBot, botLevel = if (a.isBot) a.bot.id else 0,
-                    teamIndex = 0, score = gameType.startScore
-                ),
-                Player501(
-                    name = if (b.isBot) b.bot.name else b.name,
+                    teamIndex = 0, score = gameType.startScore),
+                Player501(name = if (b.isBot) b.bot.name else b.name,
                     isBot = b.isBot, botLevel = if (b.isBot) b.bot.id else 0,
-                    teamIndex = 1, score = gameType.startScore
-                )
+                    teamIndex = 1, score = gameType.startScore)
             ).also {
                 if (!a.isBot) { PlayerNamesStorage.saveName(context, a.name); PlayerNamesStorage.setLastPlayer1(context, a.name) }
                 if (!b.isBot) { PlayerNamesStorage.saveName(context, b.name); PlayerNamesStorage.setLastPlayer2(context, b.name) }
             }
         }
         onStartGame(gameType, outMode, players, legsPerSet, setsPerMatch, isPairGame, startingTeam, autoOkSeconds)
+    }
+
+    fun runBotTest() {
+        testRunning = true
+        testResult = null
+        scope.launch {
+            val result = withContext(Dispatchers.Default) {
+                Game501Simulator.simulate(
+                    botLevel = testBotLevel,
+                    legsToPlay = testLegs
+                )
+            }
+            testResult = result
+            testRunning = false
+            showTestResult = true
+        }
     }
 
     LaunchedEffect(isPairGame) { humanBullResult = -1; botBullResult = -1 }
@@ -160,7 +176,14 @@ fun Game501SetupScreen(
                     .clickable { onBack() }.padding(horizontal = 16.dp, vertical = 10.dp)
             ) { Text("← Назад", color = Accent, fontSize = 15.sp) }
             Spacer(Modifier.width(12.dp))
-            Text("x01", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Color.White)
+            Text("x01", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Color.White, modifier = Modifier.weight(1f))
+            Box(
+                modifier = Modifier.clip(RoundedCornerShape(10.dp)).background(TileBgDark)
+                    .clickable { showTestDialog = true }
+                    .padding(horizontal = 12.dp, vertical = 8.dp)
+            ) {
+                Text("🧪 Тест бота", color = Accent, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+            }
         }
 
         Spacer(Modifier.height(20.dp))
@@ -175,37 +198,21 @@ fun Game501SetupScreen(
 
             if (isPairGame) {
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Top) {
-                    TeamColumn501(
-                        teamLabel = "КОМАНДА A",
-                        slot1 = slots[0], slot2 = slots[2],
-                        slot1Label = "1", slot2Label = "3",
-                        savedNames = savedNames, context = context,
-                        onSlot1Change = { newSlot -> slots = slots.toMutableList().also { it[0] = newSlot } },
-                        onSlot2Change = { newSlot -> slots = slots.toMutableList().also { it[2] = newSlot } },
-                        modifier = Modifier.weight(1f)
-                    )
-                    TeamColumn501(
-                        teamLabel = "КОМАНДА B",
-                        slot1 = slots[1], slot2 = slots[3],
-                        slot1Label = "2", slot2Label = "4",
-                        savedNames = savedNames, context = context,
-                        onSlot1Change = { newSlot -> slots = slots.toMutableList().also { it[1] = newSlot } },
-                        onSlot2Change = { newSlot -> slots = slots.toMutableList().also { it[3] = newSlot } },
-                        modifier = Modifier.weight(1f)
-                    )
+                    TeamColumn501("КОМАНДА A", slots[0], slots[2], "1", "3", savedNames, context,
+                        { newSlot -> slots = slots.toMutableList().also { it[0] = newSlot } },
+                        { newSlot -> slots = slots.toMutableList().also { it[2] = newSlot } },
+                        Modifier.weight(1f))
+                    TeamColumn501("КОМАНДА B", slots[1], slots[3], "2", "4", savedNames, context,
+                        { newSlot -> slots = slots.toMutableList().also { it[1] = newSlot } },
+                        { newSlot -> slots = slots.toMutableList().also { it[3] = newSlot } },
+                        Modifier.weight(1f))
                 }
             } else {
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Top) {
-                    PlayerCell501(
-                        number = 1, slot = slots[0], savedNames = savedNames, context = context,
-                        onSlotChange = { newSlot -> slots = slots.toMutableList().also { it[0] = newSlot } },
-                        modifier = Modifier.weight(1f)
-                    )
-                    PlayerCell501(
-                        number = 2, slot = slots[1], savedNames = savedNames, context = context,
-                        onSlotChange = { newSlot -> slots = slots.toMutableList().also { it[1] = newSlot } },
-                        modifier = Modifier.weight(1f)
-                    )
+                    PlayerCell501(1, slots[0], savedNames, context,
+                        { newSlot -> slots = slots.toMutableList().also { it[0] = newSlot } }, Modifier.weight(1f))
+                    PlayerCell501(2, slots[1], savedNames, context,
+                        { newSlot -> slots = slots.toMutableList().also { it[1] = newSlot } }, Modifier.weight(1f))
                 }
             }
 
@@ -229,12 +236,8 @@ fun Game501SetupScreen(
             Text("ИГРА", color = Accent, fontSize = 13.sp, fontWeight = FontWeight.Medium,
                 letterSpacing = 3.sp, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
             Spacer(Modifier.height(10.dp))
-            GameTypeSelector(
-                currentType = gameType,
-                currentOutMode = outMode,
-                onTypeChange = { changeGameType(it) },
-                onOutModeChange = { changeOutMode(it) }
-            )
+            GameTypeSelector(currentType = gameType, currentOutMode = outMode,
+                onTypeChange = { changeGameType(it) }, onOutModeChange = { changeOutMode(it) })
 
             Spacer(Modifier.height(24.dp))
 
@@ -385,126 +388,125 @@ fun Game501SetupScreen(
             }
         )
     }
-}
 
-// ─────────────────────────────────────────────
-// Селектор игры + формата
-// ─────────────────────────────────────────────
-@Composable
-private fun GameTypeSelector(
-    currentType: GameType,
-    currentOutMode: OutMode,
-    onTypeChange: (GameType) -> Unit,
-    onOutModeChange: (OutMode) -> Unit
-) {
-    Column {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            GameTypeButton("501", currentType == GameType.X501, { onTypeChange(GameType.X501) }, Modifier.weight(1f))
-            OutModeDropdown(
-                selected = if (currentType == GameType.X501) currentOutMode else OutMode.DOUBLE_OUT,
-                enabled = currentType == GameType.X501,
-                onSelect = { onOutModeChange(it) },
-                modifier = Modifier.weight(1.4f)
-            )
-        }
-        Spacer(Modifier.height(8.dp))
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            GameTypeButton("301", currentType == GameType.X301, { onTypeChange(GameType.X301) }, Modifier.weight(1f))
-            OutModeDropdown(
-                selected = if (currentType == GameType.X301) currentOutMode else OutMode.DOUBLE_OUT,
-                enabled = currentType == GameType.X301,
-                onSelect = { onOutModeChange(it) },
-                modifier = Modifier.weight(1.4f)
-            )
-        }
-    }
-}
+    if (showTestDialog) {
+        AlertDialog(
+            onDismissRequest = { if (!testRunning) showTestDialog = false },
+            confirmButton = {
+                TextButton(onClick = { runBotTest() }, enabled = !testRunning) {
+                    Text(if (testRunning) "Идёт тест..." else "Запустить", color = Accent)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showTestDialog = false }, enabled = !testRunning) {
+                    Text("Отмена", color = Color.White.copy(alpha = 0.6f))
+                }
+            },
+            title = { Text("Тест бота", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold) },
+            text = {
+                Column {
+                    Text("Выбери уровень бота:", color = Color.White, fontSize = 14.sp)
+                    Spacer(Modifier.height(8.dp))
+                    val botRows = CRICKET_BOTS.chunked(4)
+                    botRows.forEach { row ->
+                        Row(modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            row.forEach { b ->
+                                val selected = testBotLevel == b.id
+                                Box(
+                                    modifier = Modifier.weight(1f).clip(RoundedCornerShape(8.dp))
+                                        .background(if (selected) Accent else TileBgDark)
+                                        .clickable(enabled = !testRunning) { testBotLevel = b.id }
+                                        .padding(vertical = 8.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text("${b.id}",
+                                        color = if (selected) Color(0xFF121212) else Color.White,
+                                        fontSize = 14.sp,
+                                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium)
+                                }
+                            }
+                            if (row.size < 4) repeat(4 - row.size) { Spacer(Modifier.weight(1f)) }
+                        }
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    val selectedBot = CRICKET_BOTS.firstOrNull { it.id == testBotLevel }
+                    Text("Выбран: ${selectedBot?.name ?: "—"}",
+                        color = GoldAccent, fontSize = 14.sp, fontWeight = FontWeight.Bold)
 
-@Composable
-private fun GameTypeButton(label: String, selected: Boolean, onClick: () -> Unit, modifier: Modifier) {
-    Box(
-        modifier = modifier.height(56.dp).clip(RoundedCornerShape(12.dp))
-            .background(if (selected) Accent else TileBgDark)
-            .clickable { onClick() },
-        contentAlignment = Alignment.Center
-    ) {
-        Text(label, color = if (selected) Color(0xFF121212) else Color.White,
-            fontSize = 20.sp, fontWeight = FontWeight.Bold)
-    }
-}
-
-@Composable
-private fun OutModeDropdown(
-    selected: OutMode,
-    enabled: Boolean,
-    onSelect: (OutMode) -> Unit,
-    modifier: Modifier
-) {
-    var expanded by remember { mutableStateOf(false) }
-    Box(modifier = modifier) {
-        Row(
-            modifier = Modifier.fillMaxWidth().height(56.dp)
-                .clip(RoundedCornerShape(12.dp))
-                .background(if (enabled) TileBg else TileBgDark.copy(alpha = 0.5f))
-                .clickable(enabled = enabled) { expanded = true }
-                .padding(horizontal = 14.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                selected.label,
-                color = if (enabled) Color.White else Color.White.copy(alpha = 0.4f),
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Medium,
-                modifier = Modifier.weight(1f)
-            )
-            Text("▼", color = if (enabled) Accent else Accent.copy(alpha = 0.4f), fontSize = 10.sp)
-        }
-        DropdownMenu(
-            expanded = expanded,
-            onDismissRequest = { expanded = false },
-            modifier = Modifier.background(DarkBg)
-        ) {
-            OutMode.values().forEach { mode ->
-                DropdownMenuItem(
-                    text = {
-                        Text(
-                            mode.label,
-                            color = if (mode == selected) Accent else Color.White,
-                            fontWeight = if (mode == selected) FontWeight.Bold else FontWeight.Normal
-                        )
-                    },
-                    onClick = { onSelect(mode); expanded = false }
-                )
+                    Spacer(Modifier.height(12.dp))
+                    Text("Сколько легов прогнать:", color = Color.White, fontSize = 14.sp)
+                    Spacer(Modifier.height(6.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        listOf(50, 100, 200, 500).forEach { n ->
+                            val selected = testLegs == n
+                            Box(
+                                modifier = Modifier.weight(1f).clip(RoundedCornerShape(8.dp))
+                                    .background(if (selected) Accent else TileBgDark)
+                                    .clickable(enabled = !testRunning) { testLegs = n }
+                                    .padding(vertical = 8.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text("$n",
+                                    color = if (selected) Color(0xFF121212) else Color.White,
+                                    fontSize = 13.sp,
+                                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium)
+                            }
+                        }
+                    }
+                }
             }
-        }
+        )
+    }
+
+    if (showTestResult && testResult != null) {
+        val r = testResult!!
+        val bot = CRICKET_BOTS.firstOrNull { it.id == testBotLevel }
+        AlertDialog(
+            onDismissRequest = { showTestResult = false },
+            confirmButton = {
+                TextButton(onClick = { showTestResult = false }) { Text("OK", color = Accent) }
+            },
+            title = {
+                Text("Результат: ${bot?.name ?: ""}",
+                    color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+            },
+            text = {
+                Column {
+                    Text("Легов сыграно: ${r.totalLegs}", color = Color.White.copy(alpha = 0.7f), fontSize = 13.sp)
+                    Spacer(Modifier.height(10.dp))
+                    SimResultRow("Средний набор (PPR)", "%.2f".format(Locale.US, r.ppr))
+                    Spacer(Modifier.height(4.dp))
+                    SimResultRow("Точность удвоений", "%.1f%%".format(Locale.US, r.doublesAccuracy))
+                    Spacer(Modifier.height(4.dp))
+                    SimResultRow("Дротиков на лег", "%.1f".format(Locale.US, r.dartsPerLeg))
+                    Spacer(Modifier.height(4.dp))
+                    SimResultRow("Первые 9 дротиков", "%.2f".format(Locale.US, r.first9Ppr))
+                }
+            }
+        )
     }
 }
 
-// ─────────────────────────────────────────────
-// Загрузка слотов
-// ─────────────────────────────────────────────
+@Composable
+private fun SimResultRow(label: String, value: String) {
+    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+        Text(label, color = Color.White, fontSize = 14.sp)
+        Text(value, color = GoldAccent, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+    }
+}
+
 private fun loadSlots(context: android.content.Context, playerName: String): List<Slot501> {
     val bots = Game501SettingsStorage.getSlotIsBot(context)
     val names = Game501SettingsStorage.getSlotNames(context)
     val botIds = Game501SettingsStorage.getSlotBotIds(context)
-
     val defaults = listOf(
         Slot501(false, PlayerNamesStorage.getLastPlayer1(context).ifBlank { playerName.ifBlank { "Игрок 1" } }, CRICKET_BOTS[2]),
         Slot501(true, PlayerNamesStorage.getLastPlayer2(context).ifBlank { "Игрок 2" }, CRICKET_BOTS[2]),
         Slot501(true, "Игрок 3", CRICKET_BOTS[2]),
         Slot501(true, "Игрок 4", CRICKET_BOTS[2])
     )
-
     if (bots.size < 4 || names.size < 4 || botIds.size < 4) return defaults
-
     return List(4) { i ->
         val botIdx = (botIds[i] - 1).coerceIn(0, CRICKET_BOTS.lastIndex)
         val bot = CRICKET_BOTS[botIdx]
@@ -523,6 +525,61 @@ private fun generateBotBullResult(bot: CricketBot): Int {
         r < pRed -> 2
         r < pRed + pGreen -> 1
         else -> 0
+    }
+}
+
+@Composable
+private fun GameTypeSelector(
+    currentType: GameType, currentOutMode: OutMode,
+    onTypeChange: (GameType) -> Unit, onOutModeChange: (OutMode) -> Unit
+) {
+    Column {
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            GameTypeButton("501", currentType == GameType.X501, { onTypeChange(GameType.X501) }, Modifier.weight(1f))
+            OutModeDropdown(selected = if (currentType == GameType.X501) currentOutMode else OutMode.DOUBLE_OUT,
+                enabled = currentType == GameType.X501, onSelect = { onOutModeChange(it) }, modifier = Modifier.weight(1.4f))
+        }
+        Spacer(Modifier.height(8.dp))
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            GameTypeButton("301", currentType == GameType.X301, { onTypeChange(GameType.X301) }, Modifier.weight(1f))
+            OutModeDropdown(selected = if (currentType == GameType.X301) currentOutMode else OutMode.DOUBLE_OUT,
+                enabled = currentType == GameType.X301, onSelect = { onOutModeChange(it) }, modifier = Modifier.weight(1.4f))
+        }
+    }
+}
+
+@Composable
+private fun GameTypeButton(label: String, selected: Boolean, onClick: () -> Unit, modifier: Modifier) {
+    Box(
+        modifier = modifier.height(56.dp).clip(RoundedCornerShape(12.dp))
+            .background(if (selected) Accent else TileBgDark).clickable { onClick() },
+        contentAlignment = Alignment.Center
+    ) { Text(label, color = if (selected) Color(0xFF121212) else Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold) }
+}
+
+@Composable
+private fun OutModeDropdown(selected: OutMode, enabled: Boolean, onSelect: (OutMode) -> Unit, modifier: Modifier) {
+    var expanded by remember { mutableStateOf(false) }
+    Box(modifier = modifier) {
+        Row(
+            modifier = Modifier.fillMaxWidth().height(56.dp).clip(RoundedCornerShape(12.dp))
+                .background(if (enabled) TileBg else TileBgDark.copy(alpha = 0.5f))
+                .clickable(enabled = enabled) { expanded = true }.padding(horizontal = 14.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(selected.label, color = if (enabled) Color.White else Color.White.copy(alpha = 0.4f),
+                fontSize = 14.sp, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
+            Text("▼", color = if (enabled) Accent else Accent.copy(alpha = 0.4f), fontSize = 10.sp)
+        }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }, modifier = Modifier.background(DarkBg)) {
+            OutMode.values().forEach { mode ->
+                DropdownMenuItem(
+                    text = { Text(mode.label, color = if (mode == selected) Accent else Color.White,
+                        fontWeight = if (mode == selected) FontWeight.Bold else FontWeight.Normal) },
+                    onClick = { onSelect(mode); expanded = false }
+                )
+            }
+        }
     }
 }
 
@@ -581,7 +638,6 @@ private fun PlayerInnerSlot501(numberLabel: String, slot: Slot501, savedNames: L
     var expanded by remember { mutableStateOf(false) }
     var showAddDialog by remember { mutableStateOf(false) }
     var newNameInput by remember { mutableStateOf("") }
-
     Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Box(modifier = Modifier.size(22.dp).clip(RoundedCornerShape(11.dp)).background(TileBg),
             contentAlignment = Alignment.Center) {
@@ -589,11 +645,9 @@ private fun PlayerInnerSlot501(numberLabel: String, slot: Slot501, savedNames: L
         }
         Spacer(Modifier.width(6.dp))
         Box(modifier = Modifier.weight(1f)) {
-            Row(
-                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(TileBg)
-                    .clickable { expanded = true }.padding(horizontal = 10.dp, vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
+            Row(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(TileBg)
+                .clickable { expanded = true }.padding(horizontal = 10.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically) {
                 Text(if (slot.isBot) slot.bot.name else slot.name, color = Color.White, fontSize = 13.sp,
                     fontWeight = FontWeight.Medium, maxLines = 1, modifier = Modifier.weight(1f))
                 Text("▼", color = Accent, fontSize = 10.sp)
@@ -602,7 +656,6 @@ private fun PlayerInnerSlot501(numberLabel: String, slot: Slot501, savedNames: L
                 { expanded = false; newNameInput = ""; showAddDialog = true })
         }
     }
-
     if (showAddDialog) {
         AddNameDialog501(newNameInput, { newNameInput = it },
             onSave = {
@@ -618,7 +671,8 @@ private fun SlotDropdown(
     expanded: Boolean, onDismiss: () -> Unit, slot: Slot501, savedNames: List<String>,
     onSlotChange: (Slot501) -> Unit, onNewName: () -> Unit
 ) {
-    DropdownMenu(expanded = expanded, onDismissRequest = onDismiss, modifier = Modifier.heightIn(max = 400.dp).background(DarkBg)) {
+    DropdownMenu(expanded = expanded, onDismissRequest = onDismiss,
+        modifier = Modifier.heightIn(max = 400.dp).background(DarkBg)) {
         Text("  ИГРОК", color = Accent, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp,
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp))
         savedNames.forEach { saved ->
@@ -648,7 +702,6 @@ private fun PlayerCell501(number: Int, slot: Slot501, savedNames: List<String>,
     var expanded by remember { mutableStateOf(false) }
     var showAddDialog by remember { mutableStateOf(false) }
     var newNameInput by remember { mutableStateOf("") }
-
     Column(modifier = modifier.clip(RoundedCornerShape(12.dp)).background(TileBgDark).padding(8.dp)) {
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Box(modifier = Modifier.size(24.dp).clip(RoundedCornerShape(12.dp)).background(TileBg),
@@ -658,11 +711,9 @@ private fun PlayerCell501(number: Int, slot: Slot501, savedNames: List<String>,
         }
         Spacer(Modifier.height(6.dp))
         Box(modifier = Modifier.fillMaxWidth()) {
-            Row(
-                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(TileBg)
-                    .clickable { expanded = true }.padding(horizontal = 10.dp, vertical = 12.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
+            Row(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(TileBg)
+                .clickable { expanded = true }.padding(horizontal = 10.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically) {
                 Text(if (slot.isBot) slot.bot.name else slot.name, color = Color.White, fontSize = 14.sp,
                     fontWeight = FontWeight.Medium, maxLines = 1, modifier = Modifier.weight(1f))
                 Text("▼", color = Accent, fontSize = 10.sp)
@@ -671,7 +722,6 @@ private fun PlayerCell501(number: Int, slot: Slot501, savedNames: List<String>,
                 { expanded = false; newNameInput = ""; showAddDialog = true })
         }
     }
-
     if (showAddDialog) {
         AddNameDialog501(newNameInput, { newNameInput = it },
             onSave = {
