@@ -101,28 +101,30 @@ object Game501BotAI {
             return SimulatedThrow(target.sector, target.multiplier, isHit = true)
         }
         return when (target.multiplier) {
-            3 -> missFromTriple(target.sector)
+            3 -> missFromTriple(target.sector, botLevel)
             2 -> missFromDouble(target.sector)
             else -> missFromSingle(target.sector)
         }
     }
 
     // ─────────────────────────────────────────────
-    // КАЛИБРОВКА (v5)
-    // Цель Разрядника (7): PPR ~52-53, D-точность ~18-19%
-    // v3: PPR 53.5, D% 14.7% (double=0.484)
-    // v4: PPR 55.8, D% 17.6% (double=0.625)
-    // v5: double 0.625→0.652, triple 0.109→0.1048
+    // КАЛИБРОВКА (v6)
+    // Целевые PPR: ур.1≈24, ур.7≈53, ур.16≈105
+    // Проблема v5: база ≈40 (щедрые промахи), мал наклон.
+    // Решение:
+    //   - p3 от 0.02 (ур.1) до 0.40 (ур.16)
+    //   - missFromTriple параметризован: слабые чаще в 0,
+    //     сильные чаще в S20.
     // ─────────────────────────────────────────────
     private fun getTripleAccuracy(botLevel: Int): Double {
         val lvl = botLevel.coerceIn(1, 16)
-        // Новичок 4%, Разрядник (7) 10.5%, Легенда (16) ~20%
-        return 0.04 + (lvl - 1) * 0.0108
+        // ур.1=0.02, ур.7≈0.17, ур.16=0.40
+        return 0.02 + (lvl - 1) * 0.0253
     }
 
     private fun getDoubleAccuracy(botLevel: Int): Double {
         val lvl = botLevel.coerceIn(1, 16)
-        // Новичок 22%, Разрядник (7) ~65%, Легенда (16) ~97%
+        // ур.1=0.22, ур.7≈0.65, ур.12+ ≈0.97 (как в v5)
         return (0.22 + (lvl - 1) * 0.072).coerceAtMost(0.97)
     }
 
@@ -131,24 +133,29 @@ object Game501BotAI {
         return (t * 1.4 + 0.25).coerceAtMost(0.95)
     }
 
-    private fun missFromTriple(sector: Int): SimulatedThrow {
+    private fun missFromTriple(sector: Int, botLevel: Int): SimulatedThrow {
+        val lvl = botLevel.coerceIn(1, 16)
+        // ур.1: 30% мимо, 15% в S20; ур.16: 3% мимо, 52.5% в S20
+        val missProb = 0.30 - (lvl - 1) * 0.018
+        val s20Prob = 0.15 + (lvl - 1) * 0.025
+
         val r = Random.nextDouble()
-        if (r < 0.57) return SimulatedThrow(sector, 1, isHit = false)
-        if (r < 0.81) {
-            val (l, rt) = NEIGHBORS[sector] ?: (sector to sector)
-            val n = if (Random.nextBoolean()) l else rt
-            return SimulatedThrow(n, 1, isHit = false)
+        var acc = missProb
+        if (r < acc) return SimulatedThrow(0, 0, isHit = false)
+        acc += s20Prob
+        if (r < acc) return SimulatedThrow(sector, 1, isHit = false)
+
+        // Остаток — соседи
+        val remaining = (1.0 - acc).coerceAtLeast(0.001)
+        val localR = (r - acc) / remaining
+        val (l, rt) = NEIGHBORS[sector] ?: (sector to sector)
+        val n = if (Random.nextBoolean()) l else rt
+        return when {
+            localR < 0.40 -> SimulatedThrow(n, 1, isHit = false)
+            localR < 0.70 -> SimulatedThrow(n, 3, isHit = false)
+            localR < 0.90 -> SimulatedThrow(n, 2, isHit = false)
+            else -> SimulatedThrow(sector, 2, isHit = false)
         }
-        if (r < 0.97) {
-            val (l, rt) = NEIGHBORS[sector] ?: (sector to sector)
-            val n = if (Random.nextBoolean()) l else rt
-            return SimulatedThrow(n, 3, isHit = false)
-        }
-        if (r < 0.995) {
-            val other = listOf(12, 18).random()
-            return SimulatedThrow(other, 1, isHit = false)
-        }
-        return SimulatedThrow(0, 0, isHit = false)
     }
 
     private fun missFromDouble(sector: Int): SimulatedThrow {
