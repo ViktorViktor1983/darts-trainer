@@ -56,6 +56,10 @@ fun Game501Screen(
     var quickSums by remember { mutableStateOf(Game501SettingsStorage.getQuickSums(context)) }
     var recordSum by remember { mutableStateOf<Int?>(null) }
 
+    // Слежение за историей легов
+    var lastSeenLegHistorySize by remember { mutableStateOf(game.legHistory.size) }
+    var lastSeenSetNumber by remember { mutableStateOf(game.currentSetNumber) }
+
     val allBots = game.players.all { it.isBot }
 
     val history = remember { mutableStateListOf<Game501>() }
@@ -169,21 +173,27 @@ fun Game501Screen(
         showLegQuestionDialog = true
     }
 
+    // ─────────────────────────────────────────────
+    // Автоход бота. Ключи — только то, что реально влияет на смену игрока.
+    // ─────────────────────────────────────────────
     LaunchedEffect(
         game.currentPlayerIndex,
+        game.currentLegNumber,
+        game.currentSetNumber,
         game.isFinished,
-        showLegWonDialog, showSetWonDialog, showWinDialog,
-        showLegQuestionDialog, showDoublesQuestionDialog, showDoublesOnlyDialog
+        showLegQuestionDialog, showDoublesQuestionDialog, showDoublesOnlyDialog,
+        showWinDialog
     ) {
-        val currentPlayer = game.players.getOrNull(game.currentPlayerIndex) ?: return@LaunchedEffect
         if (game.isFinished) return@LaunchedEffect
         if (showLegQuestionDialog || showDoublesQuestionDialog || showDoublesOnlyDialog) return@LaunchedEffect
         if (showWinDialog) return@LaunchedEffect
+
+        val currentPlayer = game.players.getOrNull(game.currentPlayerIndex) ?: return@LaunchedEffect
         if (!currentPlayer.isBot) return@LaunchedEffect
 
         if (!allBots && (showLegWonDialog || showSetWonDialog)) return@LaunchedEffect
 
-        delay(if (allBots) 500L else 900L)
+        delay(if (allBots) 400L else 900L)
 
         if (game.isFinished) return@LaunchedEffect
         if (showLegQuestionDialog || showDoublesQuestionDialog || showDoublesOnlyDialog) return@LaunchedEffect
@@ -198,22 +208,38 @@ fun Game501Screen(
         if (showBustMessage) { delay(1500L); showBustMessage = false }
     }
 
-    LaunchedEffect(game.lastLegWinnerIndex, allBots) {
-        if (game.lastLegWinnerIndex == null) return@LaunchedEffect
+    // ─────────────────────────────────────────────
+    // Диалог лега — только для не-allBots.
+    // Отслеживаем размер истории легов.
+    // ─────────────────────────────────────────────
+    LaunchedEffect(game.legHistory.size, allBots) {
         if (allBots) {
-            game = game.copy(lastLegWinnerIndex = null)
-        } else {
+            lastSeenLegHistorySize = game.legHistory.size
+            return@LaunchedEffect
+        }
+        if (game.legHistory.size > lastSeenLegHistorySize) {
+            lastSeenLegHistorySize = game.legHistory.size
             showLegWonDialog = true
         }
     }
-    LaunchedEffect(game.lastSetWinnerIndex, allBots, showLegWonDialog) {
-        if (game.lastSetWinnerIndex == null) return@LaunchedEffect
+
+    // ─────────────────────────────────────────────
+    // Диалог сета — только для не-allBots.
+    // ─────────────────────────────────────────────
+    LaunchedEffect(game.currentSetNumber, allBots, showLegWonDialog) {
         if (allBots) {
-            game = game.copy(lastSetWinnerIndex = null)
-        } else if (!showLegWonDialog && !showWinDialog) {
+            lastSeenSetNumber = game.currentSetNumber
+            return@LaunchedEffect
+        }
+        if (game.currentSetNumber > lastSeenSetNumber && !showLegWonDialog && !showWinDialog) {
+            lastSeenSetNumber = game.currentSetNumber
             showSetWonDialog = true
         }
     }
+
+    // ─────────────────────────────────────────────
+    // Диалог победы — только для не-allBots.
+    // ─────────────────────────────────────────────
     LaunchedEffect(game.isFinished, allBots, showLegWonDialog, showSetWonDialog) {
         if (!game.isFinished) return@LaunchedEffect
         if (allBots) {
@@ -235,24 +261,14 @@ fun Game501Screen(
                 .padding(horizontal = 12.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            PrevScoreBlock(
-                label = "Пред.",
-                value = lastScoreA,
-                isActive = activeTeam == 0,
-                alignment = Alignment.Start
-            )
+            PrevScoreBlock("Пред.", lastScoreA, activeTeam == 0, Alignment.Start)
             Text(
                 if (inputText.isEmpty()) "—" else inputText,
                 color = if (inputText.isEmpty()) Color.White.copy(alpha = 0.3f) else GoldAccent,
                 fontSize = 32.sp, fontWeight = FontWeight.Bold,
                 modifier = Modifier.weight(1f), textAlign = TextAlign.Center
             )
-            PrevScoreBlock(
-                label = "Пред.",
-                value = lastScoreB,
-                isActive = activeTeam == 1,
-                alignment = Alignment.End
-            )
+            PrevScoreBlock("Пред.", lastScoreB, activeTeam == 1, Alignment.End)
         }
 
         QuickButtonsWithLeg(
@@ -267,14 +283,14 @@ fun Game501Screen(
             horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             BigActionButton(
-                label = "Остаток",
-                enabled = !game.isFinished && game.currentPlayer?.isBot != true,
-                color = TileBg, textColor = Accent, modifier = Modifier.weight(2f)
+                "Остаток",
+                !game.isFinished && game.currentPlayer?.isBot != true,
+                TileBg, Accent, Modifier.weight(2f)
             ) { submitRemaining() }
             BigActionButton(
-                label = "OK",
-                enabled = !game.isFinished && game.currentPlayer?.isBot != true,
-                color = Accent, textColor = Color(0xFF121212), modifier = Modifier.weight(4f)
+                "OK",
+                !game.isFinished && game.currentPlayer?.isBot != true,
+                Accent, Color(0xFF121212), Modifier.weight(4f)
             ) { submitSum() }
         }
 
@@ -382,10 +398,7 @@ fun Game501Screen(
         AlertDialog(
             onDismissRequest = { },
             confirmButton = {
-                TextButton(onClick = {
-                    showLegWonDialog = false
-                    game = game.copy(lastLegWinnerIndex = null)
-                }) { Text("Продолжить", color = Accent) }
+                TextButton(onClick = { showLegWonDialog = false }) { Text("Продолжить", color = Accent) }
             },
             title = {
                 Column {
@@ -421,16 +434,13 @@ fun Game501Screen(
         AlertDialog(
             onDismissRequest = { },
             confirmButton = {
-                TextButton(onClick = {
-                    showSetWonDialog = false
-                    game = game.copy(lastSetWinnerIndex = null)
-                }) { Text("Продолжить", color = Accent) }
+                TextButton(onClick = { showSetWonDialog = false }) { Text("Продолжить", color = Accent) }
             },
             title = { Text("СЕТ ЗАВЕРШЁН", color = GoldAccent, fontSize = 22.sp, fontWeight = FontWeight.Bold) },
             text = {
                 Column {
                     Text("Победитель:", color = Color.White, fontSize = 14.sp)
-                    val winnerTeam = game.lastSetWinnerIndex ?: 0
+                    val winnerTeam = game.legHistory.lastOrNull()?.winningTeam ?: 0
                     Text(game.playersOfTeam(winnerTeam).joinToString("/") { it.name },
                         color = GoldAccent, fontSize = 20.sp, fontWeight = FontWeight.Bold)
                 }
@@ -467,25 +477,13 @@ fun Game501Screen(
 
 @Composable
 private fun PrevScoreBlock(
-    label: String,
-    value: Int?,
-    isActive: Boolean,
-    alignment: Alignment.Horizontal
+    label: String, value: Int?, isActive: Boolean, alignment: Alignment.Horizontal
 ) {
     val nameColor = if (isActive) Accent else Color.White.copy(alpha = 0.45f)
     val valueColor = if (isActive) Color.White else Color.White.copy(alpha = 0.55f)
-
-    Column(
-        modifier = Modifier.width(60.dp),
-        horizontalAlignment = alignment
-    ) {
+    Column(modifier = Modifier.width(60.dp), horizontalAlignment = alignment) {
         Text(label, color = nameColor, fontSize = 10.sp)
-        Text(
-            if (value != null) "$value" else "—",
-            color = valueColor,
-            fontSize = 18.sp,
-            fontWeight = FontWeight.Bold
-        )
+        Text(if (value != null) "$value" else "—", color = valueColor, fontSize = 18.sp, fontWeight = FontWeight.Bold)
     }
 }
 
@@ -516,8 +514,7 @@ private fun PlayersHeader501(game: Game501) {
                     fontSize = 16.sp, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.height(4.dp))
                 Text("ЛЕГ", color = Color(0xFF99AABB), fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                Text("$legsA : $legsB",
-                    color = Color.White, fontSize = 34.sp, fontWeight = FontWeight.Bold)
+                Text("$legsA : $legsB", color = Color.White, fontSize = 34.sp, fontWeight = FontWeight.Bold)
             }
             PlayerScoreCol(
                 name = teamB.joinToString("/") { it.name },
@@ -544,8 +541,7 @@ private fun PlayerScoreCol(
         Text("ср. ${String.format(Locale.US, "%.1f", ppr)}",
             color = Color.White.copy(alpha = 0.6f), fontSize = 15.sp)
         Spacer(Modifier.height(2.dp))
-        Text("🎯 $legDarts",
-            color = Color.White.copy(alpha = 0.75f), fontSize = 14.sp, fontWeight = FontWeight.Medium)
+        Text("🎯 $legDarts", color = Color.White.copy(alpha = 0.75f), fontSize = 14.sp, fontWeight = FontWeight.Medium)
     }
 }
 
@@ -568,10 +564,7 @@ private fun TopBar501(game: Game501, onBack: () -> Unit) {
 
 @Composable
 private fun QuickButtonsWithLeg(
-    sums: List<Int>,
-    enabled: Boolean,
-    onQuick: (Int) -> Unit,
-    onLeg: () -> Unit
+    sums: List<Int>, enabled: Boolean, onQuick: (Int) -> Unit, onLeg: () -> Unit
 ) {
     val rows = sums.chunked(6)
     Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 4.dp)) {
@@ -615,12 +608,9 @@ private fun BigActionButton(
 
 @Composable
 private fun Keyboard501(
-    enabled: Boolean,
-    canUndo: Boolean,
-    onDigit: (String) -> Unit,
-    onBackspace: () -> Unit,
-    onClear: () -> Unit,
-    onUndo: () -> Unit
+    enabled: Boolean, canUndo: Boolean,
+    onDigit: (String) -> Unit, onBackspace: () -> Unit,
+    onClear: () -> Unit, onUndo: () -> Unit
 ) {
     Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 4.dp)) {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
