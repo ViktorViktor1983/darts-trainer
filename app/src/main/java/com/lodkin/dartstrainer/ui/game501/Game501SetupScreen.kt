@@ -80,12 +80,12 @@ fun Game501SetupScreen(
 
     var slots by remember { mutableStateOf(loadSlots(context, playerName)) }
 
-    // Тестовый режим
+    // Тестовый режим (мультивыбор ботов)
     var showTestDialog by remember { mutableStateOf(false) }
-    var testBotLevel by remember { mutableStateOf(7) }
+    var testBotLevels by remember { mutableStateOf(setOf(7)) }
     var testLegs by remember { mutableStateOf(200) }
     var testRunning by remember { mutableStateOf(false) }
-    var testResult by remember { mutableStateOf<Game501Simulator.SimResult?>(null) }
+    var testResults by remember { mutableStateOf<List<Game501Simulator.SimResult>>(emptyList()) }
     var showTestResult by remember { mutableStateOf(false) }
 
     val activeSlots = if (isPairGame) slots else slots.take(2)
@@ -152,16 +152,18 @@ fun Game501SetupScreen(
     }
 
     fun runBotTest() {
+        if (testBotLevels.isEmpty()) return
         testRunning = true
-        testResult = null
+        testResults = emptyList()
         scope.launch {
+            val levels = testBotLevels.sorted()
             val result = withContext(Dispatchers.Default) {
-                Game501Simulator.simulate(
-                    botLevel = testBotLevel,
+                Game501Simulator.simulateMany(
+                    botLevels = levels,
                     legsToPlay = testLegs
                 )
             }
-            testResult = result
+            testResults = result
             testRunning = false
             showTestResult = true
         }
@@ -393,8 +395,11 @@ fun Game501SetupScreen(
         AlertDialog(
             onDismissRequest = { if (!testRunning) showTestDialog = false },
             confirmButton = {
-                TextButton(onClick = { runBotTest() }, enabled = !testRunning) {
-                    Text(if (testRunning) "Идёт тест..." else "Запустить", color = Accent)
+                TextButton(onClick = { runBotTest() }, enabled = !testRunning && testBotLevels.isNotEmpty()) {
+                    Text(
+                        if (testRunning) "Идёт тест..." else "Запустить (${testBotLevels.size})",
+                        color = if (testBotLevels.isEmpty()) Color.White.copy(alpha = 0.4f) else Accent
+                    )
                 }
             },
             dismissButton = {
@@ -402,21 +407,40 @@ fun Game501SetupScreen(
                     Text("Отмена", color = Color.White.copy(alpha = 0.6f))
                 }
             },
-            title = { Text("Тест бота", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold) },
+            title = { Text("Тест ботов", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold) },
             text = {
-                Column {
-                    Text("Выбери уровень бота:", color = Color.White, fontSize = 14.sp)
-                    Spacer(Modifier.height(8.dp))
+                Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                    Text("Отметь ботов (можно несколько):", color = Color.White, fontSize = 14.sp)
+                    Spacer(Modifier.height(6.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Box(
+                            modifier = Modifier.clip(RoundedCornerShape(8.dp)).background(TileBg)
+                                .clickable(enabled = !testRunning) {
+                                    testBotLevels = CRICKET_BOTS.map { it.id }.toSet()
+                                }
+                                .padding(horizontal = 10.dp, vertical = 6.dp)
+                        ) { Text("Выбрать все", color = Accent, fontSize = 12.sp, fontWeight = FontWeight.Medium) }
+                        Box(
+                            modifier = Modifier.clip(RoundedCornerShape(8.dp)).background(TileBg)
+                                .clickable(enabled = !testRunning) { testBotLevels = emptySet() }
+                                .padding(horizontal = 10.dp, vertical = 6.dp)
+                        ) { Text("Снять все", color = Color.White.copy(alpha = 0.7f), fontSize = 12.sp) }
+                    }
+                    Spacer(Modifier.height(10.dp))
+
                     val botRows = CRICKET_BOTS.chunked(4)
                     botRows.forEach { row ->
                         Row(modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
                             horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                             row.forEach { b ->
-                                val selected = testBotLevel == b.id
+                                val selected = b.id in testBotLevels
                                 Box(
                                     modifier = Modifier.weight(1f).clip(RoundedCornerShape(8.dp))
                                         .background(if (selected) Accent else TileBgDark)
-                                        .clickable(enabled = !testRunning) { testBotLevel = b.id }
+                                        .clickable(enabled = !testRunning) {
+                                            testBotLevels = if (selected) testBotLevels - b.id
+                                            else testBotLevels + b.id
+                                        }
                                         .padding(vertical = 8.dp),
                                     contentAlignment = Alignment.Center
                                 ) {
@@ -430,12 +454,16 @@ fun Game501SetupScreen(
                         }
                     }
                     Spacer(Modifier.height(8.dp))
-                    val selectedBot = CRICKET_BOTS.firstOrNull { it.id == testBotLevel }
-                    Text("Выбран: ${selectedBot?.name ?: "—"}",
-                        color = GoldAccent, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                    val names = testBotLevels.sorted()
+                        .mapNotNull { id -> CRICKET_BOTS.firstOrNull { it.id == id }?.name }
+                        .joinToString(", ")
+                    Text(
+                        if (names.isEmpty()) "Никого не выбрано" else "Выбрано: $names",
+                        color = GoldAccent, fontSize = 12.sp, fontWeight = FontWeight.Bold
+                    )
 
                     Spacer(Modifier.height(12.dp))
-                    Text("Сколько легов прогнать:", color = Color.White, fontSize = 14.sp)
+                    Text("Сколько легов прогнать (на каждого):", color = Color.White, fontSize = 14.sp)
                     Spacer(Modifier.height(6.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         listOf(50, 100, 200, 500).forEach { n ->
@@ -459,29 +487,55 @@ fun Game501SetupScreen(
         )
     }
 
-    if (showTestResult && testResult != null) {
-        val r = testResult!!
-        val bot = CRICKET_BOTS.firstOrNull { it.id == testBotLevel }
+    if (showTestResult && testResults.isNotEmpty()) {
         AlertDialog(
             onDismissRequest = { showTestResult = false },
             confirmButton = {
                 TextButton(onClick = { showTestResult = false }) { Text("OK", color = Accent) }
             },
             title = {
-                Text("Результат: ${bot?.name ?: ""}",
-                    color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                Text("Результаты теста", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
             },
             text = {
-                Column {
-                    Text("Легов сыграно: ${r.totalLegs}", color = Color.White.copy(alpha = 0.7f), fontSize = 13.sp)
+                Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                    // Шапка таблицы
+                    Row(modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp)) {
+                        Text("Бот", color = Accent, fontSize = 11.sp, fontWeight = FontWeight.Bold,
+                            modifier = Modifier.weight(1.6f))
+                        Text("PPR", color = Accent, fontSize = 11.sp, fontWeight = FontWeight.Bold,
+                            modifier = Modifier.weight(1f), textAlign = TextAlign.End)
+                        Text("D%", color = Accent, fontSize = 11.sp, fontWeight = FontWeight.Bold,
+                            modifier = Modifier.weight(1f), textAlign = TextAlign.End)
+                        Text("Д/Л", color = Accent, fontSize = 11.sp, fontWeight = FontWeight.Bold,
+                            modifier = Modifier.weight(1f), textAlign = TextAlign.End)
+                    }
+                    HorizontalDivider(color = TileBg)
+                    Spacer(Modifier.height(4.dp))
+
+                    testResults.forEach { r ->
+                        val botName = CRICKET_BOTS.firstOrNull { it.id == r.botLevel }?.name ?: "?"
+                        Row(modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp)) {
+                            Column(modifier = Modifier.weight(1.6f)) {
+                                Text("${r.botLevel}. $botName", color = Color.White, fontSize = 12.sp,
+                                    fontWeight = FontWeight.Medium)
+                                Text("лег: ${r.totalLegs}", color = Color.White.copy(alpha = 0.5f), fontSize = 10.sp)
+                            }
+                            Text("%.1f".format(Locale.US, r.ppr), color = GoldAccent, fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f), textAlign = TextAlign.End)
+                            Text("%.1f".format(Locale.US, r.doublesAccuracy), color = GoldAccent, fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f), textAlign = TextAlign.End)
+                            Text("%.1f".format(Locale.US, r.dartsPerLeg), color = GoldAccent, fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f), textAlign = TextAlign.End)
+                        }
+                    }
+
                     Spacer(Modifier.height(10.dp))
-                    SimResultRow("Средний набор (PPR)", "%.2f".format(Locale.US, r.ppr))
-                    Spacer(Modifier.height(4.dp))
-                    SimResultRow("Точность удвоений", "%.1f%%".format(Locale.US, r.doublesAccuracy))
-                    Spacer(Modifier.height(4.dp))
-                    SimResultRow("Дротиков на лег", "%.1f".format(Locale.US, r.dartsPerLeg))
-                    Spacer(Modifier.height(4.dp))
-                    SimResultRow("Первые 9 дротиков", "%.2f".format(Locale.US, r.first9Ppr))
+                    HorizontalDivider(color = TileBg)
+                    Spacer(Modifier.height(6.dp))
+                    Text("PPR — средний набор, D% — точность удвоений,",
+                        color = Color.White.copy(alpha = 0.5f), fontSize = 10.sp)
+                    Text("Д/Л — дротиков на лег. Легов на каждого: $testLegs",
+                        color = Color.White.copy(alpha = 0.5f), fontSize = 10.sp)
                 }
             }
         )
