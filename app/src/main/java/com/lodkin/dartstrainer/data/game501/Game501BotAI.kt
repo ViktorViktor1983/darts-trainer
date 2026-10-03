@@ -45,21 +45,28 @@ object Game501BotAI {
             val result = simulateDart(target, multiplier, current.botLevel)
             previousMissed = !result.isHit
 
+            // Попытка в дабл считается ОДИН раз для каждого дротика,
+            // направленного в double-цель (неважно hit или miss).
+            // applyThrow вызывается с countDoubleAttempt = false,
+            // чтобы не считать фантомные попадания в дабл-соседей.
             val wasDoubleTarget = target.multiplier == 2
-            val hitDouble = result.actualMultiplier == 2 && result.actualSector != 0
-            if (wasDoubleTarget && !hitDouble) {
+            if (wasDoubleTarget) {
                 currentGame = Game501Logic.recordDoublesAttempts(currentGame, 1)
             }
 
             if (result.actualSector == 0) {
-                currentGame = Game501Logic.applyThrow(currentGame, 20, ThrowMultiplier.MISS)
+                currentGame = Game501Logic.applyThrow(
+                    currentGame, 20, ThrowMultiplier.MISS, countDoubleAttempt = false
+                )
             } else {
                 val mult = when (result.actualMultiplier) {
                     2 -> ThrowMultiplier.DOUBLE
                     3 -> ThrowMultiplier.TRIPLE
                     else -> ThrowMultiplier.SINGLE
                 }
-                currentGame = Game501Logic.applyThrow(currentGame, result.actualSector, mult)
+                currentGame = Game501Logic.applyThrow(
+                    currentGame, result.actualSector, mult, countDoubleAttempt = false
+                )
                 turnScoreForCategories += result.actualSector * result.actualMultiplier
             }
             dartsThrown++
@@ -108,13 +115,16 @@ object Game501BotAI {
     }
 
     // ─────────────────────────────────────────────
-    // КАЛИБРОВКА (v6)
-    // Целевые PPR: ур.1≈24, ур.7≈53, ур.16≈105
-    // Проблема v5: база ≈40 (щедрые промахи), мал наклон.
-    // Решение:
-    //   - p3 от 0.02 (ур.1) до 0.40 (ур.16)
-    //   - missFromTriple параметризован: слабые чаще в 0,
-    //     сильные чаще в S20.
+    // КАЛИБРОВКА (v7) — формулы не менялись с v6.
+    // PPR в v6 попал во ВСЕ 12 коридоров (26.9–79.9).
+    // v7 — только фикс подсчёта даблов:
+    //   * applyThrow вызывается с countDoubleAttempt = false
+    //   * AI сам инкрементит attempt ровно один раз на
+    //     каждый дротик, направленный в double-цель.
+    //   * фантомные попадания в дабл-соседей больше
+    //     НЕ раздувают знаменатель D%.
+    // Ожидаем: D% поднимется примерно в 1.8–2 раза
+    //         (ур.7: 9.6% → ~18%, ур.12: 15.1% → ~28%).
     // ─────────────────────────────────────────────
     private fun getTripleAccuracy(botLevel: Int): Double {
         val lvl = botLevel.coerceIn(1, 16)
@@ -124,7 +134,7 @@ object Game501BotAI {
 
     private fun getDoubleAccuracy(botLevel: Int): Double {
         val lvl = botLevel.coerceIn(1, 16)
-        // ур.1=0.22, ур.7≈0.65, ур.12+ ≈0.97 (как в v5)
+        // ур.1=0.22, ур.7≈0.65, ур.12+ ≈0.97
         return (0.22 + (lvl - 1) * 0.072).coerceAtMost(0.97)
     }
 
@@ -135,7 +145,6 @@ object Game501BotAI {
 
     private fun missFromTriple(sector: Int, botLevel: Int): SimulatedThrow {
         val lvl = botLevel.coerceIn(1, 16)
-        // ур.1: 30% мимо, 15% в S20; ур.16: 3% мимо, 52.5% в S20
         val missProb = 0.30 - (lvl - 1) * 0.018
         val s20Prob = 0.15 + (lvl - 1) * 0.025
 
@@ -145,7 +154,6 @@ object Game501BotAI {
         acc += s20Prob
         if (r < acc) return SimulatedThrow(sector, 1, isHit = false)
 
-        // Остаток — соседи
         val remaining = (1.0 - acc).coerceAtLeast(0.001)
         val localR = (r - acc) / remaining
         val (l, rt) = NEIGHBORS[sector] ?: (sector to sector)
