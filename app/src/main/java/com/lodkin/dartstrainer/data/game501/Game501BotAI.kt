@@ -109,19 +109,18 @@ object Game501BotAI {
     }
 
     // ─────────────────────────────────────────────
-    // ТОЧНОСТИ ПО УРОВНЯМ (калибровка: Разрядник ~11%)
+    // ТОЧНОСТИ (калибровка: Разрядник T≈12%, D≈22%)
     // ─────────────────────────────────────────────
     private fun getTripleAccuracy(botLevel: Int): Double {
         val lvl = botLevel.coerceIn(1, 16)
-        // Новичок 5%, Разрядник (7) 11%, Легенда (16) 20%
-        return 0.05 + (lvl - 1) * 0.01
+        // Новичок 5%, Разрядник (7) 12%, Легенда (16) 23%
+        return 0.05 + (lvl - 1) * 0.012
     }
 
     private fun getDoubleAccuracy(botLevel: Int): Double {
         val lvl = botLevel.coerceIn(1, 16)
-        // Точка попадания в цель D ещё не цель, а кольцо.
-        // Сейчас держим на том же уровне, что и T (для Разрядника ≈ 11%).
-        return 0.05 + (lvl - 1) * 0.01
+        // Новичок 8%, Разрядник (7) 21%, Легенда (16) 41%
+        return 0.08 + (lvl - 1) * 0.022
     }
 
     private fun getSingleAccuracy(botLevel: Int): Double {
