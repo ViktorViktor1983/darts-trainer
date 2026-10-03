@@ -56,7 +56,6 @@ fun Game501Screen(
     var quickSums by remember { mutableStateOf(Game501SettingsStorage.getQuickSums(context)) }
     var recordSum by remember { mutableStateOf<Int?>(null) }
 
-    // Автоматический режим (все игроки — боты)
     val allBots = game.players.all { it.isBot }
 
     val history = remember { mutableStateListOf<Game501>() }
@@ -170,9 +169,6 @@ fun Game501Screen(
         showLegQuestionDialog = true
     }
 
-    // ─────────────────────────────────────────────
-    // Автоход бота — теперь через Game501BotAI
-    // ─────────────────────────────────────────────
     LaunchedEffect(
         game.currentPlayerIndex,
         game.isFinished,
@@ -185,7 +181,6 @@ fun Game501Screen(
         if (showWinDialog) return@LaunchedEffect
         if (!currentPlayer.isBot) return@LaunchedEffect
 
-        // Если играют только боты — задержку делаем чуть больше (для наблюдения), а диалоги не блокируют
         if (!allBots && (showLegWonDialog || showSetWonDialog)) return@LaunchedEffect
 
         delay(if (allBots) 500L else 900L)
@@ -203,13 +198,9 @@ fun Game501Screen(
         if (showBustMessage) { delay(1500L); showBustMessage = false }
     }
 
-    // ─────────────────────────────────────────────
-    // Диалоги (в режиме бот-бот — автопропуск)
-    // ─────────────────────────────────────────────
     LaunchedEffect(game.lastLegWinnerIndex, allBots) {
         if (game.lastLegWinnerIndex == null) return@LaunchedEffect
         if (allBots) {
-            // Автоматически закрываем — не показываем диалог
             game = game.copy(lastLegWinnerIndex = null)
         } else {
             showLegWonDialog = true
@@ -226,7 +217,6 @@ fun Game501Screen(
     LaunchedEffect(game.isFinished, allBots, showLegWonDialog, showSetWonDialog) {
         if (!game.isFinished) return@LaunchedEffect
         if (allBots) {
-            // В режиме бот-бот — автоматически завершаем матч, идём в статистику
             Game501SettingsStorage.updateQuickSumsIfNeeded(context)
             onGameFinish(game)
         } else if (!showLegWonDialog && !showSetWonDialog && !showWinDialog) {
@@ -307,7 +297,6 @@ fun Game501Screen(
         }
     }
 
-    // Диалог: Сколько дротиков? (только для человека)
     if (showLegQuestionDialog && !allBots) {
         AlertDialog(
             onDismissRequest = { },
@@ -378,7 +367,7 @@ fun Game501Screen(
                                         showDoublesOnlyDialog = false
                                     }.padding(vertical = 14.dp),
                                 contentAlignment = Alignment.Center
-                            ) { Text("$n", color = Color.0xFF121212.let { Color(0xFF121212) }, fontSize = 20.sp, fontWeight = FontWeight.Bold) }
+                            ) { Text("$n", color = Color(0xFF121212), fontSize = 20.sp, fontWeight = FontWeight.Bold) }
                         }
                     }
                     Spacer(Modifier.height(10.dp))
@@ -476,9 +465,6 @@ fun Game501Screen(
     }
 }
 
-// ─────────────────────────────────────────────
-// Блок «Пред.»
-// ─────────────────────────────────────────────
 @Composable
 private fun PrevScoreBlock(
     label: String,
@@ -503,9 +489,6 @@ private fun PrevScoreBlock(
     }
 }
 
-// ─────────────────────────────────────────────
-// Шапка игроков
-// ─────────────────────────────────────────────
 @Composable
 private fun PlayersHeader501(game: Game501) {
     val activeTeam = game.currentPlayer?.teamIndex ?: -1
