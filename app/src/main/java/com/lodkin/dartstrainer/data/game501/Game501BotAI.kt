@@ -7,7 +7,6 @@ object Game501BotAI {
 
     // ─────────────────────────────────────────────
     // Полный ход бота (до 3 дротиков)
-    // Использует Game501Logic.applyThrow — вся логика там.
     // ─────────────────────────────────────────────
     fun performTurn(game: Game501, playerIndex: Int): Game501 {
         val player = game.players.getOrNull(playerIndex) ?: return game
@@ -36,19 +35,17 @@ object Game501BotAI {
             ) break
 
             val current = currentGame.players.getOrNull(playerIndex) ?: break
-            val target = chooseTarget(current, previousMissed)
-                ?: break
+            val target = chooseTarget(current, previousMissed) ?: break
 
             val result = simulateDart(target, multiplier, current.botLevel)
             previousMissed = !result.isHit
 
+            // Если мимо — регистрируем MISS
             if (result.actualSector == 0) {
-                // Мимо
                 currentGame = Game501Logic.applyThrow(
                     currentGame,
-                    20,
-                    ThrowMultiplier.MISS,
-                    playerIndex
+                    20,                       // сектор не важен для MISS
+                    ThrowMultiplier.MISS
                 )
             } else {
                 val mult = when (result.actualMultiplier) {
@@ -59,8 +56,7 @@ object Game501BotAI {
                 currentGame = Game501Logic.applyThrow(
                     currentGame,
                     result.actualSector,
-                    mult,
-                    playerIndex
+                    mult
                 )
             }
             dartsThrown++
@@ -81,9 +77,9 @@ object Game501BotAI {
     // Симуляция одного дротика
     // ─────────────────────────────────────────────
     private data class SimulatedThrow(
-        val actualSector: Int,      // 0 если мимо
-        val actualMultiplier: Int,  // 1=S, 2=D, 3=T, 0=miss
-        val isHit: Boolean          // попал в цель или нет
+        val actualSector: Int,
+        val actualMultiplier: Int,
+        val isHit: Boolean
     )
 
     private fun simulateDart(
@@ -91,7 +87,6 @@ object Game501BotAI {
         formMultiplier: Double,
         botLevel: Int
     ): SimulatedThrow {
-        // Базовая сложность попадания в целевой множитель
         val baseAcc = when (target.multiplier) {
             1 -> 0.85    // S
             2 -> 0.35    // D
@@ -102,7 +97,6 @@ object Game501BotAI {
         val levelAcc = (botLevel / 16.0).coerceIn(0.05, 1.0)
         val finalAcc = (baseAcc * levelAcc * formMultiplier).coerceIn(0.01, 0.99)
 
-        // Попал в цель?
         if (Random.nextDouble() < finalAcc) {
             return SimulatedThrow(target.sector, target.multiplier, isHit = true)
         }
@@ -112,7 +106,7 @@ object Game501BotAI {
             return SimulatedThrow(target.sector, 1, isHit = false)
         }
 
-        // Иначе — мимо (сектор 0)
+        // Мимо
         return SimulatedThrow(0, 0, isHit = false)
     }
 
@@ -137,7 +131,6 @@ object Game501BotAI {
         // 2. Закрытие — есть путь в таблице
         val paths = CheckoutTable.pathsFor(score) ?: return CheckoutThrow(20, 3)
 
-        // Если предыдущий дротик был промахом — берём «Промах ...»
         val path = if (previousMissed) {
             paths.firstOrNull { it.label.startsWith("Промах") } ?: paths.first()
         } else {
@@ -152,7 +145,7 @@ object Game501BotAI {
     }
 
     // ─────────────────────────────────────────────
-    // Серия бота (как в крикете)
+    // Серия бота
     // ─────────────────────────────────────────────
     private fun updateStreak(player: Player501): Player501 {
         if (player.botStreakLeft > 0) {
@@ -172,7 +165,7 @@ object Game501BotAI {
     }
 
     // ─────────────────────────────────────────────
-    // Усталость (от времени сессии)
+    // Усталость
     // ─────────────────────────────────────────────
     private fun fatigueFactor(sessionStartTime: Long): Double {
         if (sessionStartTime <= 0L) return 1.0
