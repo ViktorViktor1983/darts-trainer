@@ -498,7 +498,6 @@ fun Game501SetupScreen(
             },
             text = {
                 Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
-                    // Шапка таблицы
                     Row(modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp)) {
                         Text("Бот", color = Accent, fontSize = 11.sp, fontWeight = FontWeight.Bold,
                             modifier = Modifier.weight(1.6f))
@@ -514,11 +513,15 @@ fun Game501SetupScreen(
 
                     testResults.forEach { r ->
                         val botName = CRICKET_BOTS.firstOrNull { it.id == r.botLevel }?.name ?: "?"
+                        val attemptsPerLeg = if (r.totalLegs > 0)
+                            r.doublesAttempted.toDouble() / r.totalLegs else 0.0
                         Row(modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp)) {
                             Column(modifier = Modifier.weight(1.6f)) {
                                 Text("${r.botLevel}. $botName", color = Color.White, fontSize = 12.sp,
                                     fontWeight = FontWeight.Medium)
                                 Text("лег: ${r.totalLegs}", color = Color.White.copy(alpha = 0.5f), fontSize = 10.sp)
+                                Text("hit/att: ${r.doublesHit}/${r.doublesAttempted} (${"%.1f".format(Locale.US, attemptsPerLeg)}/лег)",
+                                    color = Color.White.copy(alpha = 0.5f), fontSize = 10.sp)
                             }
                             Text("%.1f".format(Locale.US, r.ppr), color = GoldAccent, fontSize = 12.sp,
                                 fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f), textAlign = TextAlign.End)
@@ -534,7 +537,9 @@ fun Game501SetupScreen(
                     Spacer(Modifier.height(6.dp))
                     Text("PPR — средний набор, D% — точность удвоений,",
                         color = Color.White.copy(alpha = 0.5f), fontSize = 10.sp)
-                    Text("Д/Л — дротиков на лег. Легов на каждого: $testLegs",
+                    Text("Д/Л — дротиков на лег, hit/att — попаданий/попыток в дабл.",
+                        color = Color.White.copy(alpha = 0.5f), fontSize = 10.sp)
+                    Text("Легов на каждого: $testLegs",
                         color = Color.White.copy(alpha = 0.5f), fontSize = 10.sp)
                 }
             }
