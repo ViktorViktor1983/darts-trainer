@@ -98,7 +98,17 @@ object Game501Logic {
         return applyCategory(p, gained)
     }
 
-    fun applyThrow(game: Game501, sector: Int, multiplier: ThrowMultiplier): Game501 {
+    // countDoubleAttempt = true (default) — считать попытку в double при попадании
+    // в double-сектор. Используется для ручной игры.
+    // countDoubleAttempt = false — для ботов: попытки считаются ТОЛЬКО когда
+    // бот целился в double (это делает Game501BotAI через recordDoublesAttempts).
+    // Иначе фантомные попадания в дабл-соседей раздувают знаменатель D%.
+    fun applyThrow(
+        game: Game501,
+        sector: Int,
+        multiplier: ThrowMultiplier,
+        countDoubleAttempt: Boolean = true
+    ): Game501 {
         if (game.isFinished) return game
         val playerIndex = game.currentPlayerIndex
         val player = game.players[playerIndex]
@@ -122,6 +132,7 @@ object Game501Logic {
         if (isBust) return registerBust(game, playerIndex)
 
         val updatedPlayers = game.players.toMutableList()
+        val countAttempt = isDouble && countDoubleAttempt
         var up = player.copy(
             score = newScore,
             turnScore = player.turnScore + points,
@@ -130,9 +141,9 @@ object Game501Logic {
             legScoreGained = player.legScoreGained + points,
             matchDarts = player.matchDarts + 1,
             matchScoreGained = player.matchScoreGained + points,
-            legDoublesAttempted = if (isDouble) player.legDoublesAttempted + 1 else player.legDoublesAttempted,
+            legDoublesAttempted = if (countAttempt) player.legDoublesAttempted + 1 else player.legDoublesAttempted,
             legDoublesHit = if (isDouble && newScore == 0) player.legDoublesHit + 1 else player.legDoublesHit,
-            matchDoublesAttempted = if (isDouble) player.matchDoublesAttempted + 1 else player.matchDoublesAttempted,
+            matchDoublesAttempted = if (countAttempt) player.matchDoublesAttempted + 1 else player.matchDoublesAttempted,
             matchDoublesHit = if (isDouble && newScore == 0) player.matchDoublesHit + 1 else player.matchDoublesHit
         )
         if (up.first9Darts < 9) {
@@ -152,7 +163,6 @@ object Game501Logic {
         var updatedGame = game.copy(players = updatedPlayers)
 
         if (newScore == 0 && canFinish) {
-            // ИСПРАВЛЕНО: записываем значение, с которого бот закрыл лег
             val closingValue = player.score
             val pWithClose = updatedGame.players[playerIndex].copy(
                 listOfCloseValues = updatedGame.players[playerIndex].listOfCloseValues.toMutableList().also {
