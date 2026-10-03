@@ -108,19 +108,19 @@ object Game501BotAI {
     }
 
     // ─────────────────────────────────────────────
-    // КАЛИБРОВКА
-    // Цель для Разрядника (7): PPR 51-55, D-точность 18-20%
+    // КАЛИБРОВКА (v3)
+    // Цель Разрядника (7): PPR ~52-53, D-точность ~17-19%
     // ─────────────────────────────────────────────
     private fun getTripleAccuracy(botLevel: Int): Double {
         val lvl = botLevel.coerceIn(1, 16)
-        // Новичок 4%, Разрядник (7) 9.5%, Легенда (16) 18.5%
-        return 0.04 + (lvl - 1) * 0.0095
+        // Новичок 4%, Разрядник (7) 11.5%, Легенда (16) 21%
+        return 0.04 + (lvl - 1) * 0.0115
     }
 
     private fun getDoubleAccuracy(botLevel: Int): Double {
         val lvl = botLevel.coerceIn(1, 16)
-        // Новичок 25%, Разрядник (7) 60%, Легенда (16) 95%
-        return 0.25 + (lvl - 1) * 0.048
+        // Новичок 22%, Разрядник (7) 45%, Легенда (16) 88%
+        return 0.22 + (lvl - 1) * 0.044
     }
 
     private fun getSingleAccuracy(botLevel: Int): Double {
