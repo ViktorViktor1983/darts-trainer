@@ -8,18 +8,16 @@ data class CheckoutThrow(
 
 // Вариант пути чекаута
 data class CheckoutPath(
-    val label: String,          // "Основной", "Альтернативный", "Промах T20"
+    val label: String,
     val throws: List<CheckoutThrow>
 )
 
-// Таблица чекаутов 2..170 (только те, что закрываются за 3 дротика)
 object CheckoutTable {
 
-    // Утилита: разбор строки типа "T20" / "S20" / "D20" / "BULL" / "25"
     private fun parseThrow(s: String): CheckoutThrow {
         return when (s) {
-            "BULL" -> CheckoutThrow(25, 2)  // Красный Bull = D25 = 50
-            "25" -> CheckoutThrow(25, 1)    // Зелёный Bull = S25 = 25
+            "BULL" -> CheckoutThrow(25, 2)
+            "25" -> CheckoutThrow(25, 1)
             else -> {
                 val mult = when (s[0]) {
                     'S' -> 1
@@ -33,14 +31,78 @@ object CheckoutTable {
         }
     }
 
-    // Вспомогательная: превратить список строк в CheckoutPath
     private fun path(label: String, vararg s: String): CheckoutPath =
         CheckoutPath(label, s.map { parseThrow(it) })
 
-    // ─────────────────────────────────────────────
-    // Таблица чекаутов
-    // ─────────────────────────────────────────────
     val TABLE: Map<Int, List<CheckoutPath>> = mapOf(
+        // ─────────────────────────────────────────────
+        // Малые остатки (2-59) — простые пути
+        // ─────────────────────────────────────────────
+        2 to listOf(path("Основной", "D1")),
+        3 to listOf(path("Основной", "S1", "D1")),
+        4 to listOf(path("Основной", "D2")),
+        5 to listOf(path("Основной", "S1", "D2")),
+        6 to listOf(path("Основной", "D3")),
+        7 to listOf(path("Основной", "S3", "D2")),
+        8 to listOf(path("Основной", "D4")),
+        9 to listOf(path("Основной", "S1", "D4")),
+        10 to listOf(path("Основной", "D5")),
+        11 to listOf(path("Основной", "S3", "D4")),
+        12 to listOf(path("Основной", "D6")),
+        13 to listOf(path("Основной", "S5", "D4")),
+        14 to listOf(path("Основной", "D7")),
+        15 to listOf(path("Основной", "S7", "D4")),
+        16 to listOf(path("Основной", "D8")),
+        17 to listOf(path("Основной", "S1", "D8")),
+        18 to listOf(path("Основной", "D9")),
+        19 to listOf(path("Основной", "S3", "D8")),
+        20 to listOf(path("Основной", "D10")),
+        21 to listOf(path("Основной", "S5", "D8")),
+        22 to listOf(path("Основной", "D11")),
+        23 to listOf(path("Основной", "S7", "D8")),
+        24 to listOf(path("Основной", "D12")),
+        25 to listOf(
+            path("Основной", "25"),
+            path("Альтернативный", "S1", "D12")
+        ),
+        26 to listOf(path("Основной", "D13")),
+        27 to listOf(path("Основной", "S3", "D12")),
+        28 to listOf(path("Основной", "D14")),
+        29 to listOf(path("Основной", "S13", "D8")),
+        30 to listOf(path("Основной", "D15")),
+        31 to listOf(path("Основной", "S15", "D8")),
+        32 to listOf(path("Основной", "D16")),
+        33 to listOf(path("Основной", "S1", "D16")),
+        34 to listOf(path("Основной", "D17")),
+        35 to listOf(path("Основной", "S3", "D16")),
+        36 to listOf(path("Основной", "D18")),
+        37 to listOf(path("Основной", "S5", "D16")),
+        38 to listOf(path("Основной", "D19")),
+        39 to listOf(path("Основной", "S7", "D16")),
+        40 to listOf(path("Основной", "D20")),
+        41 to listOf(path("Основной", "S9", "D16")),
+        42 to listOf(path("Основной", "S10", "D16")),
+        43 to listOf(path("Основной", "S3", "D20")),
+        44 to listOf(path("Основной", "S12", "D16")),
+        45 to listOf(path("Основной", "S13", "D16")),
+        46 to listOf(path("Основной", "S6", "D20")),
+        47 to listOf(path("Основной", "S15", "D16")),
+        48 to listOf(path("Основной", "S8", "D20")),
+        49 to listOf(path("Основной", "S9", "D20")),
+        50 to listOf(path("Основной", "BULL")),
+        51 to listOf(path("Основной", "S11", "D20")),
+        52 to listOf(path("Основной", "S12", "D20")),
+        53 to listOf(path("Основной", "S13", "D20")),
+        54 to listOf(path("Основной", "S14", "D20")),
+        55 to listOf(path("Основной", "S15", "D20")),
+        56 to listOf(path("Основной", "S16", "D20")),
+        57 to listOf(path("Основной", "S17", "D20")),
+        58 to listOf(path("Основной", "S18", "D20")),
+        59 to listOf(path("Основной", "S19", "D20")),
+
+        // ─────────────────────────────────────────────
+        // Большие остатки (60-170) — из Darts Checkout
+        // ─────────────────────────────────────────────
         60 to listOf(path("Основной", "S20", "D20")),
         61 to listOf(
             path("Основной", "T15", "D8"),
@@ -464,9 +526,7 @@ object CheckoutTable {
         170 to listOf(path("Основной", "T20", "T20", "BULL"))
     )
 
-    // Получить список путей для остатка
     fun pathsFor(score: Int): List<CheckoutPath>? = TABLE[score]
 
-    // Проверка: можно ли закрыть за 3 дротика
     fun isCheckoutPossible(score: Int): Boolean = TABLE.containsKey(score)
 }
