@@ -26,7 +26,6 @@ import com.lodkin.dartstrainer.theme.TileBg
 import com.lodkin.dartstrainer.theme.TileBgDark
 import kotlinx.coroutines.delay
 import java.util.Locale
-import kotlin.random.Random
 
 private val PaleYellow = Color(0xFFFFE082)
 private val PaleYellowText = Color(0xFF3E2723)
@@ -41,7 +40,6 @@ fun Game501Screen(
     var game by remember { mutableStateOf(initialGame) }
     var inputText by remember { mutableStateOf("") }
 
-    // Последний ввод для каждой команды
     var lastScoreA by remember { mutableStateOf<Int?>(null) }
     var lastScoreB by remember { mutableStateOf<Int?>(null) }
 
@@ -57,6 +55,9 @@ fun Game501Screen(
 
     var quickSums by remember { mutableStateOf(Game501SettingsStorage.getQuickSums(context)) }
     var recordSum by remember { mutableStateOf<Int?>(null) }
+
+    // Автоматический режим (все игроки — боты)
+    val allBots = game.players.all { it.isBot }
 
     val history = remember { mutableStateListOf<Game501>() }
 
@@ -75,7 +76,6 @@ fun Game501Screen(
         recordSum = null
     }
 
-    // Обновить последний ввод для текущего игрока
     fun setLastScore(value: Int) {
         val team = game.currentPlayer?.teamIndex ?: 0
         if (team == 0) lastScoreA = value else lastScoreB = value
@@ -170,30 +170,68 @@ fun Game501Screen(
         showLegQuestionDialog = true
     }
 
-    LaunchedEffect(game.currentPlayerIndex, game.isFinished, showLegWonDialog, showSetWonDialog, showWinDialog, showLegQuestionDialog, showDoublesQuestionDialog, showDoublesOnlyDialog) {
+    // ─────────────────────────────────────────────
+    // Автоход бота — теперь через Game501BotAI
+    // ─────────────────────────────────────────────
+    LaunchedEffect(
+        game.currentPlayerIndex,
+        game.isFinished,
+        showLegWonDialog, showSetWonDialog, showWinDialog,
+        showLegQuestionDialog, showDoublesQuestionDialog, showDoublesOnlyDialog
+    ) {
         val currentPlayer = game.players.getOrNull(game.currentPlayerIndex) ?: return@LaunchedEffect
-        if (game.isFinished || showLegWonDialog || showSetWonDialog || showWinDialog || showLegQuestionDialog || showDoublesQuestionDialog || showDoublesOnlyDialog) return@LaunchedEffect
+        if (game.isFinished) return@LaunchedEffect
+        if (showLegQuestionDialog || showDoublesQuestionDialog || showDoublesOnlyDialog) return@LaunchedEffect
+        if (showWinDialog) return@LaunchedEffect
         if (!currentPlayer.isBot) return@LaunchedEffect
-        delay(900L)
-        if (game.isFinished || showLegWonDialog || showSetWonDialog || showWinDialog || showLegQuestionDialog || showDoublesQuestionDialog || showDoublesOnlyDialog) return@LaunchedEffect
+
+        // Если играют только боты — задержку делаем чуть больше (для наблюдения), а диалоги не блокируют
+        if (!allBots && (showLegWonDialog || showSetWonDialog)) return@LaunchedEffect
+
+        delay(if (allBots) 500L else 900L)
+
+        if (game.isFinished) return@LaunchedEffect
+        if (showLegQuestionDialog || showDoublesQuestionDialog || showDoublesOnlyDialog) return@LaunchedEffect
         if (game.players.getOrNull(game.currentPlayerIndex)?.isBot != true) return@LaunchedEffect
+        if (!allBots && (showLegWonDialog || showSetWonDialog)) return@LaunchedEffect
 
         saveHistory()
-        game = botPerformTurn(game)
+        game = Game501BotAI.performTurn(game, game.currentPlayerIndex)
     }
 
     LaunchedEffect(showBustMessage) {
         if (showBustMessage) { delay(1500L); showBustMessage = false }
     }
 
-    LaunchedEffect(game.lastLegWinnerIndex) {
-        if (game.lastLegWinnerIndex != null) showLegWonDialog = true
+    // ─────────────────────────────────────────────
+    // Диалоги (в режиме бот-бот — автопропуск)
+    // ─────────────────────────────────────────────
+    LaunchedEffect(game.lastLegWinnerIndex, allBots) {
+        if (game.lastLegWinnerIndex == null) return@LaunchedEffect
+        if (allBots) {
+            // Автоматически закрываем — не показываем диалог
+            game = game.copy(lastLegWinnerIndex = null)
+        } else {
+            showLegWonDialog = true
+        }
     }
-    LaunchedEffect(game.lastSetWinnerIndex, showLegWonDialog) {
-        if (game.lastSetWinnerIndex != null && !showLegWonDialog && !showWinDialog) showSetWonDialog = true
+    LaunchedEffect(game.lastSetWinnerIndex, allBots, showLegWonDialog) {
+        if (game.lastSetWinnerIndex == null) return@LaunchedEffect
+        if (allBots) {
+            game = game.copy(lastSetWinnerIndex = null)
+        } else if (!showLegWonDialog && !showWinDialog) {
+            showSetWonDialog = true
+        }
     }
-    LaunchedEffect(game.isFinished, showLegWonDialog, showSetWonDialog) {
-        if (game.isFinished && !showLegWonDialog && !showSetWonDialog && !showWinDialog) showWinDialog = true
+    LaunchedEffect(game.isFinished, allBots, showLegWonDialog, showSetWonDialog) {
+        if (!game.isFinished) return@LaunchedEffect
+        if (allBots) {
+            // В режиме бот-бот — автоматически завершаем матч, идём в статистику
+            Game501SettingsStorage.updateQuickSumsIfNeeded(context)
+            onGameFinish(game)
+        } else if (!showLegWonDialog && !showSetWonDialog && !showWinDialog) {
+            showWinDialog = true
+        }
     }
 
     val activeTeam = game.currentPlayer?.teamIndex ?: 0
@@ -202,28 +240,23 @@ fun Game501Screen(
         TopBar501(game = game, onBack = { showBackConfirm = true })
         PlayersHeader501(game = game)
 
-        // Поле ввода + «Пред.» слева и справа (для каждой команды)
         Row(
             modifier = Modifier.fillMaxWidth().background(Color(0xFF16202C))
                 .padding(horizontal = 12.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Пред. для команды A (слева)
             PrevScoreBlock(
                 label = "Пред.",
                 value = lastScoreA,
                 isActive = activeTeam == 0,
                 alignment = Alignment.Start
             )
-
             Text(
                 if (inputText.isEmpty()) "—" else inputText,
                 color = if (inputText.isEmpty()) Color.White.copy(alpha = 0.3f) else GoldAccent,
                 fontSize = 32.sp, fontWeight = FontWeight.Bold,
                 modifier = Modifier.weight(1f), textAlign = TextAlign.Center
             )
-
-            // Пред. для команды B (справа)
             PrevScoreBlock(
                 label = "Пред.",
                 value = lastScoreB,
@@ -274,7 +307,8 @@ fun Game501Screen(
         }
     }
 
-    if (showLegQuestionDialog) {
+    // Диалог: Сколько дротиков? (только для человека)
+    if (showLegQuestionDialog && !allBots) {
         AlertDialog(
             onDismissRequest = { },
             confirmButton = {},
@@ -297,7 +331,7 @@ fun Game501Screen(
         )
     }
 
-    if (showDoublesQuestionDialog) {
+    if (showDoublesQuestionDialog && !allBots) {
         AlertDialog(
             onDismissRequest = { },
             confirmButton = {},
@@ -326,7 +360,7 @@ fun Game501Screen(
         )
     }
 
-    if (showDoublesOnlyDialog) {
+    if (showDoublesOnlyDialog && !allBots) {
         AlertDialog(
             onDismissRequest = { },
             confirmButton = {},
@@ -344,7 +378,7 @@ fun Game501Screen(
                                         showDoublesOnlyDialog = false
                                     }.padding(vertical = 14.dp),
                                 contentAlignment = Alignment.Center
-                            ) { Text("$n", color = Color(0xFF121212), fontSize = 20.sp, fontWeight = FontWeight.Bold) }
+                            ) { Text("$n", color = Color.0xFF121212.let { Color(0xFF121212) }, fontSize = 20.sp, fontWeight = FontWeight.Bold) }
                         }
                     }
                     Spacer(Modifier.height(10.dp))
@@ -355,7 +389,7 @@ fun Game501Screen(
         )
     }
 
-    if (showLegWonDialog) {
+    if (showLegWonDialog && !allBots) {
         AlertDialog(
             onDismissRequest = { },
             confirmButton = {
@@ -394,7 +428,7 @@ fun Game501Screen(
         )
     }
 
-    if (showSetWonDialog) {
+    if (showSetWonDialog && !allBots) {
         AlertDialog(
             onDismissRequest = { },
             confirmButton = {
@@ -415,7 +449,7 @@ fun Game501Screen(
         )
     }
 
-    if (showWinDialog) {
+    if (showWinDialog && !allBots) {
         WinDialog501(
             game = game,
             onUndo = { undo(); showWinDialog = false },
@@ -443,7 +477,7 @@ fun Game501Screen(
 }
 
 // ─────────────────────────────────────────────
-// Блок «Пред.» — последний ввод для команды
+// Блок «Пред.»
 // ─────────────────────────────────────────────
 @Composable
 private fun PrevScoreBlock(
@@ -467,52 +501,6 @@ private fun PrevScoreBlock(
             fontWeight = FontWeight.Bold
         )
     }
-}
-
-// ─────────────────────────────────────────────
-// Ход бота
-// ─────────────────────────────────────────────
-private fun botPerformTurn(game: Game501): Game501 {
-    val player = game.currentPlayer ?: return game
-    val botLevel = player.botLevel
-    val requiresDouble = game.outMode == OutMode.DOUBLE_OUT || game.outMode == OutMode.DOUBLE_IN_OUT
-
-    if (requiresDouble && player.score <= 50) {
-        val closeChance = 0.15 + (botLevel - 1) * 0.025
-        if (Random.nextDouble() < closeChance) {
-            val darts = Random.nextInt(1, 4)
-            val attempts = Random.nextInt(1, darts + 1)
-            return Game501Logic.closeLegManually(game, darts, attempts)
-        }
-    }
-
-    val scoreBefore = player.score
-    val gained = generateBotTurnScore(botLevel)
-    val capped = gained.coerceAtMost(player.score + 1)
-
-    val updated = Game501Logic.applyTurnScore(game, capped)
-    var result = updated
-
-    if (scoreBefore <= 50 && !result.isFinished) {
-        val attempts = Random.nextInt(0, 4)
-        result = Game501Logic.recordDoublesAttempts(result, attempts)
-    }
-
-    if (!result.isFinished) result = Game501Logic.finishTurn(result)
-    return result
-}
-
-private fun generateBotTurnScore(botLevel: Int): Int {
-    val lvl = botLevel.coerceIn(1, 16)
-    val basePpr = when (lvl) {
-        1 -> 24; 2 -> 31; 3 -> 38; 4 -> 45
-        5 -> 51; 6 -> 57; 7 -> 62; 8 -> 67
-        9 -> 72; 10 -> 77; 11 -> 82; 12 -> 87
-        13 -> 92; 14 -> 97; 15 -> 102; else -> 110
-    }
-    val min = (basePpr * 0.5).toInt()
-    val max = (basePpr * 1.4).toInt()
-    return Random.nextInt(min, max + 1).coerceIn(0, 180)
 }
 
 // ─────────────────────────────────────────────
