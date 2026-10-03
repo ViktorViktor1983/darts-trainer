@@ -62,7 +62,6 @@ object Game501Logic {
         }
     }
 
-    // Запись категории суммы для бота
     fun recordCategoryForBot(game: Game501, playerIndex: Int, turnScore: Int): Game501 {
         if (playerIndex !in game.players.indices) return game
         if (turnScore <= 0) return game
@@ -82,7 +81,6 @@ object Game501Logic {
 
     private fun registerApproach(player: Player501, gained: Int, dartsUsed: Int, scoreBefore: Int): Player501 {
         var p = player
-        // Первые 9 дротиков ТЕКУЩЕГО лега
         if (p.first9Darts < 9) {
             val remaining = (9 - p.first9Darts).coerceAtLeast(0)
             val toAdd = dartsUsed.coerceAtMost(remaining)
@@ -137,14 +135,12 @@ object Game501Logic {
             matchDoublesAttempted = if (isDouble) player.matchDoublesAttempted + 1 else player.matchDoublesAttempted,
             matchDoublesHit = if (isDouble && newScore == 0) player.matchDoublesHit + 1 else player.matchDoublesHit
         )
-        // Первые 9 дротиков текущего лега
         if (up.first9Darts < 9) {
             up = up.copy(
                 first9Score = up.first9Score + points,
                 first9Darts = up.first9Darts + 1
             )
         }
-        // Набор без закрытия (для точности PPR без закрытия)
         if (player.score > 170) {
             up = up.copy(
                 nonCloseScore = up.nonCloseScore + points,
@@ -152,8 +148,21 @@ object Game501Logic {
             )
         }
         updatedPlayers[playerIndex] = up
+
         var updatedGame = game.copy(players = updatedPlayers)
+
         if (newScore == 0 && canFinish) {
+            // ИСПРАВЛЕНО: записываем значение, с которого бот закрыл лег
+            val closingValue = player.score
+            val pWithClose = updatedGame.players[playerIndex].copy(
+                listOfCloseValues = updatedGame.players[playerIndex].listOfCloseValues.toMutableList().also {
+                    it.add(closingValue)
+                }
+            )
+            val finalPlayers = updatedGame.players.toMutableList()
+            finalPlayers[playerIndex] = pWithClose
+            updatedGame = updatedGame.copy(players = finalPlayers)
+
             updatedGame = finishLeg(updatedGame, up.teamIndex)
         }
         return updatedGame
@@ -254,8 +263,11 @@ object Game501Logic {
         val updated = game.players.toMutableList()
         val p = updated[playerIndex]
         val missing = (3 - p.turnDarts).coerceAtLeast(0)
-        var up = p.copy(turnScore = 0, turnDarts = 0,
-            legDarts = p.legDarts + missing, matchDarts = p.matchDarts + missing)
+        var up = p.copy(
+            turnScore = 0, turnDarts = 0,
+            legDarts = p.legDarts + missing,
+            matchDarts = p.matchDarts + missing
+        )
         if (up.first9Darts < 9 && missing > 0) {
             val toAdd = missing.coerceAtMost(9 - up.first9Darts)
             up = up.copy(first9Darts = up.first9Darts + toAdd)
@@ -299,7 +311,6 @@ object Game501Logic {
         for (i in updated.indices) {
             val p = updated[i]
             val ppr = if (p.legDarts > 0) p.legScoreGained.toDouble() / (p.legDarts / 3.0) else 0.0
-            // PPR первых 9 дротиков текущего лега
             val f9 = if (p.first9Darts > 0) p.first9Score.toDouble() / (p.first9Darts / 3.0) else 0.0
             updated[i] = p.copy(
                 listOfLegDarts = p.listOfLegDarts.toMutableList().also { it.add(p.legDarts) },
@@ -366,7 +377,6 @@ object Game501Logic {
         )
     }
 
-    // СБРОС статистики лега (включая first9)
     private fun resetLeg(p: Player501, startScore: Int): Player501 = p.copy(
         score = startScore, turnScore = 0, turnDarts = 0,
         legDarts = 0, legScoreGained = 0, legDoublesHit = 0, legDoublesAttempted = 0,
@@ -386,7 +396,6 @@ object Game501Logic {
         if (player.matchDoublesAttempted <= 0) return 0.0
         return player.matchDoublesHit.toDouble() / player.matchDoublesAttempted * 100.0
     }
-    // Средний PPR первых 9 дротиков по всем легам
     fun first9Ppr(player: Player501): Double {
         if (player.listOfFirst9Ppr.isEmpty()) return 0.0
         return player.listOfFirst9Ppr.average()
