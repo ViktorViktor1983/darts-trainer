@@ -1,9 +1,12 @@
 package com.lodkin.dartstrainer.data.game501
 
 // Быстрый симулятор матча x01 без UI.
+// Поддерживает как одиночный прогон (simulate), так и мультипрогон
+// по списку уровней (simulateMany).
 object Game501Simulator {
 
     data class SimResult(
+        val botLevel: Int,
         val totalLegs: Int,
         val ppr: Double,
         val doublesAccuracy: Double,
@@ -11,10 +14,19 @@ object Game501Simulator {
         val first9Ppr: Double
     )
 
+    // Обратная совместимость: один бот — один результат.
     fun simulate(
         botLevel: Int,
         legsToPlay: Int = 200
-    ): SimResult {
+    ): SimResult = simulateSingle(botLevel, legsToPlay)
+
+    // Мультипрогон: по одному уровню за раз, возвращаем список результатов.
+    fun simulateMany(
+        botLevels: List<Int>,
+        legsToPlay: Int = 200
+    ): List<SimResult> = botLevels.map { simulateSingle(it, legsToPlay) }
+
+    private fun simulateSingle(botLevel: Int, legsToPlay: Int): SimResult {
         val playerA = Player501(name = "Bot A", isBot = true, botLevel = botLevel, teamIndex = 0)
         val playerB = Player501(name = "Bot B", isBot = true, botLevel = botLevel, teamIndex = 1)
 
@@ -51,6 +63,13 @@ object Game501Simulator {
         val allFirst9 = game.players.flatMap { it.listOfFirst9Ppr }
         val first9 = if (allFirst9.isEmpty()) 0.0 else allFirst9.average()
 
-        return SimResult(legs, ppr, dblAcc, dartsPerLeg, first9)
+        return SimResult(
+            botLevel = botLevel,
+            totalLegs = legs,
+            ppr = ppr,
+            doublesAccuracy = dblAcc,
+            dartsPerLeg = dartsPerLeg,
+            first9Ppr = first9
+        )
     }
 }
