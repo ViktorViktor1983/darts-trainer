@@ -146,18 +146,23 @@ object Game501BotAI {
         return cleanPaths.minOf { it.throws.size }
     }
 
+    // ─────────────────────────────────────────────
+    // КАЛИБРОВКА (v23)
+    // База p_triple снижена 0.025 → 0.012, чтобы опустить PPR
+    // слабых и средних на ~3 очка (в середину допуска).
+    // ─────────────────────────────────────────────
     private fun getTripleAccuracy(botLevel: Int): Double {
         val lvl = botLevel.coerceIn(1, 16)
         val midBonus = if (lvl > 9) (lvl - 9) * 0.004 else 0.0
         val topBonus = if (lvl > 11) (lvl - 11) * 0.010 else 0.0
         val superBonus = if (lvl >= 13) (lvl - 12) * 0.008 else 0.0
-        return 0.025 + (lvl - 1) * 0.031 + midBonus + topBonus + superBonus
+        return 0.012 + (lvl - 1) * 0.031 + midBonus + topBonus + superBonus
     }
 
     private fun getDoubleAccuracy(botLevel: Int): Double {
         val lvl = botLevel.coerceIn(1, 16)
-        val bonus = if (lvl > 11) (lvl - 11) * 0.015 else 0.0
-        return (0.065 + (lvl - 1) * 0.020 + bonus).coerceAtMost(0.60)
+        val bonus = if (lvl > 11) (lvl - 11) * 0.017 else 0.0
+        return (0.065 + (lvl - 1) * 0.0205 + bonus).coerceAtMost(0.60)
     }
 
     private fun getSingleAccuracy(botLevel: Int): Double {
@@ -165,8 +170,6 @@ object Game501BotAI {
         return (t * 1.4 + 0.25).coerceAtMost(0.95)
     }
 
-    // Интерполяция между тремя опорными точками:
-    // ур.1 (Новичок) → ур.7 (Разрядник) → ур.16 (Легенда).
     private fun interp(a: Double, b: Double, c: Double, lvl: Int): Double {
         return if (lvl <= 7) {
             a + (b - a) * (lvl - 1) / 6.0
@@ -175,24 +178,22 @@ object Game501BotAI {
         }
     }
 
-    // ─────────────────────────────────────────────
-    // Промах из T-сектора (T20 и др.).
-    // Опорные точки (от промаха):
-    //   за борт   3.0% / 0.63% / 0.1%
-    //   S-целевой 18%  / 38.5% / 45%   ← ослаблено для слабых
-    //   S-соседи  37%  / 30.4% / 30%
-    //   T-соседи  25%  / 20.3% / 12%
-    //   D-соседи   8%  / 5.1%  / 4%
-    //   D-целевой  9%  / 5.1%  / 9%
-    // ─────────────────────────────────────────────
+    // Промах из T-сектора.
+    // Значения для ур.1 / ур.7 / ур.16 (от промаха):
+    //   за борт   10% / 0.63% / 0.1%
+    //   S-целевой 12% / 38.5% / 45%
+    //   S-соседи  40% / 30.4% / 30%
+    //   T-соседи  22% / 20.3% / 12%
+    //   D-соседи   8% / 5.1%  / 4%
+    //   D-целевой  8% / 5.1%  / 9%
     private fun missFromTriple(sector: Int, botLevel: Int): SimulatedThrow {
         val lvl = botLevel.coerceIn(1, 16)
-        val pOut = interp(3.0, 0.63, 0.1, lvl)
-        val pSTarget = interp(18.0, 38.5, 45.0, lvl)
-        val pSNeighbor = interp(37.0, 30.4, 30.0, lvl)
-        val pTNeighbor = interp(25.0, 20.3, 12.0, lvl)
+        val pOut = interp(10.0, 0.63, 0.1, lvl)
+        val pSTarget = interp(12.0, 38.5, 45.0, lvl)
+        val pSNeighbor = interp(40.0, 30.4, 30.0, lvl)
+        val pTNeighbor = interp(22.0, 20.3, 12.0, lvl)
         val pDNeighbor = interp(8.0, 5.1, 4.0, lvl)
-        val pDTarget = interp(9.0, 5.1, 9.0, lvl)
+        val pDTarget = interp(8.0, 5.1, 9.0, lvl)
 
         val total = pOut + pSTarget + pSNeighbor + pTNeighbor + pDNeighbor + pDTarget
         val r = Random.nextDouble() * total
@@ -222,24 +223,22 @@ object Game501BotAI {
         return SimulatedThrow(sector, 2, isHit = false)
     }
 
-    // ─────────────────────────────────────────────
-    // Промах из S-сектора (S20 и др.).
-    // Опорные точки (от промаха):
-    //   за борт   3.0% / 2.1% / 0.5%
-    //   T-целевой 6%   / 29.8% / 40%   ← ослаблено для слабых
-    //   S-соседи  54%  / 42.6% / 35%
-    //   D-целевой 15%  / 17%   / 15%
-    //   T-соседи  10%  / 4.3%  / 5%
-    //   D-соседи  12%  / 4.3%  / 4.5%
-    // ─────────────────────────────────────────────
+    // Промах из S-сектора.
+    // Значения для ур.1 / ур.7 / ур.16 (от промаха):
+    //   за борт    8% / 2.1%  / 0.5%
+    //   T-целевой  5% / 25%   / 40%
+    //   S-соседи  60% / 47.4% / 35%
+    //   D-целевой 13% / 17%   / 15%
+    //   T-соседи   7% / 4.3%  / 5%
+    //   D-соседи   7% / 4.3%  / 4.5%
     private fun missFromSingle(sector: Int, botLevel: Int): SimulatedThrow {
         val lvl = botLevel.coerceIn(1, 16)
-        val pOut = interp(3.0, 2.1, 0.5, lvl)
-        val pTTarget = interp(6.0, 29.8, 40.0, lvl)
-        val pSNeighbor = interp(54.0, 42.6, 35.0, lvl)
-        val pDTarget = interp(15.0, 17.0, 15.0, lvl)
-        val pTNeighbor = interp(10.0, 4.3, 5.0, lvl)
-        val pDNeighbor = interp(12.0, 4.3, 4.5, lvl)
+        val pOut = interp(8.0, 2.1, 0.5, lvl)
+        val pTTarget = interp(5.0, 25.0, 40.0, lvl)
+        val pSNeighbor = interp(60.0, 47.4, 35.0, lvl)
+        val pDTarget = interp(13.0, 17.0, 15.0, lvl)
+        val pTNeighbor = interp(7.0, 4.3, 5.0, lvl)
+        val pDNeighbor = interp(7.0, 4.3, 4.5, lvl)
 
         val total = pOut + pTTarget + pSNeighbor + pDTarget + pTNeighbor + pDNeighbor
         val r = Random.nextDouble() * total
@@ -271,22 +270,20 @@ object Game501BotAI {
         return SimulatedThrow(0, 0, isHit = false)
     }
 
-    // ─────────────────────────────────────────────
-    // Промах из D-сектора (D20 и др.).
-    // Опорные точки (от промаха):
-    //   за борт   55% / 38% / 20%
-    //   S-целевой 10% / 36.2% / 45%   ← ослаблено для слабых
-    //   D-соседи  10% / 12.3% / 15%
+    // Промах из D-сектора.
+    // Значения для ур.1 / ур.7 / ур.16 (от промаха):
+    //   за борт   60% / 38%   / 20%
+    //   S-целевой  8% / 36.2% / 45%
+    //   D-соседи   8% / 12.3% / 15%
     //   S-соседи  20% / 12.3% / 15%
-    //   T-соседи   5% / 1.2%  / 5%
-    // ─────────────────────────────────────────────
+    //   T-соседи   4% / 1.2%  / 5%
     private fun missFromDouble(sector: Int, botLevel: Int): SimulatedThrow {
         val lvl = botLevel.coerceIn(1, 16)
-        val pOut = interp(55.0, 38.0, 20.0, lvl)
-        val pSTarget = interp(10.0, 36.2, 45.0, lvl)
-        val pDNeighbor = interp(10.0, 12.3, 15.0, lvl)
+        val pOut = interp(60.0, 38.0, 20.0, lvl)
+        val pSTarget = interp(8.0, 36.2, 45.0, lvl)
+        val pDNeighbor = interp(8.0, 12.3, 15.0, lvl)
         val pSNeighbor = interp(20.0, 12.3, 15.0, lvl)
-        val pTNeighbor = interp(5.0, 1.2, 5.0, lvl)
+        val pTNeighbor = interp(4.0, 1.2, 5.0, lvl)
 
         val total = pOut + pSTarget + pDNeighbor + pSNeighbor + pTNeighbor
         val r = Random.nextDouble() * total
