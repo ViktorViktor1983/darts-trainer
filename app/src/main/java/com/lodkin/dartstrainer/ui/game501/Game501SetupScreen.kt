@@ -656,10 +656,16 @@ private fun loadSlots(context: android.content.Context, playerName: String): Lis
     }
 }
 
+// ─────────────────────────────────────────────
+// Бросок в Bull для розыгрыша первого хода.
+// Вероятности снижены на 10% от прежних (умножены на 0.9).
+// Промах = остаток (автоматически вырос на те же 10%).
+// Разрядник (ур.7): красный 19.1%, зелёный 29.5%, мимо 51.4%.
+// ─────────────────────────────────────────────
 private fun generateBotBullResult(bot: CricketBot): Int {
     val lvl = bot.id.coerceIn(1, 16)
-    val pRed = 0.05 + (lvl - 1) * 0.027
-    val pGreen = 0.25 + (lvl - 1) * 0.013
+    val pRed = (0.05 + (lvl - 1) * 0.027) * 0.9   // 4.5% … 40.95%
+    val pGreen = (0.25 + (lvl - 1) * 0.013) * 0.9 // 22.5% … 40.05%
     val r = Random.nextDouble()
     return when {
         r < pRed -> 2
