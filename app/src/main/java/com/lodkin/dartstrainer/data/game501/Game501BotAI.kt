@@ -32,6 +32,10 @@ object Game501BotAI {
             m.coerceIn(0.55, 1.45)
         } else 1.0
 
+        // Давление — только в партиях с человеком. В бот-бот матче
+        // (симулятор) давление не применяется, чтобы не ломать калибровку.
+        val pressure = pressureFactor(game, updatedPlayer.teamIndex)
+
         val startLeg = currentGame.currentLegNumber
         val startSet = currentGame.currentSetNumber
 
@@ -46,7 +50,7 @@ object Game501BotAI {
             val current = currentGame.players.getOrNull(playerIndex) ?: break
             val target = chooseTarget(current)
 
-            val result = simulateDart(target, multiplier, current.botLevel)
+            val result = simulateDart(target, multiplier, pressure, current.botLevel)
 
             if (target.multiplier == 2) {
                 currentGame = Game501Logic.recordDoublesAttempts(currentGame, 1)
@@ -95,9 +99,12 @@ object Game501BotAI {
         val isHit: Boolean
     )
 
+    // pressure применяется ТОЛЬКО к дабл-целям (target.multiplier == 2).
+    // На подходы (S, T) давление не действует — бот нервничает только в финише.
     private fun simulateDart(
         target: CheckoutThrow,
         formMultiplier: Double,
+        pressure: Double,
         botLevel: Int
     ): SimulatedThrow {
         val baseAcc = when (target.multiplier) {
@@ -105,7 +112,11 @@ object Game501BotAI {
             2 -> getDoubleAccuracy(botLevel)
             else -> getSingleAccuracy(botLevel)
         }
-        val finalAcc = (baseAcc * formMultiplier).coerceIn(0.01, 0.99)
+        val finalAcc = if (target.multiplier == 2) {
+            (baseAcc * formMultiplier * pressure).coerceIn(0.01, 0.99)
+        } else {
+            (baseAcc * formMultiplier).coerceIn(0.01, 0.99)
+        }
 
         if (Random.nextDouble() < finalAcc) {
             return SimulatedThrow(target.sector, target.multiplier, isHit = true)
@@ -115,6 +126,45 @@ object Game501BotAI {
             2 -> missFromDouble(target.sector)
             else -> missFromSingle(target.sector)
         }
+    }
+
+    // ─────────────────────────────────────────────
+    // Давление соперника. Работает ТОЛЬКО когда в игре есть человек.
+    // В симметричном бот-бот матче (симулятор) давление отключено,
+    // чтобы не ломать откалиброванные значения D%.
+    //
+    // Градации по минимальному числу дротиков, нужных сопернику
+    // для закрытия его остатка (по CheckoutTable):
+    //   1 дротик  → ×0.78 (сильное давление, соперник в дабле)
+    //   2 дротика → ×0.85 (среднее)
+    //   3 дротика → ×0.92 (лёгкое)
+    //   4+ или нет чекаута → ×1.00 (нет давления)
+    // ─────────────────────────────────────────────
+    private fun pressureFactor(game: Game501, myTeamIndex: Int): Double {
+        // Только в матчах с человеком.
+        if (game.players.all { it.isBot }) return 1.0
+
+        val opponent = game.players.firstOrNull { it.teamIndex != myTeamIndex }
+            ?: return 1.0
+
+        val dartsNeeded = dartsToClose(opponent.score)
+        return when (dartsNeeded) {
+            1 -> 0.78
+            2 -> 0.85
+            3 -> 0.92
+            else -> 1.0
+        }
+    }
+
+    // Минимальное число дротиков, чтобы закрыть остаток score.
+    // 1 = чистый дабл/Bull; 2–3 = по таблице чекаутов; 99 = не закрыть.
+    private fun dartsToClose(score: Int): Int {
+        if (score > 170) return 99
+        if (score < 2) return 0
+        val paths = CheckoutTable.pathsFor(score) ?: return 99
+        val cleanPaths = paths.filter { !it.label.startsWith("Промах") }
+        if (cleanPaths.isEmpty()) return 99
+        return cleanPaths.minOf { it.throws.size }
     }
 
     // ─────────────────────────────────────────────
@@ -261,9 +311,6 @@ object Game501BotAI {
         return bestThrow
     }
 
-    // Оценка остатка: чем больше баллов, тем лучше.
-    // Идеал — чётный остаток 2..40 (чистый маленький дабл),
-    // желательно из любимых. Нечётные и большие — хуже.
     private fun evaluateRemainder(score: Int, favDoubles: List<Int>): Int {
         if (score < 2) return -100
         if (score % 2 != 0) return -50
