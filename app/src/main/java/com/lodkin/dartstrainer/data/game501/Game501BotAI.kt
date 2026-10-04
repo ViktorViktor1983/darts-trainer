@@ -43,9 +43,6 @@ object Game501BotAI {
 
             val result = simulateDart(target, multiplier, current.botLevel)
 
-            // Попытка в дабл = каждый дротик, направленный в дабл-цель.
-            // Попадание в дабл = дротик попал ТОЧНО в целевой дабл-сектор
-            // (независимо от обнуления остатка). Так D% = реальный % попаданий.
             if (target.multiplier == 2) {
                 currentGame = Game501Logic.recordDoublesAttempts(currentGame, 1)
                 if (result.actualMultiplier == 2 && result.actualSector == target.sector) {
@@ -116,29 +113,28 @@ object Game501BotAI {
     }
 
     // ─────────────────────────────────────────────
-    // КАЛИБРОВКА (v9)
-    // D% теперь = % попаданий в ЦЕЛЕВОЙ дабл-сектор, поэтому
-    // p_double ≈ целевой D%. Раньше (v8) p_double=0.97 давал
-    // D%=27% потому что считался другой метрикой (закрытия).
+    // КАЛИБРОВКА (v10)
+    // v9 показал:
+    //   PPR: просел на 2-15 (чем выше ур., тем больше),
+    //        потому что p_double стал реалистичным.
+    //   D%:  попал почти везде, чуть выше на средних.
     //
-    // Целевые D%: ур.1=5-8%, ур.7=18-21%, ур.16=42-47%.
-    // Формула: 0.065 + (lvl-1)*0.02533
-    //   ур.1  → 0.065 (6.5%)
-    //   ур.7  → 0.217 (21.7%)
-    //   ур.16 → 0.445 (44.5%)
-    //
-    // p_triple НЕ менял (v8 показал PPR во всех коридорах).
-    // После снижения p_double ожидаем лёгкое проседание PPR на
-    // верхах (больше дротиков на добивание) — калибруем после теста.
+    // v10:
+    //   p_triple: поднять, круче наклон.
+    //     0.025 + (lvl-1)*0.031
+    //     ур.1=2.5%, ур.7=21%, ур.16=49%
+    //   p_double: чуть сжать, чтобы убрать «+5%» на средних.
+    //     0.065 + (lvl-1)*0.024
+    //     ур.1=6.5%, ур.7=20.9%, ур.16=42.5%
     // ─────────────────────────────────────────────
     private fun getTripleAccuracy(botLevel: Int): Double {
         val lvl = botLevel.coerceIn(1, 16)
-        return 0.02 + (lvl - 1) * 0.0253
+        return 0.025 + (lvl - 1) * 0.031
     }
 
     private fun getDoubleAccuracy(botLevel: Int): Double {
         val lvl = botLevel.coerceIn(1, 16)
-        return (0.065 + (lvl - 1) * 0.02533).coerceAtMost(0.60)
+        return (0.065 + (lvl - 1) * 0.024).coerceAtMost(0.60)
     }
 
     private fun getSingleAccuracy(botLevel: Int): Double {
@@ -199,11 +195,6 @@ object Game501BotAI {
         return SimulatedThrow(0, 0, isHit = false)
     }
 
-    // Выбор цели на ТЕКУЩИЙ дротик.
-    // * Оставшиеся дротики в ходу = 3 - turnDarts.
-    // * Пути для ТЕКУЩЕГО остатка, отфильтрованные по числу дротиков.
-    // * Возвращаем ПЕРВЫЙ бросок первого подходящего пути.
-    // * Если не влезает — подход в S20 (не попытка в дабл).
     private fun chooseTarget(player: Player501): CheckoutThrow {
         val score = player.score
         if (score > 170 || !CheckoutTable.isCheckoutPossible(score)) {
