@@ -4,8 +4,6 @@ import kotlin.random.Random
 
 object Game501BotAI {
 
-    // ВКЛЮЧЕНО: форма дня × серия × усталость.
-    // multiplier = sessionForm × botStreak × fatigueFactor, кламп 0.55…1.45.
     private const val ENABLE_VARIABILITY = true
 
     private val NEIGHBORS: Map<Int, Pair<Int, Int>> = mapOf(
@@ -32,8 +30,6 @@ object Game501BotAI {
             m.coerceIn(0.55, 1.45)
         } else 1.0
 
-        // Давление — только в партиях с человеком. В бот-бот матче
-        // (симулятор) давление не применяется, чтобы не ломать калибровку.
         val pressure = pressureFactor(game, updatedPlayer.teamIndex)
 
         val startLeg = currentGame.currentLegNumber
@@ -99,8 +95,6 @@ object Game501BotAI {
         val isHit: Boolean
     )
 
-    // pressure применяется ТОЛЬКО к дабл-целям (target.multiplier == 2).
-    // На подходы (S, T) давление не действует — бот нервничает только в финише.
     private fun simulateDart(
         target: CheckoutThrow,
         formMultiplier: Double,
@@ -123,25 +117,15 @@ object Game501BotAI {
         }
         return when (target.multiplier) {
             3 -> missFromTriple(target.sector, botLevel)
-            2 -> missFromDouble(target.sector)
-            else -> missFromSingle(target.sector)
+            2 -> missFromDouble(target.sector, botLevel)
+            else -> missFromSingle(target.sector, botLevel)
         }
     }
 
     // ─────────────────────────────────────────────
     // Давление соперника. Работает ТОЛЬКО когда в игре есть человек.
-    // В симметричном бот-бот матче (симулятор) давление отключено,
-    // чтобы не ломать откалиброванные значения D%.
-    //
-    // Градации по минимальному числу дротиков, нужных сопернику
-    // для закрытия его остатка (по CheckoutTable):
-    //   1 дротик  → ×0.78 (сильное давление, соперник в дабле)
-    //   2 дротика → ×0.85 (среднее)
-    //   3 дротика → ×0.92 (лёгкое)
-    //   4+ или нет чекаута → ×1.00 (нет давления)
     // ─────────────────────────────────────────────
     private fun pressureFactor(game: Game501, myTeamIndex: Int): Double {
-        // Только в матчах с человеком.
         if (game.players.all { it.isBot }) return 1.0
 
         val opponent = game.players.firstOrNull { it.teamIndex != myTeamIndex }
@@ -156,8 +140,6 @@ object Game501BotAI {
         }
     }
 
-    // Минимальное число дротиков, чтобы закрыть остаток score.
-    // 1 = чистый дабл/Bull; 2–3 = по таблице чекаутов; 99 = не закрыть.
     private fun dartsToClose(score: Int): Int {
         if (score > 170) return 99
         if (score < 2) return 0
@@ -168,7 +150,7 @@ object Game501BotAI {
     }
 
     // ─────────────────────────────────────────────
-    // КАЛИБРОВКА (v14). PPR 14/16, D% 16/16.
+    // КАЛИБРОВКА. PPR 14/16, D% 16/16.
     // ─────────────────────────────────────────────
     private fun getTripleAccuracy(botLevel: Int): Double {
         val lvl = botLevel.coerceIn(1, 16)
@@ -189,65 +171,158 @@ object Game501BotAI {
         return (t * 1.4 + 0.25).coerceAtMost(0.95)
     }
 
+    // ─────────────────────────────────────────────
+    // Интерполяция между тремя опорными точками:
+    // ур.1 (Новичок) → ур.7 (Разрядник) → ур.16 (Легенда).
+    // a = значение для ур.1, b = для ур.7, c = для ур.16.
+    // Все значения в процентах (0..100).
+    // ─────────────────────────────────────────────
+    private fun interp(a: Double, b: Double, c: Double, lvl: Int): Double {
+        return if (lvl <= 7) {
+            a + (b - a) * (lvl - 1) / 6.0
+        } else {
+            b + (c - b) * (lvl - 7) / 9.0
+        }
+    }
+
+    // ─────────────────────────────────────────────
+    // Промах из T-сектора (например, T20).
+    // Опорные точки для Разрядника (ур.7):
+    //   за борт   0.63%   (от промаха)
+    //   S-целевой 38.5%   (S20)
+    //   S-соседи  30.4%   (сумма S1+S5)
+    //   T-соседи  20.3%   (сумма T1+T5)
+    //   D-соседи  5.1%    (сумма D1+D5)
+    //   D-целевой 5.1%    (D20)
+    // ─────────────────────────────────────────────
     private fun missFromTriple(sector: Int, botLevel: Int): SimulatedThrow {
         val lvl = botLevel.coerceIn(1, 16)
-        val missProb = 0.30 - (lvl - 1) * 0.018
-        val s20Prob = 0.15 + (lvl - 1) * 0.025
+        val pOut = interp(3.0, 0.63, 0.1, lvl)
+        val pSTarget = interp(30.0, 38.5, 45.0, lvl)
+        val pSNeighbor = interp(25.0, 30.4, 30.0, lvl)
+        val pTNeighbor = interp(25.0, 20.3, 12.0, lvl)
+        val pDNeighbor = interp(8.0, 5.1, 4.0, lvl)
+        val pDTarget = interp(9.0, 5.1, 9.0, lvl)
 
-        val r = Random.nextDouble()
-        var acc = missProb
+        val total = pOut + pSTarget + pSNeighbor + pTNeighbor + pDNeighbor + pDTarget
+        val r = Random.nextDouble() * total
+
+        var acc = pOut
         if (r < acc) return SimulatedThrow(0, 0, isHit = false)
-        acc += s20Prob
+        acc += pSTarget
         if (r < acc) return SimulatedThrow(sector, 1, isHit = false)
-
-        val remaining = (1.0 - acc).coerceAtLeast(0.001)
-        val localR = (r - acc) / remaining
-        val (l, rt) = NEIGHBORS[sector] ?: (sector to sector)
-        val n = if (Random.nextBoolean()) l else rt
-        return when {
-            localR < 0.40 -> SimulatedThrow(n, 1, isHit = false)
-            localR < 0.70 -> SimulatedThrow(n, 3, isHit = false)
-            localR < 0.90 -> SimulatedThrow(n, 2, isHit = false)
-            else -> SimulatedThrow(sector, 2, isHit = false)
-        }
-    }
-
-    private fun missFromDouble(sector: Int): SimulatedThrow {
-        val r = Random.nextDouble()
-        if (r < 0.50) return SimulatedThrow(0, 0, isHit = false)
-        if (r < 0.75) return SimulatedThrow(sector, 1, isHit = false)
-        if (r < 0.90) {
-            val (l, rt) = NEIGHBORS[sector] ?: (sector to sector)
-            val n = if (Random.nextBoolean()) l else rt
-            return SimulatedThrow(n, 2, isHit = false)
-        }
-        val (l, rt) = NEIGHBORS[sector] ?: (sector to sector)
-        val n = if (Random.nextBoolean()) l else rt
-        return SimulatedThrow(n, 1, isHit = false)
-    }
-
-    private fun missFromSingle(sector: Int): SimulatedThrow {
-        val r = Random.nextDouble()
-        if (r < 0.35) {
+        acc += pSNeighbor
+        if (r < acc) {
             val (l, rt) = NEIGHBORS[sector] ?: (sector to sector)
             val n = if (Random.nextBoolean()) l else rt
             return SimulatedThrow(n, 1, isHit = false)
         }
-        if (r < 0.70) {
+        acc += pTNeighbor
+        if (r < acc) {
             val (l, rt) = NEIGHBORS[sector] ?: (sector to sector)
             val n = if (Random.nextBoolean()) l else rt
             return SimulatedThrow(n, 3, isHit = false)
         }
-        if (r < 0.90) return SimulatedThrow(sector, 2, isHit = false)
+        acc += pDNeighbor
+        if (r < acc) {
+            val (l, rt) = NEIGHBORS[sector] ?: (sector to sector)
+            val n = if (Random.nextBoolean()) l else rt
+            return SimulatedThrow(n, 2, isHit = false)
+        }
+        return SimulatedThrow(sector, 2, isHit = false)
+    }
+
+    // ─────────────────────────────────────────────
+    // Промах из S-сектора (например, S20).
+    // Опорные точки для Разрядника (ур.7):
+    //   за борт    2.1%    (от промаха)
+    //   T-целевой 29.8%    (T20)
+    //   S-соседи  42.6%    (сумма S1+S5)
+    //   D-целевой 17.0%    (D20)
+    //   T-соседи   4.3%    (сумма T1+T5)
+    //   D-соседи   4.3%    (сумма D1+D5)
+    // ─────────────────────────────────────────────
+    private fun missFromSingle(sector: Int, botLevel: Int): SimulatedThrow {
+        val lvl = botLevel.coerceIn(1, 16)
+        val pOut = interp(3.0, 2.1, 0.5, lvl)
+        val pTTarget = interp(20.0, 29.8, 40.0, lvl)
+        val pSNeighbor = interp(40.0, 42.6, 35.0, lvl)
+        val pDTarget = interp(15.0, 17.0, 15.0, lvl)
+        val pTNeighbor = interp(10.0, 4.3, 5.0, lvl)
+        val pDNeighbor = interp(12.0, 4.3, 4.5, lvl)
+
+        val total = pOut + pTTarget + pSNeighbor + pDTarget + pTNeighbor + pDNeighbor
+        val r = Random.nextDouble() * total
+
+        var acc = pOut
+        if (r < acc) return SimulatedThrow(0, 0, isHit = false)
+        acc += pTTarget
+        if (r < acc) return SimulatedThrow(sector, 3, isHit = false)
+        acc += pSNeighbor
+        if (r < acc) {
+            val (l, rt) = NEIGHBORS[sector] ?: (sector to sector)
+            val n = if (Random.nextBoolean()) l else rt
+            return SimulatedThrow(n, 1, isHit = false)
+        }
+        acc += pDTarget
+        if (r < acc) return SimulatedThrow(sector, 2, isHit = false)
+        acc += pTNeighbor
+        if (r < acc) {
+            val (l, rt) = NEIGHBORS[sector] ?: (sector to sector)
+            val n = if (Random.nextBoolean()) l else rt
+            return SimulatedThrow(n, 3, isHit = false)
+        }
+        acc += pDNeighbor
+        if (r < acc) {
+            val (l, rt) = NEIGHBORS[sector] ?: (sector to sector)
+            val n = if (Random.nextBoolean()) l else rt
+            return SimulatedThrow(n, 2, isHit = false)
+        }
         return SimulatedThrow(0, 0, isHit = false)
     }
 
     // ─────────────────────────────────────────────
-    // Выбор цели на текущий дротик.
-    // 1. Если можно закрыть — берём путь с любимым даблом.
-    // 2. Если остался ОДИН дротик и закрыть нельзя — setup shot.
-    // 3. Иначе — S20.
+    // Промах из D-сектора (например, D20).
+    // Опорные точки для Разрядника (ур.7):
+    //   за борт   38.0%    (от промаха)
+    //   S-целевой 36.2%    (S20)
+    //   D-соседи  12.3%    (сумма D1+D5)
+    //   S-соседи  12.3%    (сумма S1+S5)
+    //   T-соседи   1.2%    (сумма T1+T5)
     // ─────────────────────────────────────────────
+    private fun missFromDouble(sector: Int, botLevel: Int): SimulatedThrow {
+        val lvl = botLevel.coerceIn(1, 16)
+        val pOut = interp(55.0, 38.0, 20.0, lvl)
+        val pSTarget = interp(20.0, 36.2, 45.0, lvl)
+        val pDNeighbor = interp(10.0, 12.3, 15.0, lvl)
+        val pSNeighbor = interp(10.0, 12.3, 15.0, lvl)
+        val pTNeighbor = interp(5.0, 1.2, 5.0, lvl)
+
+        val total = pOut + pSTarget + pDNeighbor + pSNeighbor + pTNeighbor
+        val r = Random.nextDouble() * total
+
+        var acc = pOut
+        if (r < acc) return SimulatedThrow(0, 0, isHit = false)
+        acc += pSTarget
+        if (r < acc) return SimulatedThrow(sector, 1, isHit = false)
+        acc += pDNeighbor
+        if (r < acc) {
+            val (l, rt) = NEIGHBORS[sector] ?: (sector to sector)
+            val n = if (Random.nextBoolean()) l else rt
+            return SimulatedThrow(n, 2, isHit = false)
+        }
+        acc += pSNeighbor
+        if (r < acc) {
+            val (l, rt) = NEIGHBORS[sector] ?: (sector to sector)
+            val n = if (Random.nextBoolean()) l else rt
+            return SimulatedThrow(n, 1, isHit = false)
+        }
+        // T-сосед
+        val (l, rt) = NEIGHBORS[sector] ?: (sector to sector)
+        val n = if (Random.nextBoolean()) l else rt
+        return SimulatedThrow(n, 3, isHit = false)
+    }
+
     private fun chooseTarget(player: Player501): CheckoutThrow {
         val score = player.score
         if (score > 170 || !CheckoutTable.isCheckoutPossible(score)) {
@@ -279,10 +354,6 @@ object Game501BotAI {
         return CheckoutThrow(20, 1)
     }
 
-    // ─────────────────────────────────────────────
-    // Setup shot: выбор броска, оставляющего лучший остаток.
-    // Без ограничения по уровню — риск уже заложен в p_triple.
-    // ─────────────────────────────────────────────
     private fun chooseSetupTarget(score: Int, botLevel: Int): CheckoutThrow {
         val favDoubles = BotPreferences.favouriteDoubles(botLevel.coerceIn(1, 16))
 
