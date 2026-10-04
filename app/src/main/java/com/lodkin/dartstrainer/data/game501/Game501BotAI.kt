@@ -6,29 +6,28 @@ object Game501BotAI {
 
     private const val ENABLE_VARIABILITY = true
 
-    // Точность в утроение по уровням (1..16). Прямая таблица.
-    // Значения подобраны так, чтобы PPR попадал в середину ± 1.
+    // Точность в утроение. Прямая таблица по уровням 1..16.
     private val TRIPLE_ACCURACY = doubleArrayOf(
-        0.0,    // индекс 0 — пустой
-        0.010,  // 1  Новичок
+        0.0,    // 0 — пустой
+        0.007,  // 1  Новичок
         0.042,  // 2  Ученик
-        0.073,  // 3  Любитель
-        0.104,  // 4  Уверенный
-        0.135,  // 5  Опытный
-        0.166,  // 6  Практик
+        0.080,  // 3  Любитель
+        0.114,  // 4  Уверенный
+        0.148,  // 5  Опытный
+        0.185,  // 6  Практик
         0.198,  // 7  Разрядник
         0.230,  // 8  Турнирный
         0.262,  // 9  Сильный
-        0.300,  // 10 Крепкий
-        0.340,  // 11 КМС
-        0.385,  // 12 Почти мастер
-        0.435,  // 13 Мастер
-        0.485,  // 14 Чемпион
-        0.535,  // 15 Профи
+        0.305,  // 10 Крепкий
+        0.348,  // 11 КМС
+        0.405,  // 12 Почти мастер
+        0.455,  // 13 Мастер
+        0.498,  // 14 Чемпион
+        0.522,  // 15 Профи
         0.590   // 16 Легенда
     )
 
-    // Точность в удвоение по уровням.
+    // Точность в удвоение. Прямая таблица по уровням 1..16.
     private val DOUBLE_ACCURACY = doubleArrayOf(
         0.0,      // 0
         0.065,    // 1
@@ -42,11 +41,11 @@ object Game501BotAI {
         0.229,    // 9
         0.250,    // 10
         0.285,    // 11
-        0.305,    // 12
+        0.318,    // 12
         0.350,    // 13
         0.367,    // 14
-        0.400,    // 15
-        0.450     // 16
+        0.383,    // 15
+        0.438     // 16
     )
 
     private val NEIGHBORS: Map<Int, Pair<Int, Int>> = mapOf(
@@ -212,8 +211,6 @@ object Game501BotAI {
         }
     }
 
-    // Промах из T-сектора.
-    // Значения для ур.1 / ур.7 / ур.16 (от промаха).
     private fun missFromTriple(sector: Int, botLevel: Int): SimulatedThrow {
         val lvl = botLevel.coerceIn(1, 16)
         val pOut = interp(10.0, 0.63, 0.1, lvl)
@@ -251,7 +248,6 @@ object Game501BotAI {
         return SimulatedThrow(sector, 2, isHit = false)
     }
 
-    // Промах из S-сектора.
     private fun missFromSingle(sector: Int, botLevel: Int): SimulatedThrow {
         val lvl = botLevel.coerceIn(1, 16)
         val pOut = interp(8.0, 2.1, 0.5, lvl)
@@ -291,7 +287,6 @@ object Game501BotAI {
         return SimulatedThrow(0, 0, isHit = false)
     }
 
-    // Промах из D-сектора.
     private fun missFromDouble(sector: Int, botLevel: Int): SimulatedThrow {
         val lvl = botLevel.coerceIn(1, 16)
         val pOut = interp(60.0, 38.0, 20.0, lvl)
