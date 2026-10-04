@@ -4,7 +4,13 @@ import kotlin.random.Random
 
 object Game501BotAI {
 
-    private const val ENABLE_VARIABILITY = false
+    // ВКЛЮЧЕНО: форма дня × серия × усталость.
+    // multiplier = sessionForm × botStreak × fatigueFactor, кламп 0.55…1.45.
+    // * sessionForm  — задаётся при старте матча (шаг 6, SetupScreen).
+    // * botStreak    — updateStreak, ±10–20% раз в 1–2 хода.
+    // * fatigueFactor — падает после 90 мин игры (нужен реальный sessionStartTime).
+    // Средний multiplier ≈ 1.0, калибровка сохраняется.
+    private const val ENABLE_VARIABILITY = true
 
     private val NEIGHBORS: Map<Int, Pair<Int, Int>> = mapOf(
         20 to (5 to 1), 1 to (20 to 18), 18 to (1 to 4), 4 to (18 to 13),
@@ -24,7 +30,10 @@ object Game501BotAI {
         var currentGame = game.copy(players = playersWithStreak)
 
         val multiplier = if (ENABLE_VARIABILITY) {
-            game.sessionForm * updatedPlayer.botStreak * fatigueFactor(game.sessionStartTime)
+            val m = game.sessionForm *
+                    updatedPlayer.botStreak *
+                    fatigueFactor(game.sessionStartTime)
+            m.coerceIn(0.55, 1.45)
         } else 1.0
 
         val startLeg = currentGame.currentLegNumber
@@ -113,8 +122,7 @@ object Game501BotAI {
     }
 
     // ─────────────────────────────────────────────
-    // КАЛИБРОВКА (v14)
-    // PPR 14/16 в цели, D% 16/16. Формулы зафиксированы.
+    // КАЛИБРОВКА (v14). PPR 14/16, D% 16/16.
     // ─────────────────────────────────────────────
     private fun getTripleAccuracy(botLevel: Int): Double {
         val lvl = botLevel.coerceIn(1, 16)
@@ -188,13 +196,6 @@ object Game501BotAI {
         return SimulatedThrow(0, 0, isHit = false)
     }
 
-    // Выбор цели на ТЕКУЩИЙ дротик.
-    // * Оставшиеся дротики в ходу = 3 - turnDarts.
-    // * Пути для ТЕКУЩЕГО остатка, отфильтрованные по числу дротиков.
-    // * Сортировка: пути с любимым даблом бота — вперёд
-    //   (приоритет из BotPreferences.doublePriority).
-    // * Возвращаем ПЕРВЫЙ бросок первого подходящего пути.
-    // * Если не влезает — подход в S20 (не попытка в дабл).
     private fun chooseTarget(player: Player501): CheckoutThrow {
         val score = player.score
         if (score > 170 || !CheckoutTable.isCheckoutPossible(score)) {
@@ -211,10 +212,6 @@ object Game501BotAI {
             return CheckoutThrow(20, 1)
         }
 
-        // Приоритизация по любимым даблам.
-        // Последний бросок пути — финишный, обычно дабл. Если он
-        // любимый — приоритет высокий. Стабильная сортировка сохранит
-        // порядок путей из таблицы при равных приоритетах.
         val sorted = viable.sortedBy { path ->
             val last = path.throws.lastOrNull()
             if (last != null && last.multiplier == 2) {
@@ -223,7 +220,6 @@ object Game501BotAI {
                 Int.MAX_VALUE
             }
         }
-
         return sorted.first().throws.first()
     }
 
