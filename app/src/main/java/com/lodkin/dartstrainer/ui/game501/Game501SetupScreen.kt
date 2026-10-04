@@ -54,6 +54,13 @@ data class Slot501(
     val bot: CricketBot
 )
 
+// Человекочитаемое имя режима закрытия
+private fun OutMode.displayName(): String = when (this) {
+    OutMode.DOUBLE_IN_OUT -> "Double In / Double Out"
+    OutMode.DOUBLE_OUT -> "Double Out"
+    OutMode.STRAIGHT_OUT -> "Без даблов"
+}
+
 @Composable
 fun Game501SetupScreen(
     playerName: String,
@@ -238,8 +245,14 @@ fun Game501SetupScreen(
             Text("ИГРА", color = Accent, fontSize = 13.sp, fontWeight = FontWeight.Medium,
                 letterSpacing = 3.sp, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
             Spacer(Modifier.height(10.dp))
-            GameTypeSelector(currentType = gameType, currentOutMode = outMode,
-                onTypeChange = { changeGameType(it) }, onOutModeChange = { changeOutMode(it) })
+            GameTypeDropdown(selected = gameType, onSelect = { changeGameType(it) })
+
+            Spacer(Modifier.height(16.dp))
+
+            Text("ЗАКРЫТИЕ", color = Accent, fontSize = 13.sp, fontWeight = FontWeight.Medium,
+                letterSpacing = 3.sp, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
+            Spacer(Modifier.height(10.dp))
+            OutModeDropdown(selected = outMode, onSelect = { changeOutMode(it) })
 
             Spacer(Modifier.height(24.dp))
 
@@ -548,6 +561,74 @@ fun Game501SetupScreen(
 }
 
 @Composable
+private fun GameTypeDropdown(selected: GameType, onSelect: (GameType) -> Unit) {
+    var expanded by remember { mutableStateOf(false) }
+    Box(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.fillMaxWidth().height(56.dp).clip(RoundedCornerShape(12.dp))
+                .background(TileBg)
+                .clickable { expanded = true }.padding(horizontal = 18.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(selected.label, color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold,
+                modifier = Modifier.weight(1f))
+            Text("▼", color = Accent, fontSize = 12.sp)
+        }
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+            modifier = Modifier.background(DarkBg)
+        ) {
+            GameType.values().forEach { type ->
+                DropdownMenuItem(
+                    text = {
+                        Text(type.label,
+                            color = if (type == selected) Accent else Color.White,
+                            fontSize = 16.sp,
+                            fontWeight = if (type == selected) FontWeight.Bold else FontWeight.Normal)
+                    },
+                    onClick = { onSelect(type); expanded = false }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun OutModeDropdown(selected: OutMode, onSelect: (OutMode) -> Unit) {
+    var expanded by remember { mutableStateOf(false) }
+    Box(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.fillMaxWidth().height(56.dp).clip(RoundedCornerShape(12.dp))
+                .background(TileBg)
+                .clickable { expanded = true }.padding(horizontal = 18.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(selected.displayName(), color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Medium,
+                modifier = Modifier.weight(1f))
+            Text("▼", color = Accent, fontSize = 12.sp)
+        }
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+            modifier = Modifier.background(DarkBg)
+        ) {
+            OutMode.values().forEach { mode ->
+                DropdownMenuItem(
+                    text = {
+                        Text(mode.displayName(),
+                            color = if (mode == selected) Accent else Color.White,
+                            fontSize = 15.sp,
+                            fontWeight = if (mode == selected) FontWeight.Bold else FontWeight.Normal)
+                    },
+                    onClick = { onSelect(mode); expanded = false }
+                )
+            }
+        }
+    }
+}
+
+@Composable
 private fun SimResultRow(label: String, value: String) {
     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
         Text(label, color = Color.White, fontSize = 14.sp)
@@ -584,61 +665,6 @@ private fun generateBotBullResult(bot: CricketBot): Int {
         r < pRed -> 2
         r < pRed + pGreen -> 1
         else -> 0
-    }
-}
-
-@Composable
-private fun GameTypeSelector(
-    currentType: GameType, currentOutMode: OutMode,
-    onTypeChange: (GameType) -> Unit, onOutModeChange: (OutMode) -> Unit
-) {
-    Column {
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            GameTypeButton("501", currentType == GameType.X501, { onTypeChange(GameType.X501) }, Modifier.weight(1f))
-            OutModeDropdown(selected = if (currentType == GameType.X501) currentOutMode else OutMode.DOUBLE_OUT,
-                enabled = currentType == GameType.X501, onSelect = { onOutModeChange(it) }, modifier = Modifier.weight(1.4f))
-        }
-        Spacer(Modifier.height(8.dp))
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            GameTypeButton("301", currentType == GameType.X301, { onTypeChange(GameType.X301) }, Modifier.weight(1f))
-            OutModeDropdown(selected = if (currentType == GameType.X301) currentOutMode else OutMode.DOUBLE_OUT,
-                enabled = currentType == GameType.X301, onSelect = { onOutModeChange(it) }, modifier = Modifier.weight(1.4f))
-        }
-    }
-}
-
-@Composable
-private fun GameTypeButton(label: String, selected: Boolean, onClick: () -> Unit, modifier: Modifier) {
-    Box(
-        modifier = modifier.height(56.dp).clip(RoundedCornerShape(12.dp))
-            .background(if (selected) Accent else TileBgDark).clickable { onClick() },
-        contentAlignment = Alignment.Center
-    ) { Text(label, color = if (selected) Color(0xFF121212) else Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold) }
-}
-
-@Composable
-private fun OutModeDropdown(selected: OutMode, enabled: Boolean, onSelect: (OutMode) -> Unit, modifier: Modifier) {
-    var expanded by remember { mutableStateOf(false) }
-    Box(modifier = modifier) {
-        Row(
-            modifier = Modifier.fillMaxWidth().height(56.dp).clip(RoundedCornerShape(12.dp))
-                .background(if (enabled) TileBg else TileBgDark.copy(alpha = 0.5f))
-                .clickable(enabled = enabled) { expanded = true }.padding(horizontal = 14.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(selected.label, color = if (enabled) Color.White else Color.White.copy(alpha = 0.4f),
-                fontSize = 14.sp, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
-            Text("▼", color = if (enabled) Accent else Accent.copy(alpha = 0.4f), fontSize = 10.sp)
-        }
-        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }, modifier = Modifier.background(DarkBg)) {
-            OutMode.values().forEach { mode ->
-                DropdownMenuItem(
-                    text = { Text(mode.label, color = if (mode == selected) Accent else Color.White,
-                        fontWeight = if (mode == selected) FontWeight.Bold else FontWeight.Normal) },
-                    onClick = { onSelect(mode); expanded = false }
-                )
-            }
-        }
     }
 }
 
