@@ -98,16 +98,22 @@ object Game501Logic {
         return applyCategory(p, gained)
     }
 
-    // countDoubleAttempt = true (default) — считать попытку в double при попадании
-    // в double-сектор. Используется для ручной игры.
+    // countDoubleAttempt = true (default) — считать попытку в дабл при попадании
+    // в дабл-сектор. Для ручной игры.
     // countDoubleAttempt = false — для ботов: попытки считаются ТОЛЬКО когда
-    // бот целился в double (это делает Game501BotAI через recordDoublesAttempts).
-    // Иначе фантомные попадания в дабл-соседей раздувают знаменатель D%.
+    // бот целился в дабл (делает Game501BotAI через recordDoublesAttempts).
+    //
+    // countDoubleHit = true (default) — считать "попадание в дабл" при
+    // обнулении остатка. Для ручной игры.
+    // countDoubleHit = false — для ботов: попадание считает Game501BotAI
+    // через recordDoublesHit (когда дротик попал в ЦЕЛЕВОЙ дабл-сектор,
+    // независимо от закрытия). Так D% = % попаданий в дабл-сектор.
     fun applyThrow(
         game: Game501,
         sector: Int,
         multiplier: ThrowMultiplier,
-        countDoubleAttempt: Boolean = true
+        countDoubleAttempt: Boolean = true,
+        countDoubleHit: Boolean = true
     ): Game501 {
         if (game.isFinished) return game
         val playerIndex = game.currentPlayerIndex
@@ -133,6 +139,7 @@ object Game501Logic {
 
         val updatedPlayers = game.players.toMutableList()
         val countAttempt = isDouble && countDoubleAttempt
+        val countHit = isDouble && newScore == 0 && countDoubleHit
         var up = player.copy(
             score = newScore,
             turnScore = player.turnScore + points,
@@ -142,9 +149,9 @@ object Game501Logic {
             matchDarts = player.matchDarts + 1,
             matchScoreGained = player.matchScoreGained + points,
             legDoublesAttempted = if (countAttempt) player.legDoublesAttempted + 1 else player.legDoublesAttempted,
-            legDoublesHit = if (isDouble && newScore == 0) player.legDoublesHit + 1 else player.legDoublesHit,
+            legDoublesHit = if (countHit) player.legDoublesHit + 1 else player.legDoublesHit,
             matchDoublesAttempted = if (countAttempt) player.matchDoublesAttempted + 1 else player.matchDoublesAttempted,
-            matchDoublesHit = if (isDouble && newScore == 0) player.matchDoublesHit + 1 else player.matchDoublesHit
+            matchDoublesHit = if (countHit) player.matchDoublesHit + 1 else player.matchDoublesHit
         )
         if (up.first9Darts < 9) {
             up = up.copy(
@@ -255,6 +262,21 @@ object Game501Logic {
         updated[idx] = p.copy(
             legDoublesAttempted = p.legDoublesAttempted + attempts,
             matchDoublesAttempted = p.matchDoublesAttempted + attempts
+        )
+        return game.copy(players = updated)
+    }
+
+    // Регистрирует попадание в дабл-сектор (для ботов: попадание в ЦЕЛЕВОЙ
+    // дабл-сектор, независимо от того, обнулился ли остаток).
+    fun recordDoublesHit(game: Game501, hits: Int): Game501 {
+        if (hits <= 0) return game
+        val idx = game.currentPlayerIndex
+        if (idx !in game.players.indices) return game
+        val p = game.players[idx]
+        val updated = game.players.toMutableList()
+        updated[idx] = p.copy(
+            legDoublesHit = p.legDoublesHit + hits,
+            matchDoublesHit = p.matchDoublesHit + hits
         )
         return game.copy(players = updated)
     }
