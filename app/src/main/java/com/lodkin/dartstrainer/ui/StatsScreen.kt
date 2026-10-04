@@ -30,6 +30,8 @@ import com.lodkin.dartstrainer.theme.GoldAccent
 import com.lodkin.dartstrainer.theme.TileBg
 import com.lodkin.dartstrainer.theme.TileBgDark
 import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
+import java.util.Date
 import java.util.Locale
 
 // ─────────────────────────────────────────────
@@ -45,7 +47,7 @@ private enum class StatPeriod(val label: String, val daysBack: Long?) {
 }
 
 // ─────────────────────────────────────────────
-// Агрегат статистики крикета (только по игрокам-людям)
+// Агрегат крикета
 // ─────────────────────────────────────────────
 private data class CricketAggregate(
     val legs: Int = 0,
@@ -61,18 +63,53 @@ private data class CricketAggregate(
 )
 
 // ─────────────────────────────────────────────
-// Агрегат статистики x01 (только по игрокам-людям)
+// Агрегат x01
 // ─────────────────────────────────────────────
 private data class Game501Aggregate(
-    val matches: Int = 0,
     val legs: Int = 0,
     val darts: Int = 0,
     val doublesHit: Int = 0,
     val doublesAttempted: Int = 0,
     val wins: Int = 0,
+    val totalMatches: Int = 0,
     val avgPpr: Double = 0.0,
-    val bestPpr: Double = 0.0,
-    val avgDartsPerLeg: Double = 0.0
+    val bestMatchPpr: Double = 0.0,
+    val bestLegPpr: Double = 0.0,
+    val avgDartsPerLeg: Double = 0.0,
+    // Категории сумм — в среднем за лег
+    val avgCount180: Double = 0.0,
+    val avgCount170plus: Double = 0.0,
+    val avgCount130plus: Double = 0.0,
+    val avgCount90plus: Double = 0.0,
+    val avgCount57plus: Double = 0.0,
+    val avgCount57minus: Double = 0.0,
+    // Наборы
+    val first9: Double = 0.0,
+    val nonClose: Double = 0.0,
+    // Серии
+    val currentStreak: Int = 0,
+    val maxStreak: Int = 0,
+    // Тренд
+    val trend: Double = 0.0,
+    val hasTrend: Boolean = false,
+    // По ботам
+    val byBot: List<BotStat> = emptyList(),
+    // Лучшие 5 матчей
+    val topMatches: List<MatchInfo> = emptyList()
+)
+
+private data class BotStat(
+    val botName: String,
+    val matches: Int,
+    val ppr: Double,
+    val dblPct: Double
+)
+
+private data class MatchInfo(
+    val dateMillis: Long,
+    val ppr: Double,
+    val opponent: String,
+    val dartsPerLeg: Double
 )
 
 // ─────────────────────────────────────────────
@@ -89,7 +126,7 @@ fun StatsScreen(
         Game501Repository(Game501Database.get(context).game501Dao())
     }
 
-    var selectedTab by remember { mutableStateOf(0) }   // 0 = Крикет, 1 = 501
+    var selectedTab by remember { mutableStateOf(0) }
     var period by remember { mutableStateOf(StatPeriod.ALL) }
     var games by remember { mutableStateOf<List<CricketGameEntity>>(emptyList()) }
     var games501 by remember { mutableStateOf<List<Game501Entity>>(emptyList()) }
@@ -108,7 +145,6 @@ fun StatsScreen(
     }
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-        // Верхняя панель
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(
                 modifier = Modifier
@@ -120,17 +156,11 @@ fun StatsScreen(
                 Text("← Назад", color = Accent, fontSize = 15.sp)
             }
             Spacer(Modifier.width(12.dp))
-            Text(
-                "Статистика",
-                fontSize = 22.sp,
-                fontWeight = FontWeight.Bold,
-                color = Color.White
-            )
+            Text("Статистика", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Color.White)
         }
 
         Spacer(Modifier.height(16.dp))
 
-        // Табы
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -196,7 +226,7 @@ fun StatsScreen(
 }
 
 // ─────────────────────────────────────────────
-// Контент вкладки Крикет
+// Контент вкладки Крикет (без изменений)
 // ─────────────────────────────────────────────
 @Composable
 private fun CricketTabContent(
@@ -207,13 +237,8 @@ private fun CricketTabContent(
 ) {
     val aggregate = remember(games) { computeAggregate(games) }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-    ) {
+    Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
         PeriodSelector(period = period, onPeriodChange = onPeriodChange)
-
         Spacer(Modifier.height(16.dp))
 
         if (aggregate.legs == 0) {
@@ -228,73 +253,37 @@ private fun CricketTabContent(
             StatRowCard("Лучший MPR за матч", "%.2f".format(Locale.US, aggregate.bestMpr))
 
             Spacer(Modifier.height(20.dp))
-
             SectionTitle("ТОЧНОСТЬ")
             Spacer(Modifier.height(8.dp))
-            StatRowCard(
-                label = "Промахи",
-                value = percentLabel(aggregate.misses, aggregate.darts),
-                sub = "${aggregate.misses} из ${aggregate.darts} дротиков"
-            )
+            StatRowCard("Промахи", percentLabel(aggregate.misses, aggregate.darts),
+                "${aggregate.misses} из ${aggregate.darts} дротиков")
+            Spacer(Modifier.height(6.dp))
+            StatRowCard("Утроения", percentLabel(aggregate.triples, aggregate.darts),
+                "${aggregate.triples} утроений")
             Spacer(Modifier.height(6.dp))
             StatRowCard(
-                label = "Утроения",
-                value = percentLabel(aggregate.triples, aggregate.darts),
-                sub = "${aggregate.triples} утроений"
-            )
-            Spacer(Modifier.height(6.dp))
-            StatRowCard(
-                label = "Точность Bull",
-                value = if (aggregate.bullAttempts > 0)
-                    percentLabel(aggregate.bullHits, aggregate.bullAttempts)
-                else "—",
-                sub = if (aggregate.bullAttempts > 0)
-                    "${aggregate.bullHits} из ${aggregate.bullAttempts} прицельных"
+                "Точность Bull",
+                if (aggregate.bullAttempts > 0) percentLabel(aggregate.bullHits, aggregate.bullAttempts) else "—",
+                if (aggregate.bullAttempts > 0) "${aggregate.bullHits} из ${aggregate.bullAttempts} прицельных"
                 else "Нет прицельных бросков"
             )
 
             Spacer(Modifier.height(20.dp))
-
             SectionTitle("ДОСТИЖЕНИЯ")
             Spacer(Modifier.height(8.dp))
-            StatRowCard(
-                label = "Идеальные подходы (8–9)",
-                value = "${aggregate.perfectRounds} раз",
-                sub = "в ${aggregate.legs} легах"
-            )
+            StatRowCard("Идеальные подходы (8–9)", "${aggregate.perfectRounds} раз", "в ${aggregate.legs} легах")
             Spacer(Modifier.height(6.dp))
-            StatRowCard(
-                label = "Сильные подходы (6–7)",
-                value = "${aggregate.strongRounds} раз",
-                sub = "в ${aggregate.legs} легах"
-            )
+            StatRowCard("Сильные подходы (6–7)", "${aggregate.strongRounds} раз", "в ${aggregate.legs} легах")
 
             Spacer(Modifier.height(24.dp))
-
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(14.dp))
-                    .background(TileBgDark)
-                    .clickable { onResetClick() }
-                    .padding(vertical = 14.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    "Сбросить статистику",
-                    color = ErrorColor,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Medium
-                )
-            }
-
+            ResetButton(onResetClick)
             Spacer(Modifier.height(24.dp))
         }
     }
 }
 
 // ─────────────────────────────────────────────
-// Контент вкладки 501
+// Контент вкладки 501 (НОВЫЙ)
 // ─────────────────────────────────────────────
 @Composable
 private fun Game501TabContent(
@@ -303,122 +292,190 @@ private fun Game501TabContent(
     onPeriodChange: (StatPeriod) -> Unit,
     onResetClick: () -> Unit
 ) {
-    val aggregate = remember(games) { computeAggregate501(games) }
+    val agg = remember(games) { computeAggregate501(games) }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-    ) {
+    Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
         PeriodSelector(period = period, onPeriodChange = onPeriodChange)
-
         Spacer(Modifier.height(16.dp))
 
-        if (aggregate.matches == 0) {
+        if (agg.totalMatches == 0) {
             EmptyStats()
-        } else {
-            // ── ОСНОВНЫЕ ──
-            SectionTitle("ОСНОВНЫЕ")
-            Spacer(Modifier.height(8.dp))
-            StatRowCard("Матчей сыграно", aggregate.matches.toString())
-            Spacer(Modifier.height(6.dp))
-            StatRowCard("Легов сыграно", aggregate.legs.toString())
-            Spacer(Modifier.height(6.dp))
-            StatRowCard(
-                "Средний набор (PPR)",
-                "%.2f".format(Locale.US, aggregate.avgPpr)
-            )
-            Spacer(Modifier.height(6.dp))
-            StatRowCard(
-                "Лучший PPR за матч",
-                "%.2f".format(Locale.US, aggregate.bestPpr)
-            )
-
-            Spacer(Modifier.height(20.dp))
-
-            // ── ТОЧНОСТЬ ──
-            SectionTitle("ТОЧНОСТЬ")
-            Spacer(Modifier.height(8.dp))
-            StatRowCard(
-                label = "Точность удвоений",
-                value = if (aggregate.doublesAttempted > 0)
-                    percentLabel(aggregate.doublesHit, aggregate.doublesAttempted)
-                else "—",
-                sub = if (aggregate.doublesAttempted > 0)
-                    "${aggregate.doublesHit} из ${aggregate.doublesAttempted} попыток"
-                else "Нет попыток в удвоение"
-            )
-            Spacer(Modifier.height(6.dp))
-            StatRowCard(
-                label = "Средний дротиков на лег",
-                value = if (aggregate.avgDartsPerLeg > 0)
-                    "%.1f".format(Locale.US, aggregate.avgDartsPerLeg)
-                else "—",
-                sub = "всего ${aggregate.darts} дротиков"
-            )
-
-            Spacer(Modifier.height(20.dp))
-
-            // ── ДОСТИЖЕНИЯ ──
-            SectionTitle("ДОСТИЖЕНИЯ")
-            Spacer(Modifier.height(8.dp))
-            StatRowCard(
-                label = "Побед в матчах",
-                value = "${aggregate.wins} из ${aggregate.matches}",
-                sub = if (aggregate.matches > 0)
-                    "%.0f%% побед".format(
-                        Locale.US,
-                        aggregate.wins.toDouble() / aggregate.matches * 100.0
-                    )
-                else null
-            )
-
-            Spacer(Modifier.height(24.dp))
-
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(14.dp))
-                    .background(TileBgDark)
-                    .clickable { onResetClick() }
-                    .padding(vertical = 14.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    "Сбросить статистику",
-                    color = ErrorColor,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Medium
-                )
-            }
-
-            Spacer(Modifier.height(24.dp))
+            return@Column
         }
+
+        // ── ОСНОВНЫЕ ──
+        SectionTitle("ОСНОВНЫЕ")
+        Spacer(Modifier.height(8.dp))
+        StatRowCard("Средний набор (PPR)", "%.2f".format(Locale.US, agg.avgPpr))
+        Spacer(Modifier.height(6.dp))
+        StatRowCard(
+            "Точность удвоений",
+            if (agg.doublesAttempted > 0) percentLabel(agg.doublesHit, agg.doublesAttempted) else "—",
+            "${agg.doublesHit} из ${agg.doublesAttempted} попыток"
+        )
+        Spacer(Modifier.height(6.dp))
+        StatRowCard(
+            "Средний дротиков на лег",
+            if (agg.avgDartsPerLeg > 0) "%.1f".format(Locale.US, agg.avgDartsPerLeg) else "—",
+            "всего ${agg.darts} дротиков"
+        )
+
+        Spacer(Modifier.height(20.dp))
+
+        // ── КАТЕГОРИИ СУММ (среднее за лег) ──
+        SectionTitle("КАТЕГОРИИ СУММ (в среднем за лег)")
+        Spacer(Modifier.height(8.dp))
+        StatRowCard("180", "%.2f".format(Locale.US, agg.avgCount180))
+        Spacer(Modifier.height(6.dp))
+        StatRowCard("170+", "%.2f".format(Locale.US, agg.avgCount170plus))
+        Spacer(Modifier.height(6.dp))
+        StatRowCard("130+", "%.2f".format(Locale.US, agg.avgCount130plus))
+        Spacer(Modifier.height(6.dp))
+        StatRowCard("90+", "%.2f".format(Locale.US, agg.avgCount90plus))
+        Spacer(Modifier.height(6.dp))
+        StatRowCard("57+", "%.2f".format(Locale.US, agg.avgCount57plus))
+        Spacer(Modifier.height(6.dp))
+        StatRowCard("57−", "%.2f".format(Locale.US, agg.avgCount57minus))
+
+        Spacer(Modifier.height(20.dp))
+
+        // ── НАБОРЫ ──
+        SectionTitle("НАБОРЫ")
+        Spacer(Modifier.height(8.dp))
+        StatRowCard(
+            "Первые 9 дротиков",
+            if (agg.first9 > 0) "%.2f".format(Locale.US, agg.first9) else "—",
+            "средний набор за первые 3 подхода"
+        )
+        Spacer(Modifier.height(6.dp))
+        StatRowCard(
+            "Набор без закрытия (>170)",
+            if (agg.nonClose > 0) "%.2f".format(Locale.US, agg.nonClose) else "—",
+            "средний набор на подходе, когда остаток >170"
+        )
+
+        Spacer(Modifier.height(20.dp))
+
+        // ── ПО УРОВНЯМ БОТОВ ──
+        if (agg.byBot.isNotEmpty()) {
+            SectionTitle("ПО УРОВНЯМ БОТОВ")
+            Spacer(Modifier.height(8.dp))
+            agg.byBot.forEach { b ->
+                StatRowCard(
+                    label = b.botName,
+                    value = "%.2f PPR".format(Locale.US, b.ppr),
+                    sub = "${b.matches} ${pluralMatches(b.matches)} · удв. %.1f%%".format(Locale.US, b.dblPct)
+                )
+                Spacer(Modifier.height(6.dp))
+            }
+            Spacer(Modifier.height(20.dp))
+        }
+
+        // ── ДОСТИЖЕНИЯ ──
+        SectionTitle("ДОСТИЖЕНИЯ")
+        Spacer(Modifier.height(8.dp))
+        StatRowCard("Лучший PPR за матч", "%.2f".format(Locale.US, agg.bestMatchPpr))
+        Spacer(Modifier.height(6.dp))
+        StatRowCard("Лучший PPR за лег", "%.2f".format(Locale.US, agg.bestLegPpr))
+        Spacer(Modifier.height(6.dp))
+        StatRowCard(
+            "Побед в матчах",
+            "${agg.wins} из ${agg.totalMatches}",
+            if (agg.totalMatches > 0)
+                "%.0f%% побед".format(Locale.US, agg.wins.toDouble() / agg.totalMatches * 100.0)
+            else null
+        )
+        Spacer(Modifier.height(6.dp))
+        StatRowCard("Текущая серия побед", "${agg.currentStreak}")
+        Spacer(Modifier.height(6.dp))
+        StatRowCard("Максимальная серия побед", "${agg.maxStreak}")
+
+        if (agg.topMatches.isNotEmpty()) {
+            Spacer(Modifier.height(12.dp))
+            Text(
+                "ЛУЧШИЕ 5 МАТЧЕЙ",
+                color = Accent, fontSize = 13.sp, fontWeight = FontWeight.Medium,
+                letterSpacing = 3.sp, modifier = Modifier.fillMaxWidth()
+            )
+            Spacer(Modifier.height(8.dp))
+            agg.topMatches.forEach { m ->
+                StatRowCard(
+                    label = "${formatDate(m.dateMillis)} · против ${m.opponent}",
+                    value = "%.2f PPR".format(Locale.US, m.ppr),
+                    sub = "дротиков на лег: %.1f".format(Locale.US, m.dartsPerLeg)
+                )
+                Spacer(Modifier.height(6.dp))
+            }
+        }
+
+        // ── ТРЕНД ──
+        if (agg.hasTrend) {
+            Spacer(Modifier.height(20.dp))
+            SectionTitle("ТРЕНД")
+            Spacer(Modifier.height(8.dp))
+            val sign = if (agg.trend >= 0) "+" else ""
+            val label = when {
+                agg.trend >= 1.0 -> "растёшь"
+                agg.trend <= -1.0 -> "падаешь"
+                else -> "стабильно"
+            }
+            StatRowCard(
+                label = "PPR последние vs предыдущие",
+                value = "$sign%.2f".format(Locale.US, agg.trend),
+                sub = label
+            )
+        }
+
+        Spacer(Modifier.height(24.dp))
+        ResetButton(onResetClick)
+        Spacer(Modifier.height(24.dp))
     }
+}
+
+@Composable
+private fun ResetButton(onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(TileBgDark)
+            .clickable { onClick() }
+            .padding(vertical = 14.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text("Сбросить статистику", color = ErrorColor, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+    }
+}
+
+private fun pluralMatches(n: Int): String {
+    val mod10 = n % 10
+    val mod100 = n % 100
+    return when {
+        mod100 in 11..19 -> "матчей"
+        mod10 == 1 -> "матч"
+        mod10 in 2..4 -> "матча"
+        else -> "матчей"
+    }
+}
+
+private fun formatDate(millis: Long): String {
+    val fmt = SimpleDateFormat("dd.MM", Locale.US)
+    return fmt.format(Date(millis))
 }
 
 // ─────────────────────────────────────────────
 // Фильтр по периоду
 // ─────────────────────────────────────────────
 @Composable
-private fun PeriodSelector(
-    period: StatPeriod,
-    onPeriodChange: (StatPeriod) -> Unit
-) {
+private fun PeriodSelector(period: StatPeriod, onPeriodChange: (StatPeriod) -> Unit) {
     Column {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             listOf(StatPeriod.WEEK, StatPeriod.MONTH, StatPeriod.THREE_MONTHS).forEach { p ->
                 PeriodChip(p.label, p == period, { onPeriodChange(p) }, Modifier.weight(1f))
             }
         }
         Spacer(Modifier.height(6.dp))
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             listOf(StatPeriod.HALF_YEAR, StatPeriod.YEAR, StatPeriod.ALL).forEach { p ->
                 PeriodChip(p.label, p == period, { onPeriodChange(p) }, Modifier.weight(1f))
             }
@@ -427,12 +484,7 @@ private fun PeriodSelector(
 }
 
 @Composable
-private fun PeriodChip(
-    label: String,
-    selected: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier
-) {
+private fun PeriodChip(label: String, selected: Boolean, onClick: () -> Unit, modifier: Modifier) {
     Box(
         modifier = modifier
             .clip(RoundedCornerShape(10.dp))
@@ -455,12 +507,7 @@ private fun PeriodChip(
 // UI-компоненты
 // ─────────────────────────────────────────────
 @Composable
-private fun TabButton(
-    label: String,
-    selected: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier
-) {
+private fun TabButton(label: String, selected: Boolean, onClick: () -> Unit, modifier: Modifier) {
     Box(
         modifier = modifier
             .clip(RoundedCornerShape(12.dp))
@@ -507,12 +554,7 @@ private fun StatRowCard(label: String, value: String, sub: String? = null) {
                 Text(sub, color = Color.White.copy(alpha = 0.5f), fontSize = 11.sp)
             }
         }
-        Text(
-            value,
-            color = GoldAccent,
-            fontSize = 18.sp,
-            fontWeight = FontWeight.Bold
-        )
+        Text(value, color = GoldAccent, fontSize = 18.sp, fontWeight = FontWeight.Bold)
     }
 }
 
@@ -537,7 +579,7 @@ private fun EmptyStats() {
 }
 
 // ─────────────────────────────────────────────
-// Логика подсчёта — крикет
+// Хелперы для парсинга
 // ─────────────────────────────────────────────
 private fun parseStringList(s: String): List<String> =
     if (s.isBlank()) emptyList() else s.split("|")
@@ -554,6 +596,9 @@ private fun percentLabel(part: Int, total: Int): String {
     return String.format(Locale.US, "%.1f%%", p)
 }
 
+// ─────────────────────────────────────────────
+// Логика подсчёта — крикет
+// ─────────────────────────────────────────────
 private fun computeAggregate(games: List<CricketGameEntity>): CricketAggregate {
     var legs = 0
     var darts = 0
@@ -590,13 +635,8 @@ private fun computeAggregate(games: List<CricketGameEntity>): CricketAggregate {
                 if (i < mprList.size) mprValues.add(mprList[i])
             }
         }
-        if (hasHuman) {
-            legs += g.legsPlayed
-        }
+        if (hasHuman) legs += g.legsPlayed
     }
-
-    val avgMpr = if (mprValues.isEmpty()) 0.0 else mprValues.average()
-    val bestMpr = mprValues.maxOrNull() ?: 0.0
 
     return CricketAggregate(
         legs = legs,
@@ -607,8 +647,8 @@ private fun computeAggregate(games: List<CricketGameEntity>): CricketAggregate {
         bullHits = bullHits,
         perfectRounds = perfect,
         strongRounds = strong,
-        avgMpr = avgMpr,
-        bestMpr = bestMpr
+        avgMpr = if (mprValues.isEmpty()) 0.0 else mprValues.average(),
+        bestMpr = mprValues.maxOrNull() ?: 0.0
     )
 }
 
@@ -616,22 +656,59 @@ private fun computeAggregate(games: List<CricketGameEntity>): CricketAggregate {
 // Логика подсчёта — x01
 // ─────────────────────────────────────────────
 private fun computeAggregate501(games: List<Game501Entity>): Game501Aggregate {
-    var matches = 0
     var legs = 0
     var darts = 0
     var doublesHit = 0
     var doublesAttempted = 0
     var wins = 0
+    var matches = 0
+
+    var sumCount180 = 0
+    var sumCount170plus = 0
+    var sumCount130plus = 0
+    var sumCount90plus = 0
+    var sumCount57plus = 0
+    var sumCount57minus = 0
+
+    var sumFirst9Score = 0
+    var sumFirst9Darts = 0
+    var sumNonCloseScore = 0
+    var sumNonCloseDarts = 0
+
     val pprValues = mutableListOf<Double>()
+    val bestLegPprValues = mutableListOf<Double>()
+    val allMatchesInOrder = mutableListOf<Boolean>() // true если победа (для серий)
+
+    // Группировка по ботам
+    val botMatches = mutableMapOf<String, MutableList<Game501Entity>>()
+
+    // Для топа матчей
+    val matchCandidates = mutableListOf<MatchInfo>()
 
     for (g in games) {
         val bots = parseStringList(g.playerIsBot)
+        val names = parseStringList(g.playerNames)
         val dartsList = parseIntList(g.matchDarts)
         val hitList = parseIntList(g.doublesHit)
         val attList = parseIntList(g.doublesAttempted)
         val pprList = parseDoubleList(g.ppr)
+        val bestLegPprList = parseDoubleList(g.bestLegPpr)
+
+        val c180 = parseIntList(g.matchCount180)
+        val c170 = parseIntList(g.matchCount170plus)
+        val c130 = parseIntList(g.matchCount130plus)
+        val c90 = parseIntList(g.matchCount90plus)
+        val c57p = parseIntList(g.matchCount57plus)
+        val c57m = parseIntList(g.matchCount57minus)
+
+        val f9s = parseIntList(g.first9Score)
+        val f9d = parseIntList(g.first9Darts)
+        val ncs = parseIntList(g.nonCloseScore)
+        val ncd = parseIntList(g.nonCloseDarts)
 
         var hasHuman = false
+        var humanWon = false
+
         for (i in bots.indices) {
             if (bots[i] == "0") {
                 hasHuman = true
@@ -639,29 +716,167 @@ private fun computeAggregate501(games: List<Game501Entity>): Game501Aggregate {
                 doublesHit += hitList.getOrElse(i) { 0 }
                 doublesAttempted += attList.getOrElse(i) { 0 }
                 if (i < pprList.size) pprValues.add(pprList[i])
-                // Победа — если в матче победил этот игрок-человек
-                if (g.winnerIndex == i) wins++
+                if (i < bestLegPprList.size && bestLegPprList[i] > 0) {
+                    bestLegPprValues.add(bestLegPprList[i])
+                }
+                if (g.winnerIndex == i) {
+                    wins++
+                    humanWon = true
+                }
+
+                sumCount180 += c180.getOrElse(i) { 0 }
+                sumCount170plus += c170.getOrElse(i) { 0 }
+                sumCount130plus += c130.getOrElse(i) { 0 }
+                sumCount90plus += c90.getOrElse(i) { 0 }
+                sumCount57plus += c57p.getOrElse(i) { 0 }
+                sumCount57minus += c57m.getOrElse(i) { 0 }
+
+                sumFirst9Score += f9s.getOrElse(i) { 0 }
+                sumFirst9Darts += f9d.getOrElse(i) { 0 }
+                sumNonCloseScore += ncs.getOrElse(i) { 0 }
+                sumNonCloseDarts += ncd.getOrElse(i) { 0 }
             }
         }
+
         if (hasHuman) {
             matches++
             legs += g.legsPlayed
+
+            // Соперник-бот (имена через +)
+            val botNames = bots.indices.filter { bots[it] == "1" }
+                .mapNotNull { idx -> names.getOrNull(idx) }
+            val opponentLabel = if (botNames.isEmpty()) "человек" else botNames.joinToString(" + ")
+
+            if (botNames.isNotEmpty()) {
+                botMatches.getOrPut(opponentLabel) { mutableListOf() }.add(g)
+            }
+
+            // Топ-матч: беру PPR человека
+            val humanIdx = bots.indexOfFirst { it == "0" }
+            val humanPpr = pprList.getOrElse(humanIdx) { 0.0 }
+            val humanDarts = dartsList.getOrElse(humanIdx) { 0 }
+            val dpl = if (g.legsPlayed > 0) humanDarts.toDouble() / g.legsPlayed else 0.0
+            matchCandidates.add(
+                MatchInfo(
+                    dateMillis = g.dateMillis,
+                    ppr = humanPpr,
+                    opponent = opponentLabel,
+                    dartsPerLeg = dpl
+                )
+            )
+
+            allMatchesInOrder.add(humanWon)
         }
     }
 
+    // Средний PPR
     val avgPpr = if (pprValues.isEmpty()) 0.0 else pprValues.average()
-    val bestPpr = pprValues.maxOrNull() ?: 0.0
+    val bestMatchPpr = pprValues.maxOrNull() ?: 0.0
+    val bestLegPpr = bestLegPprValues.maxOrNull() ?: 0.0
     val avgDartsPerLeg = if (legs > 0) darts.toDouble() / legs else 0.0
 
+    // Категории в среднем за лег
+    val safeLegs = if (legs > 0) legs.toDouble() else 1.0
+    val avg180 = sumCount180 / safeLegs
+    val avg170 = sumCount170plus / safeLegs
+    val avg130 = sumCount130plus / safeLegs
+    val avg90 = sumCount90plus / safeLegs
+    val avg57p = sumCount57plus / safeLegs
+    val avg57m = sumCount57minus / safeLegs
+
+    // Наборы
+    val first9 = if (sumFirst9Darts > 0) sumFirst9Score.toDouble() / (sumFirst9Darts / 3.0) else 0.0
+    val nonClose = if (sumNonCloseDarts > 0) sumNonCloseScore.toDouble() / (sumNonCloseDarts / 3.0) else 0.0
+
+    // Серии побед. allMatchesInOrder идёт от свежих к старым (БД отдаёт DESC).
+    var currentStreak = 0
+    for (won in allMatchesInOrder) {
+        if (won) currentStreak++ else break
+    }
+
+    // Максимальная серия — идём от старых к свежим
+    var maxStreak = 0
+    var run = 0
+    for (i in allMatchesInOrder.indices.reversed()) {
+        if (allMatchesInOrder[i]) {
+            run++
+            if (run > maxStreak) maxStreak = run
+        } else {
+            run = 0
+        }
+    }
+
+    // Тренд: сравнить свежую половину матчей с предыдущей
+    var trend = 0.0
+    var hasTrend = false
+    val matchPprs = games.mapNotNull { g ->
+        val bots = parseStringList(g.playerIsBot)
+        val pprList = parseDoubleList(g.ppr)
+        val humanIdx = bots.indexOfFirst { it == "0" }
+        if (humanIdx >= 0) pprList.getOrNull(humanIdx) else null
+    }
+    if (matchPprs.size >= 4) {
+        val half = matchPprs.size / 2
+        val fresh = matchPprs.take(half)
+        val old = matchPprs.drop(half).take(half)
+        if (fresh.isNotEmpty() && old.isNotEmpty()) {
+            trend = fresh.average() - old.average()
+            hasTrend = true
+        }
+    }
+
+    // По ботам — сортировка от худшего PPR к лучшему
+    val byBotList = botMatches.map { (name, list) ->
+        val pprs = mutableListOf<Double>()
+        var hitSum = 0
+        var attSum = 0
+        for (g in list) {
+            val bots = parseStringList(g.playerIsBot)
+            val pprList = parseDoubleList(g.ppr)
+            val hitList = parseIntList(g.doublesHit)
+            val attList = parseIntList(g.doublesAttempted)
+            val humanIdx = bots.indexOfFirst { it == "0" }
+            if (humanIdx >= 0) {
+                pprList.getOrNull(humanIdx)?.let { pprs.add(it) }
+                hitSum += hitList.getOrElse(humanIdx) { 0 }
+                attSum += attList.getOrElse(humanIdx) { 0 }
+            }
+        }
+        BotStat(
+            botName = name,
+            matches = list.size,
+            ppr = if (pprs.isEmpty()) 0.0 else pprs.average(),
+            dblPct = if (attSum > 0) hitSum.toDouble() / attSum * 100.0 else 0.0
+        )
+    }.sortedBy { it.ppr }
+
+    // Топ-5 матчей
+    val top5 = matchCandidates.sortedByDescending { it.ppr }.take(5)
+
     return Game501Aggregate(
-        matches = matches,
         legs = legs,
         darts = darts,
         doublesHit = doublesHit,
         doublesAttempted = doublesAttempted,
         wins = wins,
+        totalMatches = matches,
         avgPpr = avgPpr,
-        bestPpr = bestPpr,
-        avgDartsPerLeg = avgDartsPerLeg
+        bestMatchPpr = bestMatchPpr,
+        bestLegPpr = bestLegPpr,
+        avgDartsPerLeg = avgDartsPerLeg,
+        avgCount180 = avg180,
+        avgCount170plus = avg170,
+        avgCount130plus = avg130,
+        avgCount90plus = avg90,
+        avgCount57plus = avg57p,
+        avgCount57minus = avg57m,
+        first9 = first9,
+        nonClose = nonClose,
+        currentStreak = currentStreak,
+        maxStreak = maxStreak,
+        trend = trend,
+        hasTrend = hasTrend,
+        byBot = byBotList,
+        topMatches = top5
     )
 }
