@@ -146,11 +146,6 @@ object Game501BotAI {
         return cleanPaths.minOf { it.throws.size }
     }
 
-    // ─────────────────────────────────────────────
-    // КАЛИБРОВКА (v23)
-    // База p_triple снижена 0.025 → 0.012, чтобы опустить PPR
-    // слабых и средних на ~3 очка (в середину допуска).
-    // ─────────────────────────────────────────────
     private fun getTripleAccuracy(botLevel: Int): Double {
         val lvl = botLevel.coerceIn(1, 16)
         val midBonus = if (lvl > 9) (lvl - 9) * 0.004 else 0.0
@@ -161,7 +156,7 @@ object Game501BotAI {
 
     private fun getDoubleAccuracy(botLevel: Int): Double {
         val lvl = botLevel.coerceIn(1, 16)
-        val bonus = if (lvl > 11) (lvl - 11) * 0.017 else 0.0
+        val bonus = if (lvl > 11) (lvl - 11) * 0.012 else 0.0
         return (0.065 + (lvl - 1) * 0.0205 + bonus).coerceAtMost(0.60)
     }
 
@@ -181,16 +176,16 @@ object Game501BotAI {
     // Промах из T-сектора.
     // Значения для ур.1 / ур.7 / ур.16 (от промаха):
     //   за борт   10% / 0.63% / 0.1%
-    //   S-целевой 12% / 38.5% / 45%
-    //   S-соседи  40% / 30.4% / 30%
+    //   S-целевой 12% / 28%   / 45%
+    //   S-соседи  40% / 40.9% / 30%
     //   T-соседи  22% / 20.3% / 12%
     //   D-соседи   8% / 5.1%  / 4%
     //   D-целевой  8% / 5.1%  / 9%
     private fun missFromTriple(sector: Int, botLevel: Int): SimulatedThrow {
         val lvl = botLevel.coerceIn(1, 16)
         val pOut = interp(10.0, 0.63, 0.1, lvl)
-        val pSTarget = interp(12.0, 38.5, 45.0, lvl)
-        val pSNeighbor = interp(40.0, 30.4, 30.0, lvl)
+        val pSTarget = interp(12.0, 28.0, 45.0, lvl)
+        val pSNeighbor = interp(40.0, 40.9, 30.0, lvl)
         val pTNeighbor = interp(22.0, 20.3, 12.0, lvl)
         val pDNeighbor = interp(8.0, 5.1, 4.0, lvl)
         val pDTarget = interp(8.0, 5.1, 9.0, lvl)
@@ -226,16 +221,16 @@ object Game501BotAI {
     // Промах из S-сектора.
     // Значения для ур.1 / ур.7 / ур.16 (от промаха):
     //   за борт    8% / 2.1%  / 0.5%
-    //   T-целевой  5% / 25%   / 40%
-    //   S-соседи  60% / 47.4% / 35%
+    //   T-целевой  5% / 22%   / 40%
+    //   S-соседи  60% / 50.4% / 35%
     //   D-целевой 13% / 17%   / 15%
     //   T-соседи   7% / 4.3%  / 5%
     //   D-соседи   7% / 4.3%  / 4.5%
     private fun missFromSingle(sector: Int, botLevel: Int): SimulatedThrow {
         val lvl = botLevel.coerceIn(1, 16)
         val pOut = interp(8.0, 2.1, 0.5, lvl)
-        val pTTarget = interp(5.0, 25.0, 40.0, lvl)
-        val pSNeighbor = interp(60.0, 47.4, 35.0, lvl)
+        val pTTarget = interp(5.0, 22.0, 40.0, lvl)
+        val pSNeighbor = interp(60.0, 50.4, 35.0, lvl)
         val pDTarget = interp(13.0, 17.0, 15.0, lvl)
         val pTNeighbor = interp(7.0, 4.3, 5.0, lvl)
         val pDNeighbor = interp(7.0, 4.3, 4.5, lvl)
