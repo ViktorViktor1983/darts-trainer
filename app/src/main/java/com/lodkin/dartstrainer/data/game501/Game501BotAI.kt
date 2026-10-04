@@ -6,10 +6,6 @@ object Game501BotAI {
 
     // ВКЛЮЧЕНО: форма дня × серия × усталость.
     // multiplier = sessionForm × botStreak × fatigueFactor, кламп 0.55…1.45.
-    // * sessionForm  — задаётся при старте матча (шаг 6, SetupScreen).
-    // * botStreak    — updateStreak, ±10–20% раз в 1–2 хода.
-    // * fatigueFactor — падает после 90 мин игры (нужен реальный sessionStartTime).
-    // Средний multiplier ≈ 1.0, калибровка сохраняется.
     private const val ENABLE_VARIABILITY = true
 
     private val NEIGHBORS: Map<Int, Pair<Int, Int>> = mapOf(
@@ -196,6 +192,12 @@ object Game501BotAI {
         return SimulatedThrow(0, 0, isHit = false)
     }
 
+    // ─────────────────────────────────────────────
+    // Выбор цели на текущий дротик.
+    // 1. Если можно закрыть — берём путь с любимым даблом.
+    // 2. Если остался ОДИН дротик и закрыть нельзя — setup shot.
+    // 3. Иначе — S20.
+    // ─────────────────────────────────────────────
     private fun chooseTarget(player: Player501): CheckoutThrow {
         val score = player.score
         if (score > 170 || !CheckoutTable.isCheckoutPossible(score)) {
@@ -208,19 +210,77 @@ object Game501BotAI {
         val cleanPaths = paths.filter { !it.label.startsWith("Промах") }.ifEmpty { paths }
         val viable = cleanPaths.filter { it.throws.size <= dartsLeft }
 
-        if (viable.isEmpty()) {
-            return CheckoutThrow(20, 1)
+        if (viable.isNotEmpty()) {
+            val sorted = viable.sortedBy { path ->
+                val last = path.throws.lastOrNull()
+                if (last != null && last.multiplier == 2) {
+                    BotPreferences.doublePriority(player.botLevel, last.sector)
+                } else {
+                    Int.MAX_VALUE
+                }
+            }
+            return sorted.first().throws.first()
         }
 
-        val sorted = viable.sortedBy { path ->
-            val last = path.throws.lastOrNull()
-            if (last != null && last.multiplier == 2) {
-                BotPreferences.doublePriority(player.botLevel, last.sector)
-            } else {
-                Int.MAX_VALUE
+        if (dartsLeft == 1) {
+            return chooseSetupTarget(score, player.botLevel)
+        }
+
+        return CheckoutThrow(20, 1)
+    }
+
+    // ─────────────────────────────────────────────
+    // Setup shot: выбор броска, оставляющего лучший остаток.
+    // Без ограничения по уровню — риск уже заложен в p_triple.
+    // ─────────────────────────────────────────────
+    private fun chooseSetupTarget(score: Int, botLevel: Int): CheckoutThrow {
+        val favDoubles = BotPreferences.favouriteDoubles(botLevel.coerceIn(1, 16))
+
+        val candidates = listOf(
+            CheckoutThrow(20, 1), CheckoutThrow(19, 1), CheckoutThrow(18, 1),
+            CheckoutThrow(17, 1), CheckoutThrow(16, 1), CheckoutThrow(15, 1),
+            CheckoutThrow(20, 3), CheckoutThrow(19, 3), CheckoutThrow(18, 3),
+            CheckoutThrow(17, 3), CheckoutThrow(16, 3), CheckoutThrow(15, 3)
+        )
+
+        var bestThrow: CheckoutThrow = CheckoutThrow(20, 1)
+        var bestQuality = Int.MIN_VALUE
+
+        for (t in candidates) {
+            val points = t.sector * t.multiplier
+            val newScore = score - points
+            if (newScore < 2 || newScore > 170) continue
+
+            val quality = evaluateRemainder(newScore, favDoubles)
+            if (quality > bestQuality) {
+                bestQuality = quality
+                bestThrow = t
             }
         }
-        return sorted.first().throws.first()
+
+        return bestThrow
+    }
+
+    // Оценка остатка: чем больше баллов, тем лучше.
+    // Идеал — чётный остаток 2..40 (чистый маленький дабл),
+    // желательно из любимых. Нечётные и большие — хуже.
+    private fun evaluateRemainder(score: Int, favDoubles: List<Int>): Int {
+        if (score < 2) return -100
+        if (score % 2 != 0) return -50
+        if (score > 40) return -20
+        val dblSector = score / 2
+        if (dblSector < 1 || dblSector > 20) return -20
+
+        val base = 80
+        val favIdx = favDoubles.indexOf(dblSector)
+        val bonus = when {
+            favIdx == 0 -> 25
+            favIdx == 1 -> 20
+            favIdx == 2 -> 15
+            favIdx in 3..5 -> 10
+            else -> 0
+        }
+        return base + bonus
     }
 
     private fun updateStreak(player: Player501): Player501 {
