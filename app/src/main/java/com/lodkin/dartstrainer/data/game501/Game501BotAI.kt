@@ -122,9 +122,6 @@ object Game501BotAI {
         }
     }
 
-    // ─────────────────────────────────────────────
-    // Давление соперника. Работает ТОЛЬКО когда в игре есть человек.
-    // ─────────────────────────────────────────────
     private fun pressureFactor(game: Game501, myTeamIndex: Int): Double {
         if (game.players.all { it.isBot }) return 1.0
 
@@ -149,9 +146,6 @@ object Game501BotAI {
         return cleanPaths.minOf { it.throws.size }
     }
 
-    // ─────────────────────────────────────────────
-    // КАЛИБРОВКА. PPR 14/16, D% 16/16.
-    // ─────────────────────────────────────────────
     private fun getTripleAccuracy(botLevel: Int): Double {
         val lvl = botLevel.coerceIn(1, 16)
         val midBonus = if (lvl > 9) (lvl - 9) * 0.004 else 0.0
@@ -171,12 +165,8 @@ object Game501BotAI {
         return (t * 1.4 + 0.25).coerceAtMost(0.95)
     }
 
-    // ─────────────────────────────────────────────
     // Интерполяция между тремя опорными точками:
     // ур.1 (Новичок) → ур.7 (Разрядник) → ур.16 (Легенда).
-    // a = значение для ур.1, b = для ур.7, c = для ур.16.
-    // Все значения в процентах (0..100).
-    // ─────────────────────────────────────────────
     private fun interp(a: Double, b: Double, c: Double, lvl: Int): Double {
         return if (lvl <= 7) {
             a + (b - a) * (lvl - 1) / 6.0
@@ -186,20 +176,20 @@ object Game501BotAI {
     }
 
     // ─────────────────────────────────────────────
-    // Промах из T-сектора (например, T20).
-    // Опорные точки для Разрядника (ур.7):
-    //   за борт   0.63%   (от промаха)
-    //   S-целевой 38.5%   (S20)
-    //   S-соседи  30.4%   (сумма S1+S5)
-    //   T-соседи  20.3%   (сумма T1+T5)
-    //   D-соседи  5.1%    (сумма D1+D5)
-    //   D-целевой 5.1%    (D20)
+    // Промах из T-сектора (T20 и др.).
+    // Опорные точки (от промаха):
+    //   за борт   3.0% / 0.63% / 0.1%
+    //   S-целевой 18%  / 38.5% / 45%   ← ослаблено для слабых
+    //   S-соседи  37%  / 30.4% / 30%
+    //   T-соседи  25%  / 20.3% / 12%
+    //   D-соседи   8%  / 5.1%  / 4%
+    //   D-целевой  9%  / 5.1%  / 9%
     // ─────────────────────────────────────────────
     private fun missFromTriple(sector: Int, botLevel: Int): SimulatedThrow {
         val lvl = botLevel.coerceIn(1, 16)
         val pOut = interp(3.0, 0.63, 0.1, lvl)
-        val pSTarget = interp(30.0, 38.5, 45.0, lvl)
-        val pSNeighbor = interp(25.0, 30.4, 30.0, lvl)
+        val pSTarget = interp(18.0, 38.5, 45.0, lvl)
+        val pSNeighbor = interp(37.0, 30.4, 30.0, lvl)
         val pTNeighbor = interp(25.0, 20.3, 12.0, lvl)
         val pDNeighbor = interp(8.0, 5.1, 4.0, lvl)
         val pDTarget = interp(9.0, 5.1, 9.0, lvl)
@@ -233,20 +223,20 @@ object Game501BotAI {
     }
 
     // ─────────────────────────────────────────────
-    // Промах из S-сектора (например, S20).
-    // Опорные точки для Разрядника (ур.7):
-    //   за борт    2.1%    (от промаха)
-    //   T-целевой 29.8%    (T20)
-    //   S-соседи  42.6%    (сумма S1+S5)
-    //   D-целевой 17.0%    (D20)
-    //   T-соседи   4.3%    (сумма T1+T5)
-    //   D-соседи   4.3%    (сумма D1+D5)
+    // Промах из S-сектора (S20 и др.).
+    // Опорные точки (от промаха):
+    //   за борт   3.0% / 2.1% / 0.5%
+    //   T-целевой 6%   / 29.8% / 40%   ← ослаблено для слабых
+    //   S-соседи  54%  / 42.6% / 35%
+    //   D-целевой 15%  / 17%   / 15%
+    //   T-соседи  10%  / 4.3%  / 5%
+    //   D-соседи  12%  / 4.3%  / 4.5%
     // ─────────────────────────────────────────────
     private fun missFromSingle(sector: Int, botLevel: Int): SimulatedThrow {
         val lvl = botLevel.coerceIn(1, 16)
         val pOut = interp(3.0, 2.1, 0.5, lvl)
-        val pTTarget = interp(20.0, 29.8, 40.0, lvl)
-        val pSNeighbor = interp(40.0, 42.6, 35.0, lvl)
+        val pTTarget = interp(6.0, 29.8, 40.0, lvl)
+        val pSNeighbor = interp(54.0, 42.6, 35.0, lvl)
         val pDTarget = interp(15.0, 17.0, 15.0, lvl)
         val pTNeighbor = interp(10.0, 4.3, 5.0, lvl)
         val pDNeighbor = interp(12.0, 4.3, 4.5, lvl)
@@ -282,20 +272,20 @@ object Game501BotAI {
     }
 
     // ─────────────────────────────────────────────
-    // Промах из D-сектора (например, D20).
-    // Опорные точки для Разрядника (ур.7):
-    //   за борт   38.0%    (от промаха)
-    //   S-целевой 36.2%    (S20)
-    //   D-соседи  12.3%    (сумма D1+D5)
-    //   S-соседи  12.3%    (сумма S1+S5)
-    //   T-соседи   1.2%    (сумма T1+T5)
+    // Промах из D-сектора (D20 и др.).
+    // Опорные точки (от промаха):
+    //   за борт   55% / 38% / 20%
+    //   S-целевой 10% / 36.2% / 45%   ← ослаблено для слабых
+    //   D-соседи  10% / 12.3% / 15%
+    //   S-соседи  20% / 12.3% / 15%
+    //   T-соседи   5% / 1.2%  / 5%
     // ─────────────────────────────────────────────
     private fun missFromDouble(sector: Int, botLevel: Int): SimulatedThrow {
         val lvl = botLevel.coerceIn(1, 16)
         val pOut = interp(55.0, 38.0, 20.0, lvl)
-        val pSTarget = interp(20.0, 36.2, 45.0, lvl)
+        val pSTarget = interp(10.0, 36.2, 45.0, lvl)
         val pDNeighbor = interp(10.0, 12.3, 15.0, lvl)
-        val pSNeighbor = interp(10.0, 12.3, 15.0, lvl)
+        val pSNeighbor = interp(20.0, 12.3, 15.0, lvl)
         val pTNeighbor = interp(5.0, 1.2, 5.0, lvl)
 
         val total = pOut + pSTarget + pDNeighbor + pSNeighbor + pTNeighbor
@@ -317,7 +307,6 @@ object Game501BotAI {
             val n = if (Random.nextBoolean()) l else rt
             return SimulatedThrow(n, 1, isHit = false)
         }
-        // T-сосед
         val (l, rt) = NEIGHBORS[sector] ?: (sector to sector)
         val n = if (Random.nextBoolean()) l else rt
         return SimulatedThrow(n, 3, isHit = false)
