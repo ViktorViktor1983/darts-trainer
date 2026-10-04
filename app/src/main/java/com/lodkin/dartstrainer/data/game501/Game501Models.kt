@@ -4,14 +4,15 @@ package com.lodkin.dartstrainer.data.game501
 enum class GameType(val startScore: Int, val label: String) {
     X501(501, "501"),
     X301(301, "301"),
+    X701(701, "701"),
     X1001(1001, "1001")
 }
 
 // Формат закрытия
 enum class OutMode(val label: String, val shortLabel: String) {
-    DOUBLE_OUT("Double Out", "DO"),
     DOUBLE_IN_OUT("Double In / Double Out", "DI/DO"),
-    STRAIGHT_OUT("Упрощённый", "SO")
+    DOUBLE_OUT("Double Out", "DO"),
+    STRAIGHT_OUT("Без даблов", "SO")
 }
 
 // Результат броска
