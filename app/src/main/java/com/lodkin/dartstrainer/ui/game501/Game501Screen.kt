@@ -184,9 +184,8 @@ fun Game501Screen(
 
     // ─────────────────────────────────────────────
     // Автоход бота.
-    // ВАЖНО: showLegWonDialog и showSetWonDialog в ключах — иначе после
-    // закрытия диалога «ЛЕГ ЗАВЕРШЁН» LaunchedEffect не перезапускается
-    // и игра висит, ожидая хода бота.
+    // showLegWonDialog и showSetWonDialog в ключах — иначе после
+    // закрытия диалога «ЛЕГ ЗАВЕРШЁН» LaunchedEffect не перезапускается.
     // ─────────────────────────────────────────────
     LaunchedEffect(
         game.currentPlayerIndex,
@@ -340,6 +339,9 @@ fun Game501Screen(
     }
 
     if (showDoublesQuestionDialog && !allBots) {
+        // 0 попыток в дабл невозможно, если лег закрыт в DOUBLE_OUT / DOUBLE_IN_OUT.
+        // Активна только в режиме STRAIGHT_OUT («Без даблов»).
+        val allowZero = game.outMode == OutMode.STRAIGHT_OUT
         AlertDialog(
             onDismissRequest = { },
             confirmButton = {},
@@ -348,21 +350,41 @@ fun Game501Screen(
                 Column {
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         listOf(0, 1, 2, 3).forEach { n ->
+                            val btnEnabled = !(n == 0 && !allowZero)
                             Box(
-                                modifier = Modifier.weight(1f).clip(RoundedCornerShape(10.dp)).background(Accent)
-                                    .clickable {
+                                modifier = Modifier.weight(1f)
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(
+                                        if (btnEnabled) Accent
+                                        else Accent.copy(alpha = 0.25f)
+                                    )
+                                    .clickable(enabled = btnEnabled) {
                                         saveHistory()
                                         game = Game501Logic.closeLegManually(game, chosenDarts, n)
                                         showDoublesQuestionDialog = false
                                         chosenDarts = 0
-                                    }.padding(vertical = 14.dp),
+                                    }
+                                    .padding(vertical = 14.dp),
                                 contentAlignment = Alignment.Center
-                            ) { Text("$n", color = Color(0xFF121212), fontSize = 20.sp, fontWeight = FontWeight.Bold) }
+                            ) {
+                                Text(
+                                    "$n",
+                                    color = if (btnEnabled) Color(0xFF121212)
+                                    else Color(0xFF121212).copy(alpha = 0.4f),
+                                    fontSize = 20.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
                         }
                     }
                     Spacer(Modifier.height(10.dp))
-                    Text("0 — если в этом подходе ты вообще не целился в удвоение",
-                        color = Color.White.copy(alpha = 0.6f), fontSize = 12.sp)
+                    Text(
+                        if (allowZero)
+                            "0 — если в этом подходе ты вообще не целился в удвоение"
+                        else
+                            "В этом режиме закрыть лег без попытки в дабл невозможно",
+                        color = Color.White.copy(alpha = 0.6f), fontSize = 12.sp
+                    )
                 }
             }
         )
