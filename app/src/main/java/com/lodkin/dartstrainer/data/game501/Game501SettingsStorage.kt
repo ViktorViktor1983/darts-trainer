@@ -7,9 +7,10 @@ object Game501SettingsStorage {
     private const val PREFS = "game501_settings"
 
     private const val KEY_PAIR_GAME = "pair_game"
-    private const val KEY_GAME_TYPE = "game_type"           // X501 / X301 / X1001
+    private const val KEY_GAME_TYPE = "game_type"           // X501 / X301 / X701 / X1001
     private const val KEY_OUT_MODE_501 = "out_mode_501"     // формат для 501
     private const val KEY_OUT_MODE_301 = "out_mode_301"     // формат для 301
+    private const val KEY_OUT_MODE_701 = "out_mode_701"     // формат для 701
     private const val KEY_OUT_MODE_1001 = "out_mode_1001"   // формат для 1001
     private const val KEY_AUTO_OK = "auto_ok"
     private const val KEY_LEGS_PER_SET = "legs_per_set"
@@ -48,6 +49,7 @@ object Game501SettingsStorage {
         val key = when (gameType) {
             GameType.X501 -> KEY_OUT_MODE_501
             GameType.X301 -> KEY_OUT_MODE_301
+            GameType.X701 -> KEY_OUT_MODE_701
             GameType.X1001 -> KEY_OUT_MODE_1001
         }
         val name = prefs(context).getString(key, OutMode.DOUBLE_OUT.name)
@@ -58,6 +60,7 @@ object Game501SettingsStorage {
         val key = when (gameType) {
             GameType.X501 -> KEY_OUT_MODE_501
             GameType.X301 -> KEY_OUT_MODE_301
+            GameType.X701 -> KEY_OUT_MODE_701
             GameType.X1001 -> KEY_OUT_MODE_1001
         }
         prefs(context).edit().putString(key, mode.name).apply()
