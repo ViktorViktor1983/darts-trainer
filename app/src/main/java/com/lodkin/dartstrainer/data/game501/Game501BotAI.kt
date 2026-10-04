@@ -31,7 +31,6 @@ object Game501BotAI {
         val startSet = currentGame.currentSetNumber
 
         var dartsThrown = 0
-        var previousMissed = false
         var turnScoreForCategories = 0
 
         while (dartsThrown < 3 && !currentGame.isFinished) {
@@ -40,23 +39,24 @@ object Game501BotAI {
             ) break
 
             val current = currentGame.players.getOrNull(playerIndex) ?: break
-            val target = chooseTarget(current, previousMissed) ?: break
+            val target = chooseTarget(current)
 
             val result = simulateDart(target, multiplier, current.botLevel)
-            previousMissed = !result.isHit
 
-            // Попытка в дабл считается ОДИН раз для каждого дротика,
-            // направленного в double-цель (неважно hit или miss).
-            // applyThrow вызывается с countDoubleAttempt = false,
-            // чтобы не считать фантомные попадания в дабл-соседей.
-            val wasDoubleTarget = target.multiplier == 2
-            if (wasDoubleTarget) {
+            // Попытка в дабл = каждый дротик, направленный в дабл-цель.
+            // Попадание в дабл = дротик попал ТОЧНО в целевой дабл-сектор
+            // (независимо от обнуления остатка). Так D% = реальный % попаданий.
+            if (target.multiplier == 2) {
                 currentGame = Game501Logic.recordDoublesAttempts(currentGame, 1)
+                if (result.actualMultiplier == 2 && result.actualSector == target.sector) {
+                    currentGame = Game501Logic.recordDoublesHit(currentGame, 1)
+                }
             }
 
             if (result.actualSector == 0) {
                 currentGame = Game501Logic.applyThrow(
-                    currentGame, 20, ThrowMultiplier.MISS, countDoubleAttempt = false
+                    currentGame, 20, ThrowMultiplier.MISS,
+                    countDoubleAttempt = false, countDoubleHit = false
                 )
             } else {
                 val mult = when (result.actualMultiplier) {
@@ -65,7 +65,8 @@ object Game501BotAI {
                     else -> ThrowMultiplier.SINGLE
                 }
                 currentGame = Game501Logic.applyThrow(
-                    currentGame, result.actualSector, mult, countDoubleAttempt = false
+                    currentGame, result.actualSector, mult,
+                    countDoubleAttempt = false, countDoubleHit = false
                 )
                 turnScoreForCategories += result.actualSector * result.actualMultiplier
             }
@@ -115,27 +116,29 @@ object Game501BotAI {
     }
 
     // ─────────────────────────────────────────────
-    // КАЛИБРОВКА (v7) — формулы не менялись с v6.
-    // PPR в v6 попал во ВСЕ 12 коридоров (26.9–79.9).
-    // v7 — только фикс подсчёта даблов:
-    //   * applyThrow вызывается с countDoubleAttempt = false
-    //   * AI сам инкрементит attempt ровно один раз на
-    //     каждый дротик, направленный в double-цель.
-    //   * фантомные попадания в дабл-соседей больше
-    //     НЕ раздувают знаменатель D%.
-    // Ожидаем: D% поднимется примерно в 1.8–2 раза
-    //         (ур.7: 9.6% → ~18%, ур.12: 15.1% → ~28%).
+    // КАЛИБРОВКА (v9)
+    // D% теперь = % попаданий в ЦЕЛЕВОЙ дабл-сектор, поэтому
+    // p_double ≈ целевой D%. Раньше (v8) p_double=0.97 давал
+    // D%=27% потому что считался другой метрикой (закрытия).
+    //
+    // Целевые D%: ур.1=5-8%, ур.7=18-21%, ур.16=42-47%.
+    // Формула: 0.065 + (lvl-1)*0.02533
+    //   ур.1  → 0.065 (6.5%)
+    //   ур.7  → 0.217 (21.7%)
+    //   ур.16 → 0.445 (44.5%)
+    //
+    // p_triple НЕ менял (v8 показал PPR во всех коридорах).
+    // После снижения p_double ожидаем лёгкое проседание PPR на
+    // верхах (больше дротиков на добивание) — калибруем после теста.
     // ─────────────────────────────────────────────
     private fun getTripleAccuracy(botLevel: Int): Double {
         val lvl = botLevel.coerceIn(1, 16)
-        // ур.1=0.02, ур.7≈0.17, ур.16=0.40
         return 0.02 + (lvl - 1) * 0.0253
     }
 
     private fun getDoubleAccuracy(botLevel: Int): Double {
         val lvl = botLevel.coerceIn(1, 16)
-        // ур.1=0.22, ур.7≈0.65, ур.12+ ≈0.97
-        return (0.22 + (lvl - 1) * 0.072).coerceAtMost(0.97)
+        return (0.065 + (lvl - 1) * 0.02533).coerceAtMost(0.60)
     }
 
     private fun getSingleAccuracy(botLevel: Int): Double {
@@ -196,18 +199,27 @@ object Game501BotAI {
         return SimulatedThrow(0, 0, isHit = false)
     }
 
-    private fun chooseTarget(player: Player501, previousMissed: Boolean): CheckoutThrow? {
+    // Выбор цели на ТЕКУЩИЙ дротик.
+    // * Оставшиеся дротики в ходу = 3 - turnDarts.
+    // * Пути для ТЕКУЩЕГО остатка, отфильтрованные по числу дротиков.
+    // * Возвращаем ПЕРВЫЙ бросок первого подходящего пути.
+    // * Если не влезает — подход в S20 (не попытка в дабл).
+    private fun chooseTarget(player: Player501): CheckoutThrow {
         val score = player.score
         if (score > 170 || !CheckoutTable.isCheckoutPossible(score)) {
             return if (score % 2 == 0) CheckoutThrow(20, 3) else CheckoutThrow(19, 3)
         }
+
+        val dartsLeft = (3 - player.turnDarts).coerceAtLeast(1)
         val paths = CheckoutTable.pathsFor(score) ?: return CheckoutThrow(20, 3)
-        val path = if (previousMissed) {
-            paths.firstOrNull { it.label.startsWith("Промах") } ?: paths.first()
-        } else paths.first()
-        val dartsUsed = player.turnDarts
-        if (dartsUsed >= path.throws.size) return path.throws.last()
-        return path.throws[dartsUsed]
+
+        val cleanPaths = paths.filter { !it.label.startsWith("Промах") }.ifEmpty { paths }
+        val viable = cleanPaths.filter { it.throws.size <= dartsLeft }
+
+        if (viable.isEmpty()) {
+            return CheckoutThrow(20, 1)
+        }
+        return viable.first().throws.first()
     }
 
     private fun updateStreak(player: Player501): Player501 {
