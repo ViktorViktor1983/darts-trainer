@@ -113,28 +113,27 @@ object Game501BotAI {
     }
 
     // ─────────────────────────────────────────────
-    // КАЛИБРОВКА (v11) — финальная
-    // v10 показал: линейка близка, но нужен БОНУС после ур.12:
-    //   p_triple:  +0.05 на ур.16 (PPR 95 → ~102)
-    //   p_double:  -0.005 на средних (D% +3 → цель),
-    //              +0.02 на ур.16 (D% 41 → ~45)
+    // КАЛИБРОВКА (v12) — финальная
+    // v11: 14/16 PPR в цели, 15/16 D% в цели.
+    // Осталось: +1-2.5 PPR на ур.13-16, -1 D% на ур.10/13.
     //
-    // Формулы:
-    //   p_triple = 0.025 + (lvl-1)*0.031 + max(0, lvl-11)*0.010
-    //     ур.1=2.5%, ур.7=21.1%, ур.12=37.6%, ур.16=54.0%
-    //   p_double = 0.065 + (lvl-1)*0.021 + max(0, lvl-11)*0.014
-    //     ур.1=6.5%, ур.7=19.1%, ур.12=32.0%, ур.16=45.0%
+    // Изменения:
+    //   p_triple:  бонус после ур.11 (lvl-11)*0.013 (было 0.010)
+    //              → ур.13 +0.006, ур.16 +0.015 → PPR +1-2 на верхах
+    //   p_double:  базовый наклон 0.021 → 0.020 (снизит средние)
+    //              бонус после ур.11 (lvl-11)*0.017 (было 0.014)
+    //              → ур.10 -0.9%, ур.13 -0.6%, ур.16 -0.6%
     // ─────────────────────────────────────────────
     private fun getTripleAccuracy(botLevel: Int): Double {
         val lvl = botLevel.coerceIn(1, 16)
-        val bonus = if (lvl > 11) (lvl - 11) * 0.010 else 0.0
+        val bonus = if (lvl > 11) (lvl - 11) * 0.013 else 0.0
         return 0.025 + (lvl - 1) * 0.031 + bonus
     }
 
     private fun getDoubleAccuracy(botLevel: Int): Double {
         val lvl = botLevel.coerceIn(1, 16)
-        val bonus = if (lvl > 11) (lvl - 11) * 0.014 else 0.0
-        return (0.065 + (lvl - 1) * 0.021 + bonus).coerceAtMost(0.60)
+        val bonus = if (lvl > 11) (lvl - 11) * 0.017 else 0.0
+        return (0.065 + (lvl - 1) * 0.020 + bonus).coerceAtMost(0.60)
     }
 
     private fun getSingleAccuracy(botLevel: Int): Double {
