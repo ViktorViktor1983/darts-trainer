@@ -186,6 +186,8 @@ fun Game501Screen(
     // Автоход бота.
     // showLegWonDialog и showSetWonDialog в ключах — иначе после
     // закрытия диалога «ЛЕГ ЗАВЕРШЁН» LaunchedEffect не перезапускается.
+    // После хода бота обновляем lastScoreA/lastScoreB по разнице
+    // matchScoreGained — так «Пред.» показывается и для ботов.
     // ─────────────────────────────────────────────
     LaunchedEffect(
         game.currentPlayerIndex,
@@ -212,8 +214,16 @@ fun Game501Screen(
         if (game.players.getOrNull(game.currentPlayerIndex)?.isBot != true) return@LaunchedEffect
         if (!allBots && (showLegWonDialog || showSetWonDialog)) return@LaunchedEffect
 
+        val idx = game.currentPlayerIndex
+        val teamIdx = game.players.getOrNull(idx)?.teamIndex ?: 0
+        val scoreBefore = game.players.getOrNull(idx)?.matchScoreGained ?: 0
+
         saveHistory()
-        game = Game501BotAI.performTurn(game, game.currentPlayerIndex)
+        game = Game501BotAI.performTurn(game, idx)
+
+        val scoreAfter = game.players.getOrNull(idx)?.matchScoreGained ?: 0
+        val gained = scoreAfter - scoreBefore
+        if (teamIdx == 0) lastScoreA = gained else lastScoreB = gained
     }
 
     LaunchedEffect(showBustMessage) {
@@ -339,8 +349,6 @@ fun Game501Screen(
     }
 
     if (showDoublesQuestionDialog && !allBots) {
-        // 0 попыток в дабл невозможно, если лег закрыт в DOUBLE_OUT / DOUBLE_IN_OUT.
-        // Активна только в режиме STRAIGHT_OUT («Без даблов»).
         val allowZero = game.outMode == OutMode.STRAIGHT_OUT
         AlertDialog(
             onDismissRequest = { },
