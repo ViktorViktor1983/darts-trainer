@@ -113,15 +113,8 @@ object Game501BotAI {
     }
 
     // ─────────────────────────────────────────────
-    // КАЛИБРОВКА (v14) — ФИНАЛ
-    // v13: 14/16 PPR в цели, 16/16 D% в цели.
-    // Осталось: ур.13 −2 PPR, ур.14 −0.3 PPR.
-    //
-    // Фикс: superBonus для lvl >= 13:
-    //   p_triple += (lvl-12) * 0.008
-    //   → ур.13 +0.008, ур.14 +0.016,
-    //     ур.15 +0.024, ур.16 +0.032
-    //   D% не трогаем — он уже в цели.
+    // КАЛИБРОВКА (v14)
+    // PPR 14/16 в цели, D% 16/16. Формулы зафиксированы.
     // ─────────────────────────────────────────────
     private fun getTripleAccuracy(botLevel: Int): Double {
         val lvl = botLevel.coerceIn(1, 16)
@@ -195,6 +188,13 @@ object Game501BotAI {
         return SimulatedThrow(0, 0, isHit = false)
     }
 
+    // Выбор цели на ТЕКУЩИЙ дротик.
+    // * Оставшиеся дротики в ходу = 3 - turnDarts.
+    // * Пути для ТЕКУЩЕГО остатка, отфильтрованные по числу дротиков.
+    // * Сортировка: пути с любимым даблом бота — вперёд
+    //   (приоритет из BotPreferences.doublePriority).
+    // * Возвращаем ПЕРВЫЙ бросок первого подходящего пути.
+    // * Если не влезает — подход в S20 (не попытка в дабл).
     private fun chooseTarget(player: Player501): CheckoutThrow {
         val score = player.score
         if (score > 170 || !CheckoutTable.isCheckoutPossible(score)) {
@@ -210,7 +210,21 @@ object Game501BotAI {
         if (viable.isEmpty()) {
             return CheckoutThrow(20, 1)
         }
-        return viable.first().throws.first()
+
+        // Приоритизация по любимым даблам.
+        // Последний бросок пути — финишный, обычно дабл. Если он
+        // любимый — приоритет высокий. Стабильная сортировка сохранит
+        // порядок путей из таблицы при равных приоритетах.
+        val sorted = viable.sortedBy { path ->
+            val last = path.throws.lastOrNull()
+            if (last != null && last.multiplier == 2) {
+                BotPreferences.doublePriority(player.botLevel, last.sector)
+            } else {
+                Int.MAX_VALUE
+            }
+        }
+
+        return sorted.first().throws.first()
     }
 
     private fun updateStreak(player: Player501): Player501 {
