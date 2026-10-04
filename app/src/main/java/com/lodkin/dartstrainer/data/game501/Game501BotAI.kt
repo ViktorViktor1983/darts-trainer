@@ -6,6 +6,49 @@ object Game501BotAI {
 
     private const val ENABLE_VARIABILITY = true
 
+    // Точность в утроение по уровням (1..16). Прямая таблица.
+    // Значения подобраны так, чтобы PPR попадал в середину ± 1.
+    private val TRIPLE_ACCURACY = doubleArrayOf(
+        0.0,    // индекс 0 — пустой
+        0.010,  // 1  Новичок
+        0.042,  // 2  Ученик
+        0.073,  // 3  Любитель
+        0.104,  // 4  Уверенный
+        0.135,  // 5  Опытный
+        0.166,  // 6  Практик
+        0.198,  // 7  Разрядник
+        0.230,  // 8  Турнирный
+        0.262,  // 9  Сильный
+        0.300,  // 10 Крепкий
+        0.340,  // 11 КМС
+        0.385,  // 12 Почти мастер
+        0.435,  // 13 Мастер
+        0.485,  // 14 Чемпион
+        0.535,  // 15 Профи
+        0.590   // 16 Легенда
+    )
+
+    // Точность в удвоение по уровням.
+    private val DOUBLE_ACCURACY = doubleArrayOf(
+        0.0,      // 0
+        0.065,    // 1
+        0.0855,   // 2
+        0.105,    // 3
+        0.127,    // 4
+        0.147,    // 5
+        0.168,    // 6
+        0.190,    // 7
+        0.205,    // 8
+        0.229,    // 9
+        0.250,    // 10
+        0.285,    // 11
+        0.305,    // 12
+        0.350,    // 13
+        0.367,    // 14
+        0.400,    // 15
+        0.450     // 16
+    )
+
     private val NEIGHBORS: Map<Int, Pair<Int, Int>> = mapOf(
         20 to (5 to 1), 1 to (20 to 18), 18 to (1 to 4), 4 to (18 to 13),
         13 to (4 to 6), 6 to (13 to 10), 10 to (6 to 15), 15 to (10 to 2),
@@ -148,16 +191,12 @@ object Game501BotAI {
 
     private fun getTripleAccuracy(botLevel: Int): Double {
         val lvl = botLevel.coerceIn(1, 16)
-        val midBonus = if (lvl > 9) (lvl - 9) * 0.004 else 0.0
-        val topBonus = if (lvl > 11) (lvl - 11) * 0.010 else 0.0
-        val superBonus = if (lvl >= 13) (lvl - 12) * 0.008 else 0.0
-        return 0.012 + (lvl - 1) * 0.031 + midBonus + topBonus + superBonus
+        return TRIPLE_ACCURACY[lvl]
     }
 
     private fun getDoubleAccuracy(botLevel: Int): Double {
         val lvl = botLevel.coerceIn(1, 16)
-        val bonus = if (lvl > 11) (lvl - 11) * 0.012 else 0.0
-        return (0.065 + (lvl - 1) * 0.0205 + bonus).coerceAtMost(0.60)
+        return DOUBLE_ACCURACY[lvl]
     }
 
     private fun getSingleAccuracy(botLevel: Int): Double {
@@ -174,13 +213,7 @@ object Game501BotAI {
     }
 
     // Промах из T-сектора.
-    // Значения для ур.1 / ур.7 / ур.16 (от промаха):
-    //   за борт   10% / 0.63% / 0.1%
-    //   S-целевой 12% / 28%   / 45%
-    //   S-соседи  40% / 40.9% / 30%
-    //   T-соседи  22% / 20.3% / 12%
-    //   D-соседи   8% / 5.1%  / 4%
-    //   D-целевой  8% / 5.1%  / 9%
+    // Значения для ур.1 / ур.7 / ур.16 (от промаха).
     private fun missFromTriple(sector: Int, botLevel: Int): SimulatedThrow {
         val lvl = botLevel.coerceIn(1, 16)
         val pOut = interp(10.0, 0.63, 0.1, lvl)
@@ -219,13 +252,6 @@ object Game501BotAI {
     }
 
     // Промах из S-сектора.
-    // Значения для ур.1 / ур.7 / ур.16 (от промаха):
-    //   за борт    8% / 2.1%  / 0.5%
-    //   T-целевой  5% / 22%   / 40%
-    //   S-соседи  60% / 50.4% / 35%
-    //   D-целевой 13% / 17%   / 15%
-    //   T-соседи   7% / 4.3%  / 5%
-    //   D-соседи   7% / 4.3%  / 4.5%
     private fun missFromSingle(sector: Int, botLevel: Int): SimulatedThrow {
         val lvl = botLevel.coerceIn(1, 16)
         val pOut = interp(8.0, 2.1, 0.5, lvl)
@@ -266,12 +292,6 @@ object Game501BotAI {
     }
 
     // Промах из D-сектора.
-    // Значения для ур.1 / ур.7 / ур.16 (от промаха):
-    //   за борт   60% / 38%   / 20%
-    //   S-целевой  8% / 36.2% / 45%
-    //   D-соседи   8% / 12.3% / 15%
-    //   S-соседи  20% / 12.3% / 15%
-    //   T-соседи   4% / 1.2%  / 5%
     private fun missFromDouble(sector: Int, botLevel: Int): SimulatedThrow {
         val lvl = botLevel.coerceIn(1, 16)
         val pOut = interp(60.0, 38.0, 20.0, lvl)
