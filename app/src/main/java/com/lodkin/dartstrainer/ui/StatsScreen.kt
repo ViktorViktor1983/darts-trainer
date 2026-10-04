@@ -14,12 +14,16 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.lodkin.dartstrainer.data.cricket.CricketGameEntity
 import com.lodkin.dartstrainer.data.cricket.CricketRepository
+import com.lodkin.dartstrainer.data.game501.Game501Database
+import com.lodkin.dartstrainer.data.game501.Game501Entity
+import com.lodkin.dartstrainer.data.game501.Game501Repository
 import com.lodkin.dartstrainer.theme.Accent
 import com.lodkin.dartstrainer.theme.ErrorColor
 import com.lodkin.dartstrainer.theme.GoldAccent
@@ -57,6 +61,21 @@ private data class CricketAggregate(
 )
 
 // ─────────────────────────────────────────────
+// Агрегат статистики x01 (только по игрокам-людям)
+// ─────────────────────────────────────────────
+private data class Game501Aggregate(
+    val matches: Int = 0,
+    val legs: Int = 0,
+    val darts: Int = 0,
+    val doublesHit: Int = 0,
+    val doublesAttempted: Int = 0,
+    val wins: Int = 0,
+    val avgPpr: Double = 0.0,
+    val bestPpr: Double = 0.0,
+    val avgDartsPerLeg: Double = 0.0
+)
+
+// ─────────────────────────────────────────────
 // Экран статистики
 // ─────────────────────────────────────────────
 @Composable
@@ -64,19 +83,28 @@ fun StatsScreen(
     repository: CricketRepository,
     onBack: () -> Unit
 ) {
+    val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val game501Repo = remember {
+        Game501Repository(Game501Database.get(context).game501Dao())
+    }
+
     var selectedTab by remember { mutableStateOf(0) }   // 0 = Крикет, 1 = 501
     var period by remember { mutableStateOf(StatPeriod.ALL) }
     var games by remember { mutableStateOf<List<CricketGameEntity>>(emptyList()) }
+    var games501 by remember { mutableStateOf<List<Game501Entity>>(emptyList()) }
     var showResetDialog by remember { mutableStateOf(false) }
     var reloadKey by remember { mutableStateOf(0) }
 
     LaunchedEffect(period, reloadKey) {
-        val all = repository.getAllGames()
         val cutoff = period.daysBack?.let {
             System.currentTimeMillis() - it * 24L * 60L * 60L * 1000L
         }
-        games = if (cutoff == null) all else all.filter { it.dateMillis >= cutoff }
+        val allCricket = repository.getAllGames()
+        games = if (cutoff == null) allCricket else allCricket.filter { it.dateMillis >= cutoff }
+
+        val all501 = game501Repo.getAllGames()
+        games501 = if (cutoff == null) all501 else all501.filter { it.dateMillis >= cutoff }
     }
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
@@ -121,17 +149,24 @@ fun StatsScreen(
                 onResetClick = { showResetDialog = true }
             )
         } else {
-            PlaceholderTab("Статистика 501", "Раздел в разработке")
+            Game501TabContent(
+                games = games501,
+                period = period,
+                onPeriodChange = { period = it },
+                onResetClick = { showResetDialog = true }
+            )
         }
     }
 
     if (showResetDialog) {
+        val isCricket = selectedTab == 0
         AlertDialog(
             onDismissRequest = { showResetDialog = false },
             confirmButton = {
                 TextButton(onClick = {
                     scope.launch {
-                        repository.clearAll()
+                        if (isCricket) repository.clearAll()
+                        else game501Repo.clearAll()
                         reloadKey++
                     }
                     showResetDialog = false
@@ -142,8 +177,20 @@ fun StatsScreen(
                     Text("Отмена", color = Accent)
                 }
             },
-            title = { Text("Сбросить статистику?", color = Color.White) },
-            text = { Text("Все матчи по крикету будут удалены. Отменить это действие нельзя.", color = Color.White) }
+            title = {
+                Text(
+                    if (isCricket) "Сбросить статистику крикета?"
+                    else "Сбросить статистику 501?",
+                    color = Color.White
+                )
+            },
+            text = {
+                Text(
+                    if (isCricket) "Все матчи по крикету будут удалены. Отменить это действие нельзя."
+                    else "Все матчи x01 будут удалены. Отменить это действие нельзя.",
+                    color = Color.White
+                )
+            }
         )
     }
 }
@@ -172,10 +219,8 @@ private fun CricketTabContent(
         if (aggregate.legs == 0) {
             EmptyStats()
         } else {
-            // Блок 1 — Основные
             SectionTitle("ОСНОВНЫЕ")
             Spacer(Modifier.height(8.dp))
-            // ВНИМАНИЕ: Строка "Матчей сыграно" убрана отсюда
             StatRowCard("Легов сыграно", aggregate.legs.toString())
             Spacer(Modifier.height(6.dp))
             StatRowCard("Средний набор (MPR)", "%.2f".format(Locale.US, aggregate.avgMpr))
@@ -184,7 +229,6 @@ private fun CricketTabContent(
 
             Spacer(Modifier.height(20.dp))
 
-            // Блок 2 — Точность
             SectionTitle("ТОЧНОСТЬ")
             Spacer(Modifier.height(8.dp))
             StatRowCard(
@@ -211,7 +255,6 @@ private fun CricketTabContent(
 
             Spacer(Modifier.height(20.dp))
 
-            // Блок 3 — Достижения
             SectionTitle("ДОСТИЖЕНИЯ")
             Spacer(Modifier.height(8.dp))
             StatRowCard(
@@ -228,7 +271,110 @@ private fun CricketTabContent(
 
             Spacer(Modifier.height(24.dp))
 
-            // Кнопка сброса
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(TileBgDark)
+                    .clickable { onResetClick() }
+                    .padding(vertical = 14.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    "Сбросить статистику",
+                    color = ErrorColor,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Medium
+                )
+            }
+
+            Spacer(Modifier.height(24.dp))
+        }
+    }
+}
+
+// ─────────────────────────────────────────────
+// Контент вкладки 501
+// ─────────────────────────────────────────────
+@Composable
+private fun Game501TabContent(
+    games: List<Game501Entity>,
+    period: StatPeriod,
+    onPeriodChange: (StatPeriod) -> Unit,
+    onResetClick: () -> Unit
+) {
+    val aggregate = remember(games) { computeAggregate501(games) }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+    ) {
+        PeriodSelector(period = period, onPeriodChange = onPeriodChange)
+
+        Spacer(Modifier.height(16.dp))
+
+        if (aggregate.matches == 0) {
+            EmptyStats()
+        } else {
+            // ── ОСНОВНЫЕ ──
+            SectionTitle("ОСНОВНЫЕ")
+            Spacer(Modifier.height(8.dp))
+            StatRowCard("Матчей сыграно", aggregate.matches.toString())
+            Spacer(Modifier.height(6.dp))
+            StatRowCard("Легов сыграно", aggregate.legs.toString())
+            Spacer(Modifier.height(6.dp))
+            StatRowCard(
+                "Средний набор (PPR)",
+                "%.2f".format(Locale.US, aggregate.avgPpr)
+            )
+            Spacer(Modifier.height(6.dp))
+            StatRowCard(
+                "Лучший PPR за матч",
+                "%.2f".format(Locale.US, aggregate.bestPpr)
+            )
+
+            Spacer(Modifier.height(20.dp))
+
+            // ── ТОЧНОСТЬ ──
+            SectionTitle("ТОЧНОСТЬ")
+            Spacer(Modifier.height(8.dp))
+            StatRowCard(
+                label = "Точность удвоений",
+                value = if (aggregate.doublesAttempted > 0)
+                    percentLabel(aggregate.doublesHit, aggregate.doublesAttempted)
+                else "—",
+                sub = if (aggregate.doublesAttempted > 0)
+                    "${aggregate.doublesHit} из ${aggregate.doublesAttempted} попыток"
+                else "Нет попыток в удвоение"
+            )
+            Spacer(Modifier.height(6.dp))
+            StatRowCard(
+                label = "Средний дротиков на лег",
+                value = if (aggregate.avgDartsPerLeg > 0)
+                    "%.1f".format(Locale.US, aggregate.avgDartsPerLeg)
+                else "—",
+                sub = "всего ${aggregate.darts} дротиков"
+            )
+
+            Spacer(Modifier.height(20.dp))
+
+            // ── ДОСТИЖЕНИЯ ──
+            SectionTitle("ДОСТИЖЕНИЯ")
+            Spacer(Modifier.height(8.dp))
+            StatRowCard(
+                label = "Побед в матчах",
+                value = "${aggregate.wins} из ${aggregate.matches}",
+                sub = if (aggregate.matches > 0)
+                    "%.0f%% побед".format(
+                        Locale.US,
+                        aggregate.wins.toDouble() / aggregate.matches * 100.0
+                    )
+                else null
+            )
+
+            Spacer(Modifier.height(24.dp))
+
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -390,26 +536,8 @@ private fun EmptyStats() {
     }
 }
 
-@Composable
-private fun PlaceholderTab(title: String, subtitle: String) {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .background(TileBgDark)
-            .padding(24.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(title, color = Accent, fontSize = 16.sp, fontWeight = FontWeight.Bold)
-            Spacer(Modifier.height(6.dp))
-            Text(subtitle, color = Color.White.copy(alpha = 0.7f), fontSize = 13.sp)
-        }
-    }
-}
-
 // ─────────────────────────────────────────────
-// Логика подсчёта
+// Логика подсчёта — крикет
 // ─────────────────────────────────────────────
 private fun parseStringList(s: String): List<String> =
     if (s.isBlank()) emptyList() else s.split("|")
@@ -481,5 +609,59 @@ private fun computeAggregate(games: List<CricketGameEntity>): CricketAggregate {
         strongRounds = strong,
         avgMpr = avgMpr,
         bestMpr = bestMpr
+    )
+}
+
+// ─────────────────────────────────────────────
+// Логика подсчёта — x01
+// ─────────────────────────────────────────────
+private fun computeAggregate501(games: List<Game501Entity>): Game501Aggregate {
+    var matches = 0
+    var legs = 0
+    var darts = 0
+    var doublesHit = 0
+    var doublesAttempted = 0
+    var wins = 0
+    val pprValues = mutableListOf<Double>()
+
+    for (g in games) {
+        val bots = parseStringList(g.playerIsBot)
+        val dartsList = parseIntList(g.matchDarts)
+        val hitList = parseIntList(g.doublesHit)
+        val attList = parseIntList(g.doublesAttempted)
+        val pprList = parseDoubleList(g.ppr)
+
+        var hasHuman = false
+        for (i in bots.indices) {
+            if (bots[i] == "0") {
+                hasHuman = true
+                darts += dartsList.getOrElse(i) { 0 }
+                doublesHit += hitList.getOrElse(i) { 0 }
+                doublesAttempted += attList.getOrElse(i) { 0 }
+                if (i < pprList.size) pprValues.add(pprList[i])
+                // Победа — если в матче победил этот игрок-человек
+                if (g.winnerIndex == i) wins++
+            }
+        }
+        if (hasHuman) {
+            matches++
+            legs += g.legsPlayed
+        }
+    }
+
+    val avgPpr = if (pprValues.isEmpty()) 0.0 else pprValues.average()
+    val bestPpr = pprValues.maxOrNull() ?: 0.0
+    val avgDartsPerLeg = if (legs > 0) darts.toDouble() / legs else 0.0
+
+    return Game501Aggregate(
+        matches = matches,
+        legs = legs,
+        darts = darts,
+        doublesHit = doublesHit,
+        doublesAttempted = doublesAttempted,
+        wins = wins,
+        avgPpr = avgPpr,
+        bestPpr = bestPpr,
+        avgDartsPerLeg = avgDartsPerLeg
     )
 }
