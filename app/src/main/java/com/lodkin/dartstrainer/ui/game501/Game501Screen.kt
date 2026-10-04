@@ -26,6 +26,7 @@ import com.lodkin.dartstrainer.theme.TileBg
 import com.lodkin.dartstrainer.theme.TileBgDark
 import kotlinx.coroutines.delay
 import java.util.Locale
+import kotlin.random.Random
 
 private val PaleYellow = Color(0xFFFFE082)
 private val PaleYellowText = Color(0xFF3E2723)
@@ -71,7 +72,22 @@ fun Game501Screen(
         showLegQuestionDialog || showDoublesQuestionDialog || showDoublesOnlyDialog
     val canUndo = history.isNotEmpty() && !dialogOpen
 
-    LaunchedEffect(Unit) { quickSums = Game501SettingsStorage.getQuickSums(context) }
+    // ─────────────────────────────────────────────
+    // Форма дня: генерируется ОДИН РАЗ при входе в экран.
+    // Коридор 0.85…1.15 (среднее 1.0), поэтому калибровка сохраняется.
+    // sessionStartTime — реальное время старта матча, от него считается
+    // fatigueFactor: до 90 мин = 1.0, потом плавно падает.
+    // ─────────────────────────────────────────────
+    LaunchedEffect(Unit) {
+        if (game.sessionStartTime == 0L) {
+            val form = 0.85 + Random.nextDouble() * 0.30
+            game = game.copy(
+                sessionForm = form,
+                sessionStartTime = System.currentTimeMillis()
+            )
+        }
+        quickSums = Game501SettingsStorage.getQuickSums(context)
+    }
 
     LaunchedEffect(recordSum) {
         val s = recordSum
@@ -174,7 +190,7 @@ fun Game501Screen(
     }
 
     // ─────────────────────────────────────────────
-    // Автоход бота. Ключи — только то, что реально влияет на смену игрока.
+    // Автоход бота.
     // ─────────────────────────────────────────────
     LaunchedEffect(
         game.currentPlayerIndex,
@@ -208,10 +224,6 @@ fun Game501Screen(
         if (showBustMessage) { delay(1500L); showBustMessage = false }
     }
 
-    // ─────────────────────────────────────────────
-    // Диалог лега — только для не-allBots.
-    // Отслеживаем размер истории легов.
-    // ─────────────────────────────────────────────
     LaunchedEffect(game.legHistory.size, allBots) {
         if (allBots) {
             lastSeenLegHistorySize = game.legHistory.size
@@ -223,9 +235,6 @@ fun Game501Screen(
         }
     }
 
-    // ─────────────────────────────────────────────
-    // Диалог сета — только для не-allBots.
-    // ─────────────────────────────────────────────
     LaunchedEffect(game.currentSetNumber, allBots, showLegWonDialog) {
         if (allBots) {
             lastSeenSetNumber = game.currentSetNumber
@@ -237,9 +246,6 @@ fun Game501Screen(
         }
     }
 
-    // ─────────────────────────────────────────────
-    // Диалог победы — только для не-allBots.
-    // ─────────────────────────────────────────────
     LaunchedEffect(game.isFinished, allBots, showLegWonDialog, showSetWonDialog) {
         if (!game.isFinished) return@LaunchedEffect
         if (allBots) {
