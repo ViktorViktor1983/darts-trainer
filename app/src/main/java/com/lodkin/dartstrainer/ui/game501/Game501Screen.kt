@@ -57,7 +57,6 @@ fun Game501Screen(
     var quickSums by remember { mutableStateOf(Game501SettingsStorage.getQuickSums(context)) }
     var recordSum by remember { mutableStateOf<Int?>(null) }
 
-    // Слежение за историей легов
     var lastSeenLegHistorySize by remember { mutableStateOf(game.legHistory.size) }
     var lastSeenSetNumber by remember { mutableStateOf(game.currentSetNumber) }
 
@@ -72,12 +71,6 @@ fun Game501Screen(
         showLegQuestionDialog || showDoublesQuestionDialog || showDoublesOnlyDialog
     val canUndo = history.isNotEmpty() && !dialogOpen
 
-    // ─────────────────────────────────────────────
-    // Форма дня: генерируется ОДИН РАЗ при входе в экран.
-    // Коридор 0.85…1.15 (среднее 1.0), поэтому калибровка сохраняется.
-    // sessionStartTime — реальное время старта матча, от него считается
-    // fatigueFactor: до 90 мин = 1.0, потом плавно падает.
-    // ─────────────────────────────────────────────
     LaunchedEffect(Unit) {
         if (game.sessionStartTime == 0L) {
             val form = 0.85 + Random.nextDouble() * 0.30
@@ -191,6 +184,9 @@ fun Game501Screen(
 
     // ─────────────────────────────────────────────
     // Автоход бота.
+    // ВАЖНО: showLegWonDialog и showSetWonDialog в ключах — иначе после
+    // закрытия диалога «ЛЕГ ЗАВЕРШЁН» LaunchedEffect не перезапускается
+    // и игра висит, ожидая хода бота.
     // ─────────────────────────────────────────────
     LaunchedEffect(
         game.currentPlayerIndex,
@@ -198,7 +194,8 @@ fun Game501Screen(
         game.currentSetNumber,
         game.isFinished,
         showLegQuestionDialog, showDoublesQuestionDialog, showDoublesOnlyDialog,
-        showWinDialog
+        showWinDialog,
+        showLegWonDialog, showSetWonDialog
     ) {
         if (game.isFinished) return@LaunchedEffect
         if (showLegQuestionDialog || showDoublesQuestionDialog || showDoublesOnlyDialog) return@LaunchedEffect
