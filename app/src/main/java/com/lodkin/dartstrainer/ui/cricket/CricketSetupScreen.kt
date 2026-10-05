@@ -452,16 +452,26 @@ fun CricketSetupScreen(
 
 // ─────────────────────────────────────────────
 // Загрузка слотов из сохранённых настроек
+//
+// Приоритет для первого слота (слот 1):
+//   1. Имя владельца (из онбординга)
+//   2. Последнее сохранённое имя
+//   3. "Игрок 1"
 // ─────────────────────────────────────────────
 private fun loadSlots(context: android.content.Context, playerName: String): List<PlayerSlot> {
     val bots = CricketSettingsStorage.getSlotIsBot(context)
     val names = CricketSettingsStorage.getSlotNames(context)
     val botIds = CricketSettingsStorage.getSlotBotIds(context)
 
+    // Имя владельца — главный приоритет для первого слота.
+    val ownerName = when {
+        playerName.isNotBlank() -> playerName
+        PlayerNamesStorage.getLastPlayer1(context).isNotBlank() -> PlayerNamesStorage.getLastPlayer1(context)
+        else -> "Игрок 1"
+    }
+
     val defaults = listOf(
-        PlayerSlot(false, PlayerNamesStorage.getLastPlayer1(context).ifBlank {
-            playerName.ifBlank { "Игрок 1" }
-        }, CRICKET_BOTS[2]),
+        PlayerSlot(false, ownerName, CRICKET_BOTS[2]),
         PlayerSlot(true, PlayerNamesStorage.getLastPlayer2(context).ifBlank { "Игрок 2" }, CRICKET_BOTS[2]),
         PlayerSlot(true, "Игрок 3", CRICKET_BOTS[2]),
         PlayerSlot(true, "Игрок 4", CRICKET_BOTS[2])
@@ -473,7 +483,14 @@ private fun loadSlots(context: android.content.Context, playerName: String): Lis
         val botIdx = (botIds[i] - 1).coerceIn(0, CRICKET_BOTS.lastIndex)
         val bot = CRICKET_BOTS[botIdx]
         val isBot = bots[i]
-        val name = if (isBot) bot.name else names[i]
+        val name = when {
+            // Если слот — бот, берём его имя.
+            isBot -> bot.name
+            // Если это первый слот и имя владельца известно — используем его.
+            i == 0 && playerName.isNotBlank() -> playerName
+            // Иначе — сохранённое имя, а если пусто — дефолт.
+            else -> names[i].ifBlank { if (i == 0) "Игрок 1" else "Игрок ${i + 1}" }
+        }
         PlayerSlot(isBot, name, bot)
     }
 }
