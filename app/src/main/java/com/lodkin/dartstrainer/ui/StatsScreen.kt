@@ -19,6 +19,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.lodkin.dartstrainer.data.SettingsStorage
 import com.lodkin.dartstrainer.data.cricket.CricketGameEntity
 import com.lodkin.dartstrainer.data.cricket.CricketRepository
 import com.lodkin.dartstrainer.data.game501.CheckoutTable
@@ -48,15 +49,14 @@ private enum class StatPeriod(val label: String, val daysBack: Long?) {
 }
 
 // ─────────────────────────────────────────────
-// Список всех валидных чекаутов (2..170 минус bogey numbers)
-// Bogey numbers: 159, 162, 163, 165, 166, 168, 169 — не закрываются за 3 дротика в Double Out.
+// Список валидных чекаутов (2..170 минус bogey numbers)
 // ─────────────────────────────────────────────
 private val VALID_CHECKOUTS: List<Int> by lazy {
     (2..170).filter { CheckoutTable.isCheckoutPossible(it) }
 }
 
 // ─────────────────────────────────────────────
-// Цвета чек-аутов (по количеству закрытий)
+// Цвета чек-аутов
 // ─────────────────────────────────────────────
 private val CheckoutGray = Color(0xFF455A64)
 private val CheckoutGreen = Color(0xFF4CAF50)
@@ -83,7 +83,7 @@ private fun checkoutColor(count: Int): Pair<Color, Color> {
 }
 
 // ─────────────────────────────────────────────
-// Агрегат крикета
+// Агрегаты
 // ─────────────────────────────────────────────
 private data class CricketAggregate(
     val legs: Int = 0,
@@ -98,9 +98,6 @@ private data class CricketAggregate(
     val bestMpr: Double = 0.0
 )
 
-// ─────────────────────────────────────────────
-// Агрегат x01
-// ─────────────────────────────────────────────
 private data class Game501Aggregate(
     val legs: Int = 0,
     val darts: Int = 0,
@@ -156,6 +153,9 @@ fun StatsScreen(
     val game501Repo = remember {
         Game501Repository(Game501Database.get(context).game501Dao())
     }
+    // Имя владельца телефона (из онбординга).
+    // Если пустое — считаем статистику по всем людям (старое поведение).
+    val ownerName = remember { SettingsStorage.getPlayerName(context).trim() }
 
     var selectedTab by remember { mutableStateOf(0) }
     var period by remember { mutableStateOf(StatPeriod.ALL) }
@@ -187,7 +187,16 @@ fun StatsScreen(
                 Text("← Назад", color = Accent, fontSize = 15.sp)
             }
             Spacer(Modifier.width(12.dp))
-            Text("Статистика", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Color.White)
+            Column {
+                Text("Статистика", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                if (ownerName.isNotBlank()) {
+                    Text(
+                        "игрок: $ownerName",
+                        color = Accent,
+                        fontSize = 12.sp
+                    )
+                }
+            }
         }
 
         Spacer(Modifier.height(16.dp))
@@ -205,6 +214,7 @@ fun StatsScreen(
         if (selectedTab == 0) {
             CricketTabContent(
                 games = games,
+                ownerName = ownerName,
                 period = period,
                 onPeriodChange = { period = it },
                 onResetClick = { showResetDialog = true }
@@ -212,6 +222,7 @@ fun StatsScreen(
         } else {
             Game501TabContent(
                 games = games501,
+                ownerName = ownerName,
                 period = period,
                 onPeriodChange = { period = it },
                 onResetClick = { showResetDialog = true }
@@ -262,11 +273,12 @@ fun StatsScreen(
 @Composable
 private fun CricketTabContent(
     games: List<CricketGameEntity>,
+    ownerName: String,
     period: StatPeriod,
     onPeriodChange: (StatPeriod) -> Unit,
     onResetClick: () -> Unit
 ) {
-    val aggregate = remember(games) { computeAggregate(games) }
+    val aggregate = remember(games, ownerName) { computeAggregate(games, ownerName) }
 
     Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
         PeriodSelector(period = period, onPeriodChange = onPeriodChange)
@@ -319,11 +331,12 @@ private fun CricketTabContent(
 @Composable
 private fun Game501TabContent(
     games: List<Game501Entity>,
+    ownerName: String,
     period: StatPeriod,
     onPeriodChange: (StatPeriod) -> Unit,
     onResetClick: () -> Unit
 ) {
-    val agg = remember(games) { computeAggregate501(games) }
+    val agg = remember(games, ownerName) { computeAggregate501(games, ownerName) }
     var showCheckoutsDialog by remember { mutableStateOf(false) }
 
     Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
@@ -335,7 +348,6 @@ private fun Game501TabContent(
             return@Column
         }
 
-        // ── ОСНОВНЫЕ ──
         SectionTitle("ОСНОВНЫЕ")
         Spacer(Modifier.height(8.dp))
         StatRowCard("Средний набор (PPR)", "%.2f".format(Locale.US, agg.avgPpr))
@@ -354,7 +366,6 @@ private fun Game501TabContent(
 
         Spacer(Modifier.height(20.dp))
 
-        // ── КАТЕГОРИИ СУММ ──
         SectionTitle("КАТЕГОРИИ СУММ (в среднем за лег)")
         Spacer(Modifier.height(8.dp))
         StatRowCard("180", "%.2f".format(Locale.US, agg.avgCount180))
@@ -371,7 +382,6 @@ private fun Game501TabContent(
 
         Spacer(Modifier.height(20.dp))
 
-        // ── НАБОРЫ ──
         SectionTitle("НАБОРЫ")
         Spacer(Modifier.height(8.dp))
         StatRowCard(
@@ -388,7 +398,6 @@ private fun Game501TabContent(
 
         Spacer(Modifier.height(20.dp))
 
-        // ── ПО УРОВНЯМ БОТОВ ──
         if (agg.byBot.isNotEmpty()) {
             SectionTitle("ПО УРОВНЯМ БОТОВ")
             Spacer(Modifier.height(8.dp))
@@ -403,7 +412,6 @@ private fun Game501TabContent(
             Spacer(Modifier.height(20.dp))
         }
 
-        // ── ДОСТИЖЕНИЯ ──
         SectionTitle("ДОСТИЖЕНИЯ")
         Spacer(Modifier.height(8.dp))
         StatRowCard("Лучший PPR за матч", "%.2f".format(Locale.US, agg.bestMatchPpr))
@@ -436,7 +444,6 @@ private fun Game501TabContent(
             }
         }
 
-        // ── ТРЕНД ──
         if (agg.hasTrend) {
             Spacer(Modifier.height(20.dp))
             SectionTitle("ТРЕНД")
@@ -454,12 +461,10 @@ private fun Game501TabContent(
             )
         }
 
-        // ── ЧЕКАУТЫ ──
         Spacer(Modifier.height(20.dp))
         SectionTitle("ЧЕКАУТЫ")
         Spacer(Modifier.height(8.dp))
 
-        // Считаем только валидные чекауты (без bogey numbers)
         val validTotal = VALID_CHECKOUTS.size
         val closedCount = VALID_CHECKOUTS.count { (agg.closedCheckouts[it] ?: 0) > 0 }
 
@@ -527,7 +532,6 @@ private fun CheckoutsDialog(
         },
         text = {
             Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
-                // Сетка 5 в ряд, только валидные чекауты
                 VALID_CHECKOUTS.chunked(5).forEach { row ->
                     Row(
                         modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
@@ -750,7 +754,7 @@ private fun EmptyStats() {
 }
 
 // ─────────────────────────────────────────────
-// Хелперы парсинга
+// Хелперы
 // ─────────────────────────────────────────────
 private fun parseStringList(s: String): List<String> =
     if (s.isBlank()) emptyList() else s.split("|")
@@ -767,10 +771,18 @@ private fun percentLabel(part: Int, total: Int): String {
     return String.format(Locale.US, "%.1f%%", p)
 }
 
+// Возвращает true, если игрок с этим именем — это владелец.
+// Если ownerName пустой — считаем любого человека владельцем (старое поведение).
+private fun isOwner(isBotFlag: String, name: String, ownerName: String): Boolean {
+    if (isBotFlag != "0") return false
+    if (ownerName.isBlank()) return true
+    return name.equals(ownerName, ignoreCase = true)
+}
+
 // ─────────────────────────────────────────────
-// Логика подсчёта — крикет
+// Логика — крикет
 // ─────────────────────────────────────────────
-private fun computeAggregate(games: List<CricketGameEntity>): CricketAggregate {
+private fun computeAggregate(games: List<CricketGameEntity>, ownerName: String): CricketAggregate {
     var legs = 0
     var darts = 0
     var misses = 0
@@ -783,6 +795,7 @@ private fun computeAggregate(games: List<CricketGameEntity>): CricketAggregate {
 
     for (g in games) {
         val bots = parseStringList(g.playerIsBot)
+        val names = parseStringList(g.playerNames)
         val dartsList = parseIntList(g.totalDarts)
         val missesList = parseIntList(g.misses)
         val triplesList = parseIntList(g.triples)
@@ -792,10 +805,11 @@ private fun computeAggregate(games: List<CricketGameEntity>): CricketAggregate {
         val strongList = parseIntList(g.strongRounds)
         val mprList = parseDoubleList(g.mpr)
 
-        var hasHuman = false
+        var hasOwner = false
         for (i in bots.indices) {
-            if (bots[i] == "0") {
-                hasHuman = true
+            val name = names.getOrNull(i) ?: ""
+            if (isOwner(bots[i], name, ownerName)) {
+                hasOwner = true
                 darts += dartsList.getOrElse(i) { 0 }
                 misses += missesList.getOrElse(i) { 0 }
                 triples += triplesList.getOrElse(i) { 0 }
@@ -806,7 +820,7 @@ private fun computeAggregate(games: List<CricketGameEntity>): CricketAggregate {
                 if (i < mprList.size) mprValues.add(mprList[i])
             }
         }
-        if (hasHuman) legs += g.legsPlayed
+        if (hasOwner) legs += g.legsPlayed
     }
 
     return CricketAggregate(
@@ -824,9 +838,9 @@ private fun computeAggregate(games: List<CricketGameEntity>): CricketAggregate {
 }
 
 // ─────────────────────────────────────────────
-// Логика подсчёта — x01
+// Логика — x01
 // ─────────────────────────────────────────────
-private fun computeAggregate501(games: List<Game501Entity>): Game501Aggregate {
+private fun computeAggregate501(games: List<Game501Entity>, ownerName: String): Game501Aggregate {
     var legs = 0
     var darts = 0
     var doublesHit = 0
@@ -878,12 +892,15 @@ private fun computeAggregate501(games: List<Game501Entity>): Game501Aggregate {
 
         val closeValuesByPlayer = g.closeValues.split("|")
 
-        var hasHuman = false
-        var humanWon = false
+        var hasOwner = false
+        var ownerWon = false
+        var ownerIndex = -1
 
         for (i in bots.indices) {
-            if (bots[i] == "0") {
-                hasHuman = true
+            val name = names.getOrNull(i) ?: ""
+            if (isOwner(bots[i], name, ownerName)) {
+                hasOwner = true
+                ownerIndex = i
                 darts += dartsList.getOrElse(i) { 0 }
                 doublesHit += hitList.getOrElse(i) { 0 }
                 doublesAttempted += attList.getOrElse(i) { 0 }
@@ -893,7 +910,7 @@ private fun computeAggregate501(games: List<Game501Entity>): Game501Aggregate {
                 }
                 if (g.winnerIndex == i) {
                     wins++
-                    humanWon = true
+                    ownerWon = true
                 }
 
                 sumCount180 += c180.getOrElse(i) { 0 }
@@ -920,7 +937,7 @@ private fun computeAggregate501(games: List<Game501Entity>): Game501Aggregate {
             }
         }
 
-        if (hasHuman) {
+        if (hasOwner) {
             matches++
             legs += g.legsPlayed
 
@@ -932,9 +949,8 @@ private fun computeAggregate501(games: List<Game501Entity>): Game501Aggregate {
                 botMatches.getOrPut(opponentLabel) { mutableListOf() }.add(g)
             }
 
-            val humanIdx = bots.indexOfFirst { it == "0" }
-            val humanPpr = pprList.getOrElse(humanIdx) { 0.0 }
-            val humanDarts = dartsList.getOrElse(humanIdx) { 0 }
+            val humanPpr = pprList.getOrElse(ownerIndex) { 0.0 }
+            val humanDarts = dartsList.getOrElse(ownerIndex) { 0 }
             val dpl = if (g.legsPlayed > 0) humanDarts.toDouble() / g.legsPlayed else 0.0
             matchCandidates.add(
                 MatchInfo(
@@ -945,7 +961,7 @@ private fun computeAggregate501(games: List<Game501Entity>): Game501Aggregate {
                 )
             )
 
-            allMatchesInOrder.add(humanWon)
+            allMatchesInOrder.add(ownerWon)
         }
     }
 
@@ -985,9 +1001,12 @@ private fun computeAggregate501(games: List<Game501Entity>): Game501Aggregate {
     var hasTrend = false
     val matchPprs = games.mapNotNull { g ->
         val bots = parseStringList(g.playerIsBot)
+        val names = parseStringList(g.playerNames)
         val pprList = parseDoubleList(g.ppr)
-        val humanIdx = bots.indexOfFirst { it == "0" }
-        if (humanIdx >= 0) pprList.getOrNull(humanIdx) else null
+        val idx = bots.indices.firstOrNull { i ->
+            isOwner(bots[i], names.getOrNull(i) ?: "", ownerName)
+        } ?: -1
+        if (idx >= 0) pprList.getOrNull(idx) else null
     }
     if (matchPprs.size >= 4) {
         val half = matchPprs.size / 2
@@ -1005,14 +1024,17 @@ private fun computeAggregate501(games: List<Game501Entity>): Game501Aggregate {
         var attSum = 0
         for (g in list) {
             val bots = parseStringList(g.playerIsBot)
+            val names = parseStringList(g.playerNames)
             val pprList = parseDoubleList(g.ppr)
             val hitList = parseIntList(g.doublesHit)
             val attList = parseIntList(g.doublesAttempted)
-            val humanIdx = bots.indexOfFirst { it == "0" }
-            if (humanIdx >= 0) {
-                pprList.getOrNull(humanIdx)?.let { pprs.add(it) }
-                hitSum += hitList.getOrElse(humanIdx) { 0 }
-                attSum += attList.getOrElse(humanIdx) { 0 }
+            val idx = bots.indices.firstOrNull { i ->
+                isOwner(bots[i], names.getOrNull(i) ?: "", ownerName)
+            } ?: -1
+            if (idx >= 0) {
+                pprList.getOrNull(idx)?.let { pprs.add(it) }
+                hitSum += hitList.getOrElse(idx) { 0 }
+                attSum += attList.getOrElse(idx) { 0 }
             }
         }
         BotStat(
