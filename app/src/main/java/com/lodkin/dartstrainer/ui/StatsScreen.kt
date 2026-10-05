@@ -49,7 +49,27 @@ private enum class StatPeriod(val label: String, val daysBack: Long?) {
 }
 
 // ─────────────────────────────────────────────
-// Список валидных чекаутов
+// Вариант игры x01 для фильтра
+// ─────────────────────────────────────────────
+private enum class GameVariant(
+    val label: String,
+    val shortLabel: String,
+    val gameTypeName: String?,   // null = все игры
+    val outModeName: String?      // null = все режимы
+) {
+    ALL("Все x01", "Все x01", null, null),
+    X501_DO("501 · Double Out", "501 DO", "X501", "DOUBLE_OUT"),
+    X501_DIDO("501 · Double In/Out", "501 DI/DO", "X501", "DOUBLE_IN_OUT"),
+    X301_DO("301 · Double Out", "301 DO", "X301", "DOUBLE_OUT"),
+    X301_DIDO("301 · Double In/Out", "301 DI/DO", "X301", "DOUBLE_IN_OUT"),
+    X701_DO("701 · Double Out", "701 DO", "X701", "DOUBLE_OUT"),
+    X701_DIDO("701 · Double In/Out", "701 DI/DO", "X701", "DOUBLE_IN_OUT"),
+    X1001_DO("1001 · Double Out", "1001 DO", "X1001", "DOUBLE_OUT"),
+    X1001_DIDO("1001 · Double In/Out", "1001 DI/DO", "X1001", "DOUBLE_IN_OUT")
+}
+
+// ─────────────────────────────────────────────
+// Список валидных чекаутов (2..170 минус bogey numbers)
 // ─────────────────────────────────────────────
 private val VALID_CHECKOUTS: List<Int> by lazy {
     (2..170).filter { CheckoutTable.isCheckoutPossible(it) }
@@ -122,8 +142,7 @@ private data class Game501Aggregate(
     val trend: Double = 0.0,
     val hasTrend: Boolean = false,
     val byBot: List<BotStat> = emptyList(),
-    val topMatches: List<MatchInfo> = emptyList(),
-    val closedCheckouts: Map<Int, Int> = emptyMap()
+    val topMatches: List<MatchInfo> = emptyList()
 )
 
 private data class BotStat(
@@ -162,6 +181,10 @@ fun StatsScreen(
     var showResetDialog by remember { mutableStateOf(false) }
     var reloadKey by remember { mutableStateOf(0) }
 
+    // Фильтр модификации x01
+    var selectedVariant by remember { mutableStateOf(GameVariant.ALL) }
+    var showVariantDialog by remember { mutableStateOf(false) }
+
     LaunchedEffect(period, reloadKey) {
         val cutoff = period.daysBack?.let {
             System.currentTimeMillis() - it * 24L * 60L * 60L * 1000L
@@ -197,10 +220,72 @@ fun StatsScreen(
 
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
             TabButton("КРИКЕТ", selectedTab == 0, { selectedTab = 0 }, Modifier.weight(1f))
-            TabButton("501", selectedTab == 1, { selectedTab = 1 }, Modifier.weight(1f))
+            // Вкладка 501 + стрелочка для фильтра
+            Row(
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(if (selectedTab == 1) Accent else TileBgDark)
+                    .clickable { selectedTab = 1 }
+                    .padding(vertical = 12.dp, horizontal = 12.dp),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    "501",
+                    color = if (selectedTab == 1) Color(0xFF121212) else Color.White,
+                    fontSize = 14.sp,
+                    fontWeight = if (selectedTab == 1) FontWeight.Bold else FontWeight.Medium,
+                    letterSpacing = 2.sp
+                )
+                if (selectedTab == 1) {
+                    Spacer(Modifier.width(6.dp))
+                    Box(
+                        modifier = Modifier
+                            .size(24.dp)
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(Color(0xFF121212).copy(alpha = 0.15f))
+                            .clickable { showVariantDialog = true },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("▼", color = Color(0xFF121212), fontSize = 12.sp)
+                    }
+                }
+            }
+        }
+
+        // Строка активного фильтра (когда выбран не "Все x01" и открыта вкладка 501)
+        if (selectedTab == 1 && selectedVariant != GameVariant.ALL) {
+            Spacer(Modifier.height(8.dp))
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(TileBgDark)
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    "Показано: ${selectedVariant.label}",
+                    color = GoldAccent,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium,
+                    modifier = Modifier.weight(1f)
+                )
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(TileBg)
+                        .clickable { selectedVariant = GameVariant.ALL }
+                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                ) {
+                    Text("✕ Сбросить", color = Color.White, fontSize = 11.sp)
+                }
+            }
         }
 
         Spacer(Modifier.height(16.dp))
@@ -217,11 +302,21 @@ fun StatsScreen(
             Game501TabContent(
                 games = games501,
                 ownerName = ownerName,
+                variant = selectedVariant,
                 period = period,
                 onPeriodChange = { period = it },
                 onResetClick = { showResetDialog = true }
             )
         }
+    }
+
+    // Диалог выбора модификации игры
+    if (showVariantDialog) {
+        VariantDialog(
+            selected = selectedVariant,
+            onSelect = { selectedVariant = it; showVariantDialog = false },
+            onDismiss = { showVariantDialog = false }
+        )
     }
 
     if (showResetDialog) {
@@ -257,6 +352,98 @@ fun StatsScreen(
                     color = Color.White
                 )
             }
+        )
+    }
+}
+
+// ─────────────────────────────────────────────
+// Диалог выбора модификации игры
+// ─────────────────────────────────────────────
+@Composable
+private fun VariantDialog(
+    selected: GameVariant,
+    onSelect: (GameVariant) -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("OK", color = Accent) }
+        },
+        title = {
+            Text("Какая игра?", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+        },
+        text = {
+            Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                // Все x01
+                VariantRow(GameVariant.ALL, selected, onSelect)
+                Spacer(Modifier.height(8.dp))
+
+                // 501
+                VariantGroupTitle("501")
+                VariantRow(GameVariant.X501_DO, selected, onSelect)
+                VariantRow(GameVariant.X501_DIDO, selected, onSelect)
+                Spacer(Modifier.height(8.dp))
+
+                // 301
+                VariantGroupTitle("301")
+                VariantRow(GameVariant.X301_DO, selected, onSelect)
+                VariantRow(GameVariant.X301_DIDO, selected, onSelect)
+                Spacer(Modifier.height(8.dp))
+
+                // 701
+                VariantGroupTitle("701")
+                VariantRow(GameVariant.X701_DO, selected, onSelect)
+                VariantRow(GameVariant.X701_DIDO, selected, onSelect)
+                Spacer(Modifier.height(8.dp))
+
+                // 1001
+                VariantGroupTitle("1001")
+                VariantRow(GameVariant.X1001_DO, selected, onSelect)
+                VariantRow(GameVariant.X1001_DIDO, selected, onSelect)
+
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    "Игры в режиме «Без даблов» в статистику не попадают.",
+                    color = Color.White.copy(alpha = 0.5f), fontSize = 10.sp
+                )
+            }
+        }
+    )
+}
+
+@Composable
+private fun VariantGroupTitle(text: String) {
+    Text(
+        text,
+        color = Accent,
+        fontSize = 11.sp,
+        fontWeight = FontWeight.Bold,
+        letterSpacing = 2.sp,
+        modifier = Modifier.padding(vertical = 4.dp)
+    )
+}
+
+@Composable
+private fun VariantRow(
+    variant: GameVariant,
+    selected: GameVariant,
+    onSelect: (GameVariant) -> Unit
+) {
+    val isSelected = variant == selected
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .background(if (isSelected) Accent else TileBgDark)
+            .clickable { onSelect(variant) }
+            .padding(horizontal = 12.dp, vertical = 10.dp)
+    ) {
+        Text(
+            variant.label,
+            color = if (isSelected) Color(0xFF121212) else Color.White,
+            fontSize = 14.sp,
+            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
         )
     }
 }
@@ -326,11 +513,30 @@ private fun CricketTabContent(
 private fun Game501TabContent(
     games: List<Game501Entity>,
     ownerName: String,
+    variant: GameVariant,
     period: StatPeriod,
     onPeriodChange: (StatPeriod) -> Unit,
     onResetClick: () -> Unit
 ) {
-    val agg = remember(games, ownerName) { computeAggregate501(games, ownerName) }
+    // 1. Отфильтровываем матчи без даблов + фильтр по выбранной модификации.
+    val filteredGames = remember(games, variant) {
+        games.filter { g ->
+            // Без даблов никогда не попадает в статистику.
+            if (g.outModeName == "STRAIGHT_OUT") return@filter false
+            // Если выбран "Все x01" — оставляем всё.
+            if (variant == GameVariant.ALL) return@filter true
+            // Иначе — совпадение по типу и режиму.
+            g.gameTypeName == variant.gameTypeName && g.outModeName == variant.outModeName
+        }
+    }
+
+    val agg = remember(filteredGames, ownerName) { computeAggregate501(filteredGames, ownerName) }
+
+    // Чекауты считаются ПО ВСЕМ играм с даблами (без фильтра модификации).
+    val allCheckouts = remember(games, ownerName) {
+        computeClosedCheckouts(games.filter { it.outModeName != "STRAIGHT_OUT" }, ownerName)
+    }
+
     var showCheckoutsDialog by remember { mutableStateOf(false) }
 
     Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
@@ -455,12 +661,19 @@ private fun Game501TabContent(
             )
         }
 
+        // ── ЧЕКАУТЫ (общие для всех игр с даблами) ──
         Spacer(Modifier.height(20.dp))
-        SectionTitle("ЧЕКАУТЫ")
+        SectionTitle("МОИ ЧЕКАУТЫ")
+        Spacer(Modifier.height(4.dp))
+        Text(
+            "по всем играм с даблами",
+            color = Color.White.copy(alpha = 0.5f),
+            fontSize = 11.sp
+        )
         Spacer(Modifier.height(8.dp))
 
         val validTotal = VALID_CHECKOUTS.size
-        val closedCount = VALID_CHECKOUTS.count { (agg.closedCheckouts[it] ?: 0) > 0 }
+        val closedCount = VALID_CHECKOUTS.count { (allCheckouts[it] ?: 0) > 0 }
 
         StatRowCard(
             label = "Закрыто чек-аутов",
@@ -492,7 +705,7 @@ private fun Game501TabContent(
 
     if (showCheckoutsDialog) {
         CheckoutsDialog(
-            closedCheckouts = agg.closedCheckouts,
+            closedCheckouts = allCheckouts,
             onDismiss = { showCheckoutsDialog = false }
         )
     }
@@ -820,6 +1033,34 @@ private fun computeAggregate(games: List<CricketGameEntity>, ownerName: String):
 }
 
 // ─────────────────────────────────────────────
+// Логика — подсчёт закрытых чек-аутов (по всем матчам с даблами)
+// ─────────────────────────────────────────────
+private fun computeClosedCheckouts(games: List<Game501Entity>, ownerName: String): Map<Int, Int> {
+    val result = mutableMapOf<Int, Int>()
+    for (g in games) {
+        val bots = parseStringList(g.playerIsBot)
+        val names = parseStringList(g.playerNames)
+        val closeValuesByPlayer = g.closeValues.split("|")
+
+        for (i in bots.indices) {
+            val name = names.getOrNull(i) ?: ""
+            if (isOwner(bots[i], name, ownerName)) {
+                val myClose = closeValuesByPlayer.getOrNull(i) ?: ""
+                if (myClose.isNotBlank()) {
+                    myClose.split(",").forEach { raw ->
+                        val v = raw.trim().toIntOrNull()
+                        if (v != null && v in 2..170) {
+                            result[v] = (result[v] ?: 0) + 1
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return result
+}
+
+// ─────────────────────────────────────────────
 // Логика — x01
 // ─────────────────────────────────────────────
 private fun computeAggregate501(games: List<Game501Entity>, ownerName: String): Game501Aggregate {
@@ -849,8 +1090,6 @@ private fun computeAggregate501(games: List<Game501Entity>, ownerName: String): 
     val botMatches = mutableMapOf<String, MutableList<Game501Entity>>()
     val matchCandidates = mutableListOf<MatchInfo>()
 
-    val closedCheckouts = mutableMapOf<Int, Int>()
-
     for (g in games) {
         val bots = parseStringList(g.playerIsBot)
         val names = parseStringList(g.playerNames)
@@ -871,8 +1110,6 @@ private fun computeAggregate501(games: List<Game501Entity>, ownerName: String): 
         val f9d = parseIntList(g.first9Darts)
         val ncs = parseIntList(g.nonCloseScore)
         val ncd = parseIntList(g.nonCloseDarts)
-
-        val closeValuesByPlayer = g.closeValues.split("|")
 
         var hasOwner = false
         var ownerWon = false
@@ -906,16 +1143,6 @@ private fun computeAggregate501(games: List<Game501Entity>, ownerName: String): 
                 sumFirst9Darts += f9d.getOrElse(i) { 0 }
                 sumNonCloseScore += ncs.getOrElse(i) { 0 }
                 sumNonCloseDarts += ncd.getOrElse(i) { 0 }
-
-                val myCloseValues = closeValuesByPlayer.getOrNull(i) ?: ""
-                if (myCloseValues.isNotBlank()) {
-                    myCloseValues.split(",").forEach { raw ->
-                        val v = raw.trim().toIntOrNull()
-                        if (v != null && v in 2..170) {
-                            closedCheckouts[v] = (closedCheckouts[v] ?: 0) + 1
-                        }
-                    }
-                }
             }
         }
 
@@ -1053,7 +1280,6 @@ private fun computeAggregate501(games: List<Game501Entity>, ownerName: String): 
         trend = trend,
         hasTrend = hasTrend,
         byBot = byBotList,
-        topMatches = top5,
-        closedCheckouts = closedCheckouts
+        topMatches = top5
     )
 }
