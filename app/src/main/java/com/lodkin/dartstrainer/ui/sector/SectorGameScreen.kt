@@ -38,7 +38,7 @@ private val SECTOR_20_NORMS: List<Pair<String, Int>> = listOf(
 )
 
 private const val TOTAL_APPROACHES = 10
-private const val DARTS_PER_APPROACH = 3
+private const val MAX_HITS_PER_APPROACH = 9 // 3 утроения = 9 попаданий
 
 @Composable
 fun SectorGameScreen(
@@ -46,7 +46,7 @@ fun SectorGameScreen(
     onFinish: (Int) -> Unit,
     onBack: () -> Unit
 ) {
-    // Список сумм за каждый завершённый подход
+    // Список попаданий за каждый завершённый подход
     val approaches = remember { mutableStateListOf<Int>() }
     var inputText by remember { mutableStateOf("") }
 
@@ -55,27 +55,18 @@ fun SectorGameScreen(
 
     val isBull = sector == 25
     val sectorLabel = if (isBull) "BULL" else "S$sector"
-
-    // Максимально возможная сумма за подход
-    val maxPerApproach = if (isBull) 150 else sector * 3
+    val pointsPerHit = if (isBull) 25 else sector
 
     val currentApproachNumber = approaches.size + 1
-    val totalScore = approaches.sum()
+    val totalHits = approaches.sum()
+    val totalScore = totalHits * pointsPerHit
     val isFinished = approaches.size >= TOTAL_APPROACHES
 
-    // Проверка валидности ввода
+    // Валидность: число 0..9
     fun isInputValid(text: String): Boolean {
         if (text.isBlank()) return false
         val v = text.toIntOrNull() ?: return false
-        if (v < 0 || v > maxPerApproach) return false
-        // Для S20 и Bull проверим, что сумма достижима
-        if (isBull) {
-            return v == 0 || v == 25 || v == 50 || v == 75 || v == 100 ||
-                   v == 125 || v == 150
-        }
-        // Для сектора N: сумма = a*N + b*2N + c*3N, где a+b+c ≤ 3
-        // То есть сумма кратна N и ≤ 3N
-        return v % sector == 0
+        return v in 0..MAX_HITS_PER_APPROACH
     }
 
     fun submitApproach() {
@@ -155,7 +146,7 @@ fun SectorGameScreen(
                 fontWeight = FontWeight.Bold
             )
             Text(
-                "подход $currentApproachNumber из $TOTAL_APPROACHES",
+                "попаданий: $totalHits",
                 color = Color.White.copy(alpha = 0.6f),
                 fontSize = 13.sp
             )
@@ -166,7 +157,7 @@ fun SectorGameScreen(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 12.dp, vertical = 10.dp)
-                .height(72.dp)
+                .height(80.dp)
                 .clip(RoundedCornerShape(12.dp))
                 .background(TileBgDark)
                 .padding(horizontal = 16.dp),
@@ -176,18 +167,25 @@ fun SectorGameScreen(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    "ЗА ПОДХОД",
-                    color = Accent,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 2.sp
-                )
-                Spacer(Modifier.weight(1f))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        "ПОПАДАНИЙ В $sectorLabel",
+                        color = Accent,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 2.sp
+                    )
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        "S=1, D=2, T=3",
+                        color = Color.White.copy(alpha = 0.4f),
+                        fontSize = 10.sp
+                    )
+                }
                 Text(
                     if (inputText.isEmpty()) "—" else inputText,
                     color = if (inputText.isEmpty()) Color.White.copy(alpha = 0.3f) else GoldAccent,
-                    fontSize = 36.sp,
+                    fontSize = 42.sp,
                     fontWeight = FontWeight.Bold
                 )
             }
@@ -202,30 +200,25 @@ fun SectorGameScreen(
         ) {
             val keyboardEnabled = !isFinished
 
-            // 1 2 3
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 DigitKey("1", keyboardEnabled) { inputText = appendDigit(inputText, "1") }
                 DigitKey("2", keyboardEnabled) { inputText = appendDigit(inputText, "2") }
                 DigitKey("3", keyboardEnabled) { inputText = appendDigit(inputText, "3") }
             }
             Spacer(Modifier.height(6.dp))
-            // 4 5 6
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 DigitKey("4", keyboardEnabled) { inputText = appendDigit(inputText, "4") }
                 DigitKey("5", keyboardEnabled) { inputText = appendDigit(inputText, "5") }
                 DigitKey("6", keyboardEnabled) { inputText = appendDigit(inputText, "6") }
             }
             Spacer(Modifier.height(6.dp))
-            // 7 8 9
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 DigitKey("7", keyboardEnabled) { inputText = appendDigit(inputText, "7") }
                 DigitKey("8", keyboardEnabled) { inputText = appendDigit(inputText, "8") }
                 DigitKey("9", keyboardEnabled) { inputText = appendDigit(inputText, "9") }
             }
             Spacer(Modifier.height(6.dp))
-            // Стереть, 0, OK
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                // Кнопка назад/удалить
                 Box(
                     modifier = Modifier
                         .weight(1f)
@@ -233,9 +226,7 @@ fun SectorGameScreen(
                         .clip(RoundedCornerShape(10.dp))
                         .background(TileBgDark)
                         .clickable(enabled = keyboardEnabled && inputText.isNotEmpty()) {
-                            if (inputText.isNotEmpty()) {
-                                inputText = inputText.dropLast(1)
-                            }
+                            if (inputText.isNotEmpty()) inputText = inputText.dropLast(1)
                         },
                     contentAlignment = Alignment.Center
                 ) {
@@ -249,7 +240,6 @@ fun SectorGameScreen(
 
                 DigitKey("0", keyboardEnabled) { inputText = appendDigit(inputText, "0") }
 
-                // OK
                 val okEnabled = keyboardEnabled && isInputValid(inputText)
                 Box(
                     modifier = Modifier
@@ -271,7 +261,6 @@ fun SectorGameScreen(
 
             Spacer(Modifier.height(8.dp))
 
-            // ── Ход назад ──
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -293,7 +282,7 @@ fun SectorGameScreen(
 
             Spacer(Modifier.height(8.dp))
 
-            // ── История подходов ──
+            // История подходов (в попаданиях)
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -315,20 +304,28 @@ fun SectorGameScreen(
                         horizontalArrangement = Arrangement.spacedBy(4.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        approaches.forEach { v ->
+                        approaches.forEach { hits ->
                             Box(
                                 modifier = Modifier
-                                    .size(28.dp)
+                                    .size(32.dp)
                                     .clip(RoundedCornerShape(6.dp))
-                                    .background(TileBg),
+                                    .background(if (hits > 0) TileBg else Color(0xFF2A2A2A)),
                                 contentAlignment = Alignment.Center
                             ) {
-                                Text(
-                                    "$v",
-                                    color = Color.White,
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Text(
+                                        "$hits",
+                                        color = Color.White,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Text(
+                                        "${hits * pointsPerHit}",
+                                        color = Accent,
+                                        fontSize = 8.sp,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                }
                             }
                         }
                     }
@@ -339,7 +336,6 @@ fun SectorGameScreen(
         Spacer(Modifier.height(12.dp))
     }
 
-    // ── Подтверждение выхода ──
     if (showBackConfirm) {
         AlertDialog(
             onDismissRequest = { showBackConfirm = false },
@@ -359,7 +355,6 @@ fun SectorGameScreen(
         )
     }
 
-    // ── Диалог результата ──
     if (showFinishDialog) {
         val score = totalScore
         val bestRank = if (sector == 20) {
@@ -395,6 +390,19 @@ fun SectorGameScreen(
                     )
                     Spacer(Modifier.height(8.dp))
 
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text("Попаданий:", color = Color.White, fontSize = 15.sp)
+                        Text(
+                            "$totalHits",
+                            color = Color.White,
+                            fontSize = 20.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    Spacer(Modifier.height(4.dp))
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween
@@ -463,10 +471,8 @@ fun SectorGameScreen(
     }
 }
 
-// Ввод: цифры, до 3 знаков
 private fun appendDigit(current: String, digit: String): String {
-    if (current.length >= 3) return current
-    // Убираем ведущий ноль
+    if (current.length >= 2) return current
     if (current == "0") return digit
     return current + digit
 }
