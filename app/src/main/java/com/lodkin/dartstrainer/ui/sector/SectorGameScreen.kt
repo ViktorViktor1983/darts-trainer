@@ -17,12 +17,15 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.lodkin.dartstrainer.data.sector.SectorRepository
 import com.lodkin.dartstrainer.theme.Accent
 import com.lodkin.dartstrainer.theme.DarkBg
 import com.lodkin.dartstrainer.theme.ErrorColor
 import com.lodkin.dartstrainer.theme.GoldAccent
 import com.lodkin.dartstrainer.theme.TileBg
 import com.lodkin.dartstrainer.theme.TileBgDark
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 private val PaleYellow = Color(0xFFFFE082)
 private val PaleYellowText = Color(0xFF3E2723)
@@ -38,17 +41,21 @@ private val SECTOR_20_NORMS: List<Pair<String, Int>> = listOf(
 )
 
 private const val TOTAL_APPROACHES = 10
-private const val MAX_HITS_PER_APPROACH = 9 // 3 утроения = 9 попаданий
+private const val MAX_HITS_PER_APPROACH = 9
+private const val AUTO_OK_SECONDS = 5
 
 @Composable
 fun SectorGameScreen(
     sector: Int,
+    repository: SectorRepository,
     onFinish: (Int) -> Unit,
     onBack: () -> Unit
 ) {
-    // Список попаданий за каждый завершённый подход
+    val scope = rememberCoroutineScope()
+
     val approaches = remember { mutableStateListOf<Int>() }
     var inputText by remember { mutableStateOf("") }
+    var autoOkActive by remember { mutableStateOf(false) }
 
     var showBackConfirm by remember { mutableStateOf(false) }
     var showFinishDialog by remember { mutableStateOf(false) }
@@ -62,7 +69,6 @@ fun SectorGameScreen(
     val totalScore = totalHits * pointsPerHit
     val isFinished = approaches.size >= TOTAL_APPROACHES
 
-    // Валидность: число 0..9
     fun isInputValid(text: String): Boolean {
         if (text.isBlank()) return false
         val v = text.toIntOrNull() ?: return false
@@ -74,6 +80,7 @@ fun SectorGameScreen(
         val v = inputText.toInt()
         approaches.add(v)
         inputText = ""
+        autoOkActive = false
 
         if (approaches.size >= TOTAL_APPROACHES) {
             showFinishDialog = true
@@ -84,6 +91,23 @@ fun SectorGameScreen(
         if (approaches.isEmpty()) return
         approaches.removeAt(approaches.lastIndex)
         showFinishDialog = false
+        autoOkActive = false
+    }
+
+    // ── Автоок ──
+    // Запускается, когда введено валидное число.
+    // Каждое изменение inputText или approaches — сбрасывает таймер.
+    LaunchedEffect(inputText, approaches.size) {
+        if (isInputValid(inputText) && !isFinished && !showFinishDialog) {
+            autoOkActive = true
+            delay(AUTO_OK_SECONDS * 1000L)
+            // Если за это время ничего не изменилось — нажимаем OK
+            if (isInputValid(inputText)) {
+                submitApproach()
+            }
+        } else {
+            autoOkActive = false
+        }
     }
 
     Column(
@@ -157,7 +181,7 @@ fun SectorGameScreen(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 12.dp, vertical = 10.dp)
-                .height(80.dp)
+                .height(88.dp)
                 .clip(RoundedCornerShape(12.dp))
                 .background(TileBgDark)
                 .padding(horizontal = 16.dp),
@@ -177,15 +201,24 @@ fun SectorGameScreen(
                     )
                     Spacer(Modifier.height(2.dp))
                     Text(
-                        "S=1, D=2, T=3",
+                        "S=1 · D=2 · T=3",
                         color = Color.White.copy(alpha = 0.4f),
                         fontSize = 10.sp
                     )
+                    if (autoOkActive && isInputValid(inputText)) {
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            "авто-OK через $AUTO_OK_SECONDS сек",
+                            color = Accent.copy(alpha = 0.7f),
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
                 }
                 Text(
                     if (inputText.isEmpty()) "—" else inputText,
                     color = if (inputText.isEmpty()) Color.White.copy(alpha = 0.3f) else GoldAccent,
-                    fontSize = 42.sp,
+                    fontSize = 44.sp,
                     fontWeight = FontWeight.Bold
                 )
             }
@@ -200,29 +233,29 @@ fun SectorGameScreen(
         ) {
             val keyboardEnabled = !isFinished
 
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 DigitKey("1", keyboardEnabled) { inputText = appendDigit(inputText, "1") }
                 DigitKey("2", keyboardEnabled) { inputText = appendDigit(inputText, "2") }
                 DigitKey("3", keyboardEnabled) { inputText = appendDigit(inputText, "3") }
             }
-            Spacer(Modifier.height(6.dp))
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Spacer(Modifier.height(8.dp))
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 DigitKey("4", keyboardEnabled) { inputText = appendDigit(inputText, "4") }
                 DigitKey("5", keyboardEnabled) { inputText = appendDigit(inputText, "5") }
                 DigitKey("6", keyboardEnabled) { inputText = appendDigit(inputText, "6") }
             }
-            Spacer(Modifier.height(6.dp))
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Spacer(Modifier.height(8.dp))
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 DigitKey("7", keyboardEnabled) { inputText = appendDigit(inputText, "7") }
                 DigitKey("8", keyboardEnabled) { inputText = appendDigit(inputText, "8") }
                 DigitKey("9", keyboardEnabled) { inputText = appendDigit(inputText, "9") }
             }
-            Spacer(Modifier.height(6.dp))
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Spacer(Modifier.height(8.dp))
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Box(
                     modifier = Modifier
                         .weight(1f)
-                        .height(64.dp)
+                        .height(68.dp)
                         .clip(RoundedCornerShape(10.dp))
                         .background(TileBgDark)
                         .clickable(enabled = keyboardEnabled && inputText.isNotEmpty()) {
@@ -244,7 +277,7 @@ fun SectorGameScreen(
                 Box(
                     modifier = Modifier
                         .weight(1f)
-                        .height(64.dp)
+                        .height(68.dp)
                         .clip(RoundedCornerShape(10.dp))
                         .background(if (okEnabled) Accent else Accent.copy(alpha = 0.35f))
                         .clickable(enabled = okEnabled) { submitApproach() },
@@ -253,13 +286,13 @@ fun SectorGameScreen(
                     Text(
                         "OK",
                         color = if (okEnabled) Color(0xFF121212) else Color(0xFF121212).copy(alpha = 0.5f),
-                        fontSize = 20.sp,
+                        fontSize = 22.sp,
                         fontWeight = FontWeight.Bold
                     )
                 }
             }
 
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(10.dp))
 
             Box(
                 modifier = Modifier
@@ -280,13 +313,13 @@ fun SectorGameScreen(
                 )
             }
 
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(10.dp))
 
-            // История подходов (в попаданиях)
+            // История подходов
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(44.dp)
+                    .height(46.dp)
                     .clip(RoundedCornerShape(10.dp))
                     .background(TileBgDark)
                     .padding(horizontal = 10.dp),
@@ -307,7 +340,7 @@ fun SectorGameScreen(
                         approaches.forEach { hits ->
                             Box(
                                 modifier = Modifier
-                                    .size(32.dp)
+                                    .size(34.dp)
                                     .clip(RoundedCornerShape(6.dp))
                                     .background(if (hits > 0) TileBg else Color(0xFF2A2A2A)),
                                 contentAlignment = Alignment.Center
@@ -369,6 +402,15 @@ fun SectorGameScreen(
             confirmButton = {
                 TextButton(onClick = {
                     showFinishDialog = false
+                    // Сохраняем матч в БД
+                    scope.launch {
+                        repository.saveGame(
+                            sector = sector,
+                            totalScore = totalScore,
+                            totalHits = totalHits,
+                            approaches = approaches.toList()
+                        )
+                    }
                     onFinish(score)
                 }) { Text("Продолжить", color = Accent) }
             },
@@ -486,7 +528,7 @@ private fun RowScope.DigitKey(
     Box(
         modifier = Modifier
             .weight(1f)
-            .height(64.dp)
+            .height(68.dp)
             .clip(RoundedCornerShape(10.dp))
             .background(if (enabled) TileBg else TileBg.copy(alpha = 0.4f))
             .clickable(enabled = enabled) { onClick() },
@@ -495,7 +537,7 @@ private fun RowScope.DigitKey(
         Text(
             digit,
             color = Color.White,
-            fontSize = 24.sp,
+            fontSize = 26.sp,
             fontWeight = FontWeight.Bold
         )
     }
