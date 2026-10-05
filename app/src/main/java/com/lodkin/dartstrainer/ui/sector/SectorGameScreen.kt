@@ -15,7 +15,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.lodkin.dartstrainer.theme.Accent
@@ -47,7 +46,6 @@ fun SectorGameScreen(
     onFinish: (Int) -> Unit,
     onBack: () -> Unit
 ) {
-    // Счёт: 0..90 (если все 30 попадёшь в утроение = 90)
     var score by remember { mutableStateOf(0) }
     var dartsThrown by remember { mutableStateOf(0) }
     var hits by remember { mutableStateOf(0) }
@@ -234,14 +232,14 @@ fun SectorGameScreen(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // История
+            // История — показываем последние 10 бросков, без скролла
             Box(
                 modifier = Modifier
                     .weight(1f)
                     .height(56.dp)
                     .clip(RoundedCornerShape(10.dp))
                     .background(TileBgDark)
-                    .padding(horizontal = 10.dp),
+                    .padding(horizontal = 8.dp),
                 contentAlignment = Alignment.CenterStart
             ) {
                 if (history.isEmpty()) {
@@ -252,14 +250,11 @@ fun SectorGameScreen(
                     )
                 } else {
                     Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .horizontalScrollSafe(rememberScrollState()),
+                        modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(4.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        // Последние 15 бросков
-                        history.takeLast(15).forEach { v ->
+                        history.takeLast(10).forEach { v ->
                             val bg = when (v) {
                                 0 -> Color(0xFF3A3A3A)
                                 1 -> Color(0xFF4CAF50)
@@ -271,15 +266,15 @@ fun SectorGameScreen(
                             }
                             Box(
                                 modifier = Modifier
-                                    .size(32.dp)
-                                    .clip(RoundedCornerShape(8.dp))
+                                    .size(30.dp)
+                                    .clip(RoundedCornerShape(6.dp))
                                     .background(bg),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Text(
                                     if (v == 0) "0" else "$v",
                                     color = Color.White,
-                                    fontSize = 12.sp,
+                                    fontSize = 11.sp,
                                     fontWeight = FontWeight.Bold
                                 )
                             }
@@ -510,10 +505,4 @@ private fun ThrowButton(
             )
         }
     }
-}
-
-// Хелпер: обычный horizontalScroll
-@Composable
-private fun Modifier.horizontalScrollSafe(state: androidx.compose.foundation.ScrollState): Modifier {
-    return this.then(androidx.compose.foundation.horizontalScroll(state))
 }
