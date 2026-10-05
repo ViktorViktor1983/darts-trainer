@@ -3,7 +3,9 @@ package com.lodkin.dartstrainer.ui
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -23,6 +25,7 @@ import com.lodkin.dartstrainer.theme.TileBgDark
 fun GameSelectScreen(
     onCricket: () -> Unit,
     on501: () -> Unit,
+    onSector: () -> Unit,
     onBack: () -> Unit
 ) {
     Column(
@@ -50,7 +53,7 @@ fun GameSelectScreen(
             )
         }
 
-        Spacer(Modifier.height(24.dp))
+        Spacer(Modifier.height(20.dp))
 
         Text(
             "Во что сыграем?",
@@ -60,25 +63,35 @@ fun GameSelectScreen(
             textAlign = TextAlign.Center
         )
 
-        Spacer(Modifier.height(24.dp))
+        Spacer(Modifier.height(20.dp))
 
-        // 501
-        GameCard(
-            title = "501",
-            subtitle = "Классика. Дойди от 501 до нуля",
-            modifier = Modifier.weight(1f).fillMaxWidth(),
-            onClick = on501
-        )
-
-        Spacer(Modifier.height(16.dp))
-
-        // Крикет
-        GameCard(
-            title = "Крикет",
-            subtitle = "Закрой сектора 15–20 и Bull",
-            modifier = Modifier.weight(1f).fillMaxWidth(),
-            onClick = onCricket
-        )
+        // Список игр — прокручивается, если не влезает
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f)
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            GameCard(
+                title = "501",
+                subtitle = "Классика. Дойди от 501 до нуля",
+                modifier = Modifier.fillMaxWidth().height(140.dp),
+                onClick = on501
+            )
+            GameCard(
+                title = "Крикет",
+                subtitle = "Закрой сектора 15–20 и Bull",
+                modifier = Modifier.fillMaxWidth().height(140.dp),
+                onClick = onCricket
+            )
+            GameCard(
+                title = "Сектор",
+                subtitle = "30 дротиков в один сектор. Нормативы для S20",
+                modifier = Modifier.fillMaxWidth().height(140.dp),
+                onClick = onSector
+            )
+        }
     }
 }
 
@@ -102,14 +115,14 @@ private fun GameCard(
         ) {
             Text(
                 title,
-                fontSize = 32.sp,
+                fontSize = 28.sp,
                 fontWeight = FontWeight.Bold,
                 color = GoldAccent,
                 textAlign = TextAlign.Center
             )
             Text(
                 subtitle,
-                fontSize = 14.sp,
+                fontSize = 13.sp,
                 color = Accent,
                 textAlign = TextAlign.Center,
                 modifier = Modifier.padding(horizontal = 24.dp)
