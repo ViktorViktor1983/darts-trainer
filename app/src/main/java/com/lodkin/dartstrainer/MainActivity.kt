@@ -34,6 +34,7 @@ import com.lodkin.dartstrainer.ui.LoadingScreen
 import com.lodkin.dartstrainer.ui.MainMenuScreen
 import com.lodkin.dartstrainer.ui.OnboardingResult
 import com.lodkin.dartstrainer.ui.OnboardingScreen
+import com.lodkin.dartstrainer.ui.SettingsScreen
 import com.lodkin.dartstrainer.ui.StatsScreen
 import com.lodkin.dartstrainer.ui.WelcomeScreen
 import com.lodkin.dartstrainer.ui.cricket.CricketGameScreen
@@ -106,12 +107,26 @@ fun DartsTrainerApp() {
             "main" -> MainMenuScreen(
                 onTraining = { screen = "training" },
                 onFreePlay = { screen = "game_select" },
-                onStatsClick = { screen = "stats" }
+                onStatsClick = { screen = "stats" },
+                onSettingsClick = { screen = "settings" }
             )
 
             "stats" -> StatsScreen(
                 repository = cricketRepository,
                 onBack = { screen = "main" }
+            )
+
+            "settings" -> SettingsScreen(
+                onBack = { screen = "main" },
+                onFactoryReset = {
+                    // Сбрасываем состояние в памяти и возвращаемся на экран приветствия.
+                    // Данные уже удалены с диска внутри SettingsScreen.factoryReset().
+                    cricketGame = null
+                    game501 = null
+                    onboardingDone = false
+                    screen = "main"
+                    stage = "welcome"
+                }
             )
 
             "training" -> PlaceholderScreen("Тренировка", { screen = "main" })
