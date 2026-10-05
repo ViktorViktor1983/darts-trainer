@@ -27,7 +27,6 @@ import com.lodkin.dartstrainer.theme.TileBgDark
 private val PaleYellow = Color(0xFFFFE082)
 private val PaleYellowText = Color(0xFF3E2723)
 
-// Нормативы для S20 (от низшего к высшему)
 private val SECTOR_20_NORMS: List<Pair<String, Int>> = listOf(
     "II юношеский" to 360,
     "I юношеский" to 400,
@@ -38,7 +37,8 @@ private val SECTOR_20_NORMS: List<Pair<String, Int>> = listOf(
     "МС" to 960
 )
 
-private const val TOTAL_DARTS = 30
+private const val TOTAL_APPROACHES = 10
+private const val DARTS_PER_APPROACH = 3
 
 @Composable
 fun SectorGameScreen(
@@ -46,12 +46,9 @@ fun SectorGameScreen(
     onFinish: (Int) -> Unit,
     onBack: () -> Unit
 ) {
-    var score by remember { mutableStateOf(0) }
-    var dartsThrown by remember { mutableStateOf(0) }
-    var hits by remember { mutableStateOf(0) }
-
-    // История попаданий: список очков за каждый дротик
-    val history = remember { mutableStateListOf<Int>() }
+    // Список сумм за каждый завершённый подход
+    val approaches = remember { mutableStateListOf<Int>() }
+    var inputText by remember { mutableStateOf("") }
 
     var showBackConfirm by remember { mutableStateOf(false) }
     var showFinishDialog by remember { mutableStateOf(false) }
@@ -59,24 +56,42 @@ fun SectorGameScreen(
     val isBull = sector == 25
     val sectorLabel = if (isBull) "BULL" else "S$sector"
 
-    fun addThrow(points: Int, isHit: Boolean) {
-        if (dartsThrown >= TOTAL_DARTS) return
-        score += points
-        if (isHit) hits++
-        history.add(points)
-        dartsThrown++
+    // Максимально возможная сумма за подход
+    val maxPerApproach = if (isBull) 150 else sector * 3
 
-        if (dartsThrown >= TOTAL_DARTS) {
+    val currentApproachNumber = approaches.size + 1
+    val totalScore = approaches.sum()
+    val isFinished = approaches.size >= TOTAL_APPROACHES
+
+    // Проверка валидности ввода
+    fun isInputValid(text: String): Boolean {
+        if (text.isBlank()) return false
+        val v = text.toIntOrNull() ?: return false
+        if (v < 0 || v > maxPerApproach) return false
+        // Для S20 и Bull проверим, что сумма достижима
+        if (isBull) {
+            return v == 0 || v == 25 || v == 50 || v == 75 || v == 100 ||
+                   v == 125 || v == 150
+        }
+        // Для сектора N: сумма = a*N + b*2N + c*3N, где a+b+c ≤ 3
+        // То есть сумма кратна N и ≤ 3N
+        return v % sector == 0
+    }
+
+    fun submitApproach() {
+        if (!isInputValid(inputText)) return
+        val v = inputText.toInt()
+        approaches.add(v)
+        inputText = ""
+
+        if (approaches.size >= TOTAL_APPROACHES) {
             showFinishDialog = true
         }
     }
 
-    fun undo() {
-        if (history.isEmpty()) return
-        val last = history.removeAt(history.lastIndex)
-        score -= last
-        if (last > 0) hits--
-        dartsThrown--
+    fun undoApproach() {
+        if (approaches.isEmpty()) return
+        approaches.removeAt(approaches.lastIndex)
         showFinishDialog = false
     }
 
@@ -111,7 +126,7 @@ fun SectorGameScreen(
                 modifier = Modifier.weight(1f)
             )
             Text(
-                "$dartsThrown / $TOTAL_DARTS",
+                "$currentApproachNumber / $TOTAL_APPROACHES",
                 color = Accent,
                 fontSize = 16.sp,
                 fontWeight = FontWeight.Bold
@@ -123,130 +138,176 @@ fun SectorGameScreen(
             modifier = Modifier
                 .fillMaxWidth()
                 .background(Color(0xFF16202C))
-                .padding(vertical = 16.dp),
+                .padding(vertical = 14.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
-                "ОЧКИ",
+                "РЕЗУЛЬТАТ",
                 color = Color(0xFF99AABB),
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Bold,
                 letterSpacing = 2.sp
             )
             Text(
-                "$score",
+                "$totalScore",
                 color = GoldAccent,
                 fontSize = 56.sp,
                 fontWeight = FontWeight.Bold
             )
-            Spacer(Modifier.height(4.dp))
             Text(
-                "попаданий: $hits / $dartsThrown",
+                "подход $currentApproachNumber из $TOTAL_APPROACHES",
                 color = Color.White.copy(alpha = 0.6f),
                 fontSize = 13.sp
             )
-            if (dartsThrown > 0) {
+        }
+
+        // ── Поле ввода ──
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 10.dp)
+                .height(72.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(TileBgDark)
+                .padding(horizontal = 16.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 Text(
-                    "точность: ${"%.1f".format(hits.toDouble() / dartsThrown * 100)}%",
-                    color = Color.White.copy(alpha = 0.5f),
-                    fontSize = 12.sp
+                    "ЗА ПОДХОД",
+                    color = Accent,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 2.sp
+                )
+                Spacer(Modifier.weight(1f))
+                Text(
+                    if (inputText.isEmpty()) "—" else inputText,
+                    color = if (inputText.isEmpty()) Color.White.copy(alpha = 0.3f) else GoldAccent,
+                    fontSize = 36.sp,
+                    fontWeight = FontWeight.Bold
                 )
             }
         }
 
-        // ── Кнопки ввода ──
+        // ── Клавиатура ──
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+                .padding(horizontal = 12.dp)
+                .weight(1f)
         ) {
-            val enabled = dartsThrown < TOTAL_DARTS
+            val keyboardEnabled = !isFinished
 
-            if (!isBull) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+            // 1 2 3
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                DigitKey("1", keyboardEnabled) { inputText = appendDigit(inputText, "1") }
+                DigitKey("2", keyboardEnabled) { inputText = appendDigit(inputText, "2") }
+                DigitKey("3", keyboardEnabled) { inputText = appendDigit(inputText, "3") }
+            }
+            Spacer(Modifier.height(6.dp))
+            // 4 5 6
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                DigitKey("4", keyboardEnabled) { inputText = appendDigit(inputText, "4") }
+                DigitKey("5", keyboardEnabled) { inputText = appendDigit(inputText, "5") }
+                DigitKey("6", keyboardEnabled) { inputText = appendDigit(inputText, "6") }
+            }
+            Spacer(Modifier.height(6.dp))
+            // 7 8 9
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                DigitKey("7", keyboardEnabled) { inputText = appendDigit(inputText, "7") }
+                DigitKey("8", keyboardEnabled) { inputText = appendDigit(inputText, "8") }
+                DigitKey("9", keyboardEnabled) { inputText = appendDigit(inputText, "9") }
+            }
+            Spacer(Modifier.height(6.dp))
+            // Стереть, 0, OK
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                // Кнопка назад/удалить
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(64.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(TileBgDark)
+                        .clickable(enabled = keyboardEnabled && inputText.isNotEmpty()) {
+                            if (inputText.isNotEmpty()) {
+                                inputText = inputText.dropLast(1)
+                            }
+                        },
+                    contentAlignment = Alignment.Center
                 ) {
-                    ThrowButton(
-                        label = "S$sector",
-                        sub = "+1",
-                        color = TileBg,
-                        enabled = enabled,
-                        modifier = Modifier.weight(1f)
-                    ) { addThrow(1, true) }
-
-                    ThrowButton(
-                        label = "D$sector",
-                        sub = "+2",
-                        color = TileBg,
-                        enabled = enabled,
-                        modifier = Modifier.weight(1f)
-                    ) { addThrow(2, true) }
-
-                    ThrowButton(
-                        label = "T$sector",
-                        sub = "+3",
-                        color = TileBg,
-                        enabled = enabled,
-                        modifier = Modifier.weight(1f)
-                    ) { addThrow(3, true) }
+                    Text(
+                        "⌫",
+                        color = if (inputText.isNotEmpty()) Color.White else Color.White.copy(alpha = 0.3f),
+                        fontSize = 24.sp,
+                        fontWeight = FontWeight.Bold
+                    )
                 }
-            } else {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    ThrowButton(
-                        label = "BULL 25",
-                        sub = "+25",
-                        color = TileBg,
-                        enabled = enabled,
-                        modifier = Modifier.weight(1f)
-                    ) { addThrow(25, true) }
 
-                    ThrowButton(
-                        label = "BULL 50",
-                        sub = "+50",
-                        color = TileBg,
-                        enabled = enabled,
-                        modifier = Modifier.weight(1f)
-                    ) { addThrow(50, true) }
+                DigitKey("0", keyboardEnabled) { inputText = appendDigit(inputText, "0") }
+
+                // OK
+                val okEnabled = keyboardEnabled && isInputValid(inputText)
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(64.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(if (okEnabled) Accent else Accent.copy(alpha = 0.35f))
+                        .clickable(enabled = okEnabled) { submitApproach() },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        "OK",
+                        color = if (okEnabled) Color(0xFF121212) else Color(0xFF121212).copy(alpha = 0.5f),
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold
+                    )
                 }
             }
 
-            ThrowButton(
-                label = "МИМО",
-                sub = "0",
-                color = Color(0xFF2A2A2A),
-                enabled = enabled,
-                modifier = Modifier.fillMaxWidth()
-            ) { addThrow(0, false) }
-        }
+            Spacer(Modifier.height(8.dp))
 
-        // ── История и откат ──
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 12.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            // История — показываем последние 10 бросков, без скролла
+            // ── Ход назад ──
             Box(
                 modifier = Modifier
-                    .weight(1f)
-                    .height(56.dp)
+                    .fillMaxWidth()
+                    .height(52.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(if (approaches.isNotEmpty()) PaleYellow else PaleYellow.copy(alpha = 0.35f))
+                    .clickable(enabled = approaches.isNotEmpty() && !showFinishDialog) {
+                        undoApproach()
+                    },
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    "↶ ХОД НАЗАД",
+                    color = PaleYellowText,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+
+            Spacer(Modifier.height(8.dp))
+
+            // ── История подходов ──
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(44.dp)
                     .clip(RoundedCornerShape(10.dp))
                     .background(TileBgDark)
-                    .padding(horizontal = 8.dp),
+                    .padding(horizontal = 10.dp),
                 contentAlignment = Alignment.CenterStart
             ) {
-                if (history.isEmpty()) {
+                if (approaches.isEmpty()) {
                     Text(
                         "Пока пусто",
                         color = Color.White.copy(alpha = 0.4f),
-                        fontSize = 12.sp
+                        fontSize = 11.sp
                     )
                 } else {
                     Row(
@@ -254,27 +315,18 @@ fun SectorGameScreen(
                         horizontalArrangement = Arrangement.spacedBy(4.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        history.takeLast(10).forEach { v ->
-                            val bg = when (v) {
-                                0 -> Color(0xFF3A3A3A)
-                                1 -> Color(0xFF4CAF50)
-                                2 -> Color(0xFF2196F3)
-                                3 -> Color(0xFF9C27B0)
-                                25 -> Color(0xFFFF9800)
-                                50 -> Color(0xFFE91E63)
-                                else -> TileBg
-                            }
+                        approaches.forEach { v ->
                             Box(
                                 modifier = Modifier
-                                    .size(30.dp)
+                                    .size(28.dp)
                                     .clip(RoundedCornerShape(6.dp))
-                                    .background(bg),
+                                    .background(TileBg),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Text(
-                                    if (v == 0) "0" else "$v",
+                                    "$v",
                                     color = Color.White,
-                                    fontSize = 11.sp,
+                                    fontSize = 10.sp,
                                     fontWeight = FontWeight.Bold
                                 )
                             }
@@ -282,47 +334,12 @@ fun SectorGameScreen(
                     }
                 }
             }
-
-            // Откат
-            Box(
-                modifier = Modifier
-                    .size(56.dp)
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(if (history.isNotEmpty()) PaleYellow else PaleYellow.copy(alpha = 0.35f))
-                    .clickable(enabled = history.isNotEmpty()) { undo() },
-                contentAlignment = Alignment.Center
-            ) {
-                Text("↶", color = PaleYellowText, fontSize = 28.sp, fontWeight = FontWeight.Black)
-            }
-        }
-
-        Spacer(Modifier.height(8.dp))
-
-        // ── Кнопка «Завершить» ──
-        if (dartsThrown > 0 && dartsThrown < TOTAL_DARTS) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 4.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(TileBgDark)
-                    .clickable { showFinishDialog = true }
-                    .padding(vertical = 12.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    "ЗАВЕРШИТЬ ДОСРОЧНО",
-                    color = ErrorColor,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Medium
-                )
-            }
         }
 
         Spacer(Modifier.height(12.dp))
     }
 
-    // ── Диалог подтверждения выхода ──
+    // ── Подтверждение выхода ──
     if (showBackConfirm) {
         AlertDialog(
             onDismissRequest = { showBackConfirm = false },
@@ -344,7 +361,7 @@ fun SectorGameScreen(
 
     // ── Диалог результата ──
     if (showFinishDialog) {
-        val resultTitle = if (dartsThrown >= TOTAL_DARTS) "ИГРА ЗАВЕРШЕНА" else "РЕЗУЛЬТАТ"
+        val score = totalScore
         val bestRank = if (sector == 20) {
             SECTOR_20_NORMS.reversed().firstOrNull { score >= it.second }
         } else null
@@ -363,11 +380,11 @@ fun SectorGameScreen(
             dismissButton = {
                 TextButton(onClick = {
                     showFinishDialog = false
-                    undo()
-                }) { Text("↶ Отменить бросок", color = ErrorColor) }
+                    undoApproach()
+                }) { Text("↶ Отменить подход", color = ErrorColor) }
             },
             title = {
-                Text(resultTitle, color = Accent, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                Text("ИГРА ЗАВЕРШЕНА", color = Accent, fontSize = 22.sp, fontWeight = FontWeight.Bold)
             },
             text = {
                 Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
@@ -382,42 +399,15 @@ fun SectorGameScreen(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Text("Очки:", color = Color.White, fontSize = 15.sp)
+                        Text("Всего очков:", color = Color.White, fontSize = 15.sp)
                         Text(
                             "$score",
                             color = GoldAccent,
-                            fontSize = 22.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                    Spacer(Modifier.height(4.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text("Попаданий:", color = Color.White, fontSize = 14.sp)
-                        Text(
-                            "$hits / $dartsThrown",
-                            color = Color.White,
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                    Spacer(Modifier.height(4.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text("Точность:", color = Color.White, fontSize = 14.sp)
-                        Text(
-                            if (dartsThrown > 0) "%.1f%%".format(hits.toDouble() / dartsThrown * 100) else "—",
-                            color = Color.White,
-                            fontSize = 14.sp,
+                            fontSize = 24.sp,
                             fontWeight = FontWeight.Bold
                         )
                     }
 
-                    // ── Разряд (только S20) ──
                     if (sector == 20) {
                         Spacer(Modifier.height(14.dp))
                         Text(
@@ -473,36 +463,34 @@ fun SectorGameScreen(
     }
 }
 
+// Ввод: цифры, до 3 знаков
+private fun appendDigit(current: String, digit: String): String {
+    if (current.length >= 3) return current
+    // Убираем ведущий ноль
+    if (current == "0") return digit
+    return current + digit
+}
+
 @Composable
-private fun ThrowButton(
-    label: String,
-    sub: String,
-    color: Color,
+private fun RowScope.DigitKey(
+    digit: String,
     enabled: Boolean,
-    modifier: Modifier,
     onClick: () -> Unit
 ) {
     Box(
-        modifier = modifier
-            .height(72.dp)
-            .clip(RoundedCornerShape(12.dp))
-            .background(if (enabled) color else color.copy(alpha = 0.4f))
+        modifier = Modifier
+            .weight(1f)
+            .height(64.dp)
+            .clip(RoundedCornerShape(10.dp))
+            .background(if (enabled) TileBg else TileBg.copy(alpha = 0.4f))
             .clickable(enabled = enabled) { onClick() },
         contentAlignment = Alignment.Center
     ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(
-                label,
-                color = Color.White,
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Bold
-            )
-            Text(
-                sub,
-                color = Accent,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Medium
-            )
-        }
+        Text(
+            digit,
+            color = Color.White,
+            fontSize = 24.sp,
+            fontWeight = FontWeight.Bold
+        )
     }
 }
