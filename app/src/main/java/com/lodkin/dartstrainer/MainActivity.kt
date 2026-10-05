@@ -27,6 +27,8 @@ import com.lodkin.dartstrainer.data.game501.Game501Repository
 import com.lodkin.dartstrainer.data.game501.GameType
 import com.lodkin.dartstrainer.data.game501.OutMode
 import com.lodkin.dartstrainer.data.game501.Player501
+import com.lodkin.dartstrainer.data.sector.SectorDatabase
+import com.lodkin.dartstrainer.data.sector.SectorRepository
 import com.lodkin.dartstrainer.theme.Accent
 import com.lodkin.dartstrainer.theme.DarkBg
 import com.lodkin.dartstrainer.ui.GameSelectScreen
@@ -45,6 +47,7 @@ import com.lodkin.dartstrainer.ui.game501.Game501SetupScreen
 import com.lodkin.dartstrainer.ui.game501.Game501StatsScreen
 import com.lodkin.dartstrainer.ui.sector.SectorGameScreen
 import com.lodkin.dartstrainer.ui.sector.SectorSetupScreen
+import com.lodkin.dartstrainer.ui.sector.SectorStatsScreen
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.random.Random
@@ -72,6 +75,9 @@ fun DartsTrainerApp() {
     }
     val game501Repository = remember {
         Game501Repository(Game501Database.get(context).game501Dao())
+    }
+    val sectorRepository = remember {
+        SectorRepository(SectorDatabase.get(context).sectorDao())
     }
 
     // ── Сессия ──
@@ -248,10 +254,12 @@ fun DartsTrainerApp() {
 
             // ── Сектор ──
             "sector_setup" -> SectorSetupScreen(
+                sectorRepository = sectorRepository,
                 onStartGame = { sector ->
                     sectorToPlay = sector
                     screen = "sector_game"
                 },
+                onOpenStats = { screen = "sector_stats" },
                 onBack = { screen = "game_select" }
             )
 
@@ -260,9 +268,8 @@ fun DartsTrainerApp() {
                 if (sector != null) {
                     SectorGameScreen(
                         sector = sector,
+                        repository = sectorRepository,
                         onFinish = { _score ->
-                            // Пока просто возвращаемся в выбор игры.
-                            // Сохранение статистики — на следующем шаге.
                             sectorToPlay = null
                             screen = "game_select"
                         },
@@ -270,6 +277,11 @@ fun DartsTrainerApp() {
                     )
                 } else screen = "sector_setup"
             }
+
+            "sector_stats" -> SectorStatsScreen(
+                repository = sectorRepository,
+                onBack = { screen = "sector_setup" }
+            )
         }
     }
 }
