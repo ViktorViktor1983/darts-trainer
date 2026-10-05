@@ -1,5 +1,6 @@
 package com.lodkin.dartstrainer.ui
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -13,7 +14,10 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -54,8 +58,8 @@ private enum class StatPeriod(val label: String, val daysBack: Long?) {
 private enum class GameVariant(
     val label: String,
     val shortLabel: String,
-    val gameTypeName: String?,   // null = все игры
-    val outModeName: String?      // null = все режимы
+    val gameTypeName: String?,
+    val outModeName: String?
 ) {
     ALL("Все x01", "Все x01", null, null),
     X501_DO("501 · Double Out", "501 DO", "X501", "DOUBLE_OUT"),
@@ -69,7 +73,7 @@ private enum class GameVariant(
 }
 
 // ─────────────────────────────────────────────
-// Список валидных чекаутов (2..170 минус bogey numbers)
+// Валидные чекауты
 // ─────────────────────────────────────────────
 private val VALID_CHECKOUTS: List<Int> by lazy {
     (2..170).filter { CheckoutTable.isCheckoutPossible(it) }
@@ -185,6 +189,11 @@ fun StatsScreen(
     var selectedVariant by remember { mutableStateOf(GameVariant.ALL) }
     var showVariantDialog by remember { mutableStateOf(false) }
 
+    // Диалоги графиков и чек-аутов
+    var showCricketChart by remember { mutableStateOf(false) }
+    var show501Chart by remember { mutableStateOf(false) }
+    var showCheckoutsDialog by remember { mutableStateOf(false) }
+
     LaunchedEffect(period, reloadKey) {
         val cutoff = period.daysBack?.let {
             System.currentTimeMillis() - it * 24L * 60L * 60L * 1000L
@@ -196,35 +205,84 @@ fun StatsScreen(
         games501 = if (cutoff == null) all501 else all501.filter { it.dateMillis >= cutoff }
     }
 
+    // Считаем данные для графиков один раз
+    val cricketChartData = remember(games, ownerName) {
+        computeCricketChartData(games, ownerName)
+    }
+    val game501ChartData = remember(games501, ownerName, selectedVariant) {
+        compute501ChartData(games501, ownerName, selectedVariant)
+    }
+
+    // Считаем чекауты (общие, по всем играм с даблами)
+    val allCheckouts = remember(games501, ownerName) {
+        computeClosedCheckouts(games501.filter { it.outModeName != "STRAIGHT_OUT" }, ownerName)
+    }
+
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
+
+        // ── ШАПКА ──
+        // Зеркальное отображение графиков:
+        // слева — [←] [📈 Крикет], справа — [📈 501] [🏆 Чек-ауты]
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Слева: Назад + График Крикета
             Box(
                 modifier = Modifier
-                    .clip(RoundedCornerShape(12.dp))
+                    .clip(RoundedCornerShape(10.dp))
                     .background(TileBgDark)
                     .clickable { onBack() }
-                    .padding(horizontal = 16.dp, vertical = 10.dp)
+                    .padding(horizontal = 10.dp, vertical = 8.dp)
             ) {
-                Text("← Назад", color = Accent, fontSize = 15.sp)
+                Text("←", color = Accent, fontSize = 18.sp, fontWeight = FontWeight.Bold)
             }
-            Spacer(Modifier.width(12.dp))
-            Column {
-                Text("Статистика", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Color.White)
+            Spacer(Modifier.width(4.dp))
+            HeaderIconButton(
+                icon = "📈",
+                active = selectedTab == 0,
+                onClick = { if (selectedTab == 0) showCricketChart = true }
+            )
+
+            // Центр: заголовок
+            Column(
+                modifier = Modifier.weight(1f),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    "Статистика",
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
+                )
                 if (ownerName.isNotBlank()) {
-                    Text("игрок: $ownerName", color = Accent, fontSize = 12.sp)
+                    Text("игрок: $ownerName", color = Accent, fontSize = 11.sp)
                 }
             }
+
+            // Справа: График 501 + Чек-ауты (зеркально левой группе)
+            HeaderIconButton(
+                icon = "📈",
+                active = selectedTab == 1,
+                onClick = { if (selectedTab == 1) show501Chart = true }
+            )
+            Spacer(Modifier.width(4.dp))
+            HeaderIconButton(
+                icon = "🏆",
+                active = selectedTab == 1,
+                onClick = { if (selectedTab == 1) showCheckoutsDialog = true }
+            )
         }
 
         Spacer(Modifier.height(16.dp))
 
+        // ── ТАБЫ ──
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             TabButton("КРИКЕТ", selectedTab == 0, { selectedTab = 0 }, Modifier.weight(1f))
-            // Вкладка 501 + стрелочка для фильтра
             Row(
                 modifier = Modifier
                     .weight(1f)
@@ -258,7 +316,7 @@ fun StatsScreen(
             }
         }
 
-        // Строка активного фильтра (когда выбран не "Все x01" и открыта вкладка 501)
+        // ── Строка активного фильтра ──
         if (selectedTab == 1 && selectedVariant != GameVariant.ALL) {
             Spacer(Modifier.height(8.dp))
             Row(
@@ -310,12 +368,46 @@ fun StatsScreen(
         }
     }
 
-    // Диалог выбора модификации игры
+    // Диалог выбора модификации
     if (showVariantDialog) {
         VariantDialog(
             selected = selectedVariant,
             onSelect = { selectedVariant = it; showVariantDialog = false },
             onDismiss = { showVariantDialog = false }
+        )
+    }
+
+    // Диалог с графиком крикета
+    if (showCricketChart) {
+        ChartDialog(
+            title = "График MPR (крикет)",
+            onDismiss = { showCricketChart = false },
+            charts = listOf(
+                ChartSpec(
+                    title = "Средний набор (MPR)",
+                    points = cricketChartData,
+                    yMin = 0.0,
+                    yMax = 6.0,
+                    lineColor = Accent
+                )
+            )
+        )
+    }
+
+    // Диалог с двумя графиками 501
+    if (show501Chart) {
+        ChartDialog(
+            title = "Графики x01",
+            onDismiss = { show501Chart = false },
+            charts = game501ChartData
+        )
+    }
+
+    // Диалог с чекаутами
+    if (showCheckoutsDialog) {
+        CheckoutsDialog(
+            closedCheckouts = allCheckouts,
+            onDismiss = { showCheckoutsDialog = false }
         )
     }
 
@@ -357,6 +449,268 @@ fun StatsScreen(
 }
 
 // ─────────────────────────────────────────────
+// Кнопка-иконка в шапке
+// ─────────────────────────────────────────────
+@Composable
+private fun HeaderIconButton(
+    icon: String,
+    active: Boolean,
+    onClick: () -> Unit
+) {
+    val alpha = if (active) 1.0f else 0.4f
+    Box(
+        modifier = Modifier
+            .size(38.dp)
+            .clip(RoundedCornerShape(10.dp))
+            .background(TileBgDark)
+            .clickable(enabled = active) { onClick() },
+        contentAlignment = Alignment.Center
+    ) {
+        Text(icon, fontSize = 18.sp, color = Color.White.copy(alpha = alpha))
+    }
+}
+
+// ─────────────────────────────────────────────
+// График
+// ─────────────────────────────────────────────
+private data class ChartSpec(
+    val title: String,
+    val points: List<Double>,
+    val yMin: Double,
+    val yMax: Double,
+    val lineColor: Color
+)
+
+@Composable
+private fun ChartDialog(
+    title: String,
+    charts: List<ChartSpec>,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("OK", color = Accent) }
+        },
+        title = {
+            Text(title, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+        },
+        text = {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState())
+            ) {
+                charts.forEachIndexed { idx, chart ->
+                    if (idx > 0) Spacer(Modifier.height(20.dp))
+                    ChartBlock(chart)
+                }
+            }
+        }
+    )
+}
+
+@Composable
+private fun ChartBlock(spec: ChartSpec) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Text(
+            spec.title,
+            color = Accent,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Medium,
+            letterSpacing = 2.sp
+        )
+        Spacer(Modifier.height(8.dp))
+
+        if (spec.points.size < 2) {
+            Text(
+                "Недостаточно матчей для графика",
+                color = Color.White.copy(alpha = 0.5f),
+                fontSize = 11.sp
+            )
+        } else {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(180.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(TileBgDark)
+                    .padding(8.dp)
+            ) {
+                LineChart(
+                    points = spec.points,
+                    yMin = spec.yMin,
+                    yMax = spec.yMax,
+                    lineColor = spec.lineColor
+                )
+            }
+            Spacer(Modifier.height(4.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    "мин: %.2f".format(Locale.US, spec.points.minOrNull() ?: 0.0),
+                    color = Color.White.copy(alpha = 0.5f), fontSize = 10.sp
+                )
+                Text(
+                    "сред: %.2f".format(Locale.US, spec.points.average()),
+                    color = GoldAccent, fontSize = 10.sp
+                )
+                Text(
+                    "макс: %.2f".format(Locale.US, spec.points.maxOrNull() ?: 0.0),
+                    color = Color.White.copy(alpha = 0.5f), fontSize = 10.sp
+                )
+            }
+            Spacer(Modifier.height(2.dp))
+            Text(
+                "матчей: ${spec.points.size}",
+                color = Color.White.copy(alpha = 0.4f),
+                fontSize = 10.sp
+            )
+        }
+    }
+}
+
+@Composable
+private fun LineChart(
+    points: List<Double>,
+    yMin: Double,
+    yMax: Double,
+    lineColor: Color
+) {
+    val gridColor = Color.White.copy(alpha = 0.12f)
+
+    Canvas(modifier = Modifier.fillMaxSize()) {
+        val w = size.width
+        val h = size.height
+        val leftPad = 36.dp.toPx()
+        val rightPad = 8.dp.toPx()
+        val topPad = 10.dp.toPx()
+        val bottomPad = 18.dp.toPx()
+
+        val plotW = w - leftPad - rightPad
+        val plotH = h - topPad - bottomPad
+        if (plotW <= 0f || plotH <= 0f) return@Canvas
+
+        val range = (yMax - yMin).coerceAtLeast(0.0001)
+
+        // Горизонтальные линии-сетка (5 штук)
+        val gridSteps = 5
+        for (i in 0..gridSteps) {
+            val y = topPad + plotH * i / gridSteps
+            drawLine(
+                color = gridColor,
+                start = Offset(leftPad, y),
+                end = Offset(leftPad + plotW, y),
+                strokeWidth = 1f
+            )
+        }
+
+        // Точки
+        val n = points.size
+        val xStep = if (n > 1) plotW / (n - 1).toFloat() else 0f
+        val coords = points.mapIndexed { i, v ->
+            val x = leftPad + xStep * i
+            val rel = ((v - yMin) / range).coerceIn(0.0, 1.0).toFloat()
+            val y = topPad + plotH * (1f - rel)
+            Offset(x, y)
+        }
+
+        // Линия
+        if (coords.size >= 2) {
+            val path = Path().apply {
+                moveTo(coords[0].x, coords[0].y)
+                for (i in 1 until coords.size) lineTo(coords[i].x, coords[i].y)
+            }
+            drawPath(path, color = lineColor, style = Stroke(width = 2.dp.toPx()))
+        }
+
+        // Точки сверху
+        val dotRadius = 3.dp.toPx()
+        coords.forEach { c ->
+            drawCircle(color = lineColor, radius = dotRadius, center = c)
+            drawCircle(color = Color.White, radius = dotRadius / 2f, center = c)
+        }
+    }
+}
+
+// ─────────────────────────────────────────────
+// Данные для графиков
+// ─────────────────────────────────────────────
+private fun computeCricketChartData(
+    games: List<CricketGameEntity>,
+    ownerName: String
+): List<Double> {
+    // Идём от старых к новым (games приходит DESC)
+    val sorted = games.sortedBy { it.dateMillis }
+    val out = mutableListOf<Double>()
+    for (g in sorted) {
+        val bots = parseStringList(g.playerIsBot)
+        val names = parseStringList(g.playerNames)
+        val mprList = parseDoubleList(g.mpr)
+        for (i in bots.indices) {
+            val name = names.getOrNull(i) ?: ""
+            if (isOwner(bots[i], name, ownerName)) {
+                mprList.getOrNull(i)?.let { out.add(it) }
+                break
+            }
+        }
+    }
+    return out
+}
+
+private fun compute501ChartData(
+    games: List<Game501Entity>,
+    ownerName: String,
+    variant: GameVariant
+): List<ChartSpec> {
+    // Фильтр: без даблов всегда исключаем; + фильтр варианта.
+    val filtered = games.filter { g ->
+        if (g.outModeName == "STRAIGHT_OUT") return@filter false
+        if (variant == GameVariant.ALL) return@filter true
+        g.gameTypeName == variant.gameTypeName && g.outModeName == variant.outModeName
+    }.sortedBy { it.dateMillis }
+
+    val pprList = mutableListOf<Double>()
+    val dblList = mutableListOf<Double>()
+
+    for (g in filtered) {
+        val bots = parseStringList(g.playerIsBot)
+        val names = parseStringList(g.playerNames)
+        val pprStr = parseDoubleList(g.ppr)
+        val hitList = parseIntList(g.doublesHit)
+        val attList = parseIntList(g.doublesAttempted)
+
+        for (i in bots.indices) {
+            val name = names.getOrNull(i) ?: ""
+            if (isOwner(bots[i], name, ownerName)) {
+                pprStr.getOrNull(i)?.let { pprList.add(it) }
+                val hit = hitList.getOrElse(i) { 0 }
+                val att = attList.getOrElse(i) { 0 }
+                if (att > 0) dblList.add(hit.toDouble() / att * 100.0)
+                break
+            }
+        }
+    }
+
+    return listOf(
+        ChartSpec(
+            title = "Средний набор (PPR)",
+            points = pprList,
+            yMin = 30.0,
+            yMax = 110.0,
+            lineColor = Accent
+        ),
+        ChartSpec(
+            title = "Точность удвоений (D%)",
+            points = dblList,
+            yMin = 0.0,
+            yMax = 60.0,
+            lineColor = GoldAccent
+        )
+    )
+}
+
+// ─────────────────────────────────────────────
 // Диалог выбора модификации игры
 // ─────────────────────────────────────────────
 @Composable
@@ -375,33 +729,23 @@ private fun VariantDialog(
         },
         text = {
             Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
-                // Все x01
                 VariantRow(GameVariant.ALL, selected, onSelect)
                 Spacer(Modifier.height(8.dp))
-
-                // 501
                 VariantGroupTitle("501")
                 VariantRow(GameVariant.X501_DO, selected, onSelect)
                 VariantRow(GameVariant.X501_DIDO, selected, onSelect)
                 Spacer(Modifier.height(8.dp))
-
-                // 301
                 VariantGroupTitle("301")
                 VariantRow(GameVariant.X301_DO, selected, onSelect)
                 VariantRow(GameVariant.X301_DIDO, selected, onSelect)
                 Spacer(Modifier.height(8.dp))
-
-                // 701
                 VariantGroupTitle("701")
                 VariantRow(GameVariant.X701_DO, selected, onSelect)
                 VariantRow(GameVariant.X701_DIDO, selected, onSelect)
                 Spacer(Modifier.height(8.dp))
-
-                // 1001
                 VariantGroupTitle("1001")
                 VariantRow(GameVariant.X1001_DO, selected, onSelect)
                 VariantRow(GameVariant.X1001_DIDO, selected, onSelect)
-
                 Spacer(Modifier.height(12.dp))
                 Text(
                     "Игры в режиме «Без даблов» в статистику не попадают.",
@@ -518,26 +862,15 @@ private fun Game501TabContent(
     onPeriodChange: (StatPeriod) -> Unit,
     onResetClick: () -> Unit
 ) {
-    // 1. Отфильтровываем матчи без даблов + фильтр по выбранной модификации.
     val filteredGames = remember(games, variant) {
         games.filter { g ->
-            // Без даблов никогда не попадает в статистику.
             if (g.outModeName == "STRAIGHT_OUT") return@filter false
-            // Если выбран "Все x01" — оставляем всё.
             if (variant == GameVariant.ALL) return@filter true
-            // Иначе — совпадение по типу и режиму.
             g.gameTypeName == variant.gameTypeName && g.outModeName == variant.outModeName
         }
     }
 
     val agg = remember(filteredGames, ownerName) { computeAggregate501(filteredGames, ownerName) }
-
-    // Чекауты считаются ПО ВСЕМ играм с даблами (без фильтра модификации).
-    val allCheckouts = remember(games, ownerName) {
-        computeClosedCheckouts(games.filter { it.outModeName != "STRAIGHT_OUT" }, ownerName)
-    }
-
-    var showCheckoutsDialog by remember { mutableStateOf(false) }
 
     Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
         PeriodSelector(period = period, onPeriodChange = onPeriodChange)
@@ -661,53 +994,9 @@ private fun Game501TabContent(
             )
         }
 
-        // ── ЧЕКАУТЫ (общие для всех игр с даблами) ──
-        Spacer(Modifier.height(20.dp))
-        SectionTitle("МОИ ЧЕКАУТЫ")
-        Spacer(Modifier.height(4.dp))
-        Text(
-            "по всем играм с даблами",
-            color = Color.White.copy(alpha = 0.5f),
-            fontSize = 11.sp
-        )
-        Spacer(Modifier.height(8.dp))
-
-        val validTotal = VALID_CHECKOUTS.size
-        val closedCount = VALID_CHECKOUTS.count { (allCheckouts[it] ?: 0) > 0 }
-
-        StatRowCard(
-            label = "Закрыто чек-аутов",
-            value = "$closedCount из $validTotal",
-            sub = "нажми, чтобы открыть список всех чек-аутов"
-        )
-        Spacer(Modifier.height(6.dp))
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(12.dp))
-                .background(Accent)
-                .clickable { showCheckoutsDialog = true }
-                .padding(vertical = 14.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                "🏆 Мои закрытые чекауты",
-                color = Color(0xFF121212),
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Bold
-            )
-        }
-
         Spacer(Modifier.height(24.dp))
         ResetButton(onResetClick)
         Spacer(Modifier.height(24.dp))
-    }
-
-    if (showCheckoutsDialog) {
-        CheckoutsDialog(
-            closedCheckouts = allCheckouts,
-            onDismiss = { showCheckoutsDialog = false }
-        )
     }
 }
 
@@ -1033,7 +1322,7 @@ private fun computeAggregate(games: List<CricketGameEntity>, ownerName: String):
 }
 
 // ─────────────────────────────────────────────
-// Логика — подсчёт закрытых чек-аутов (по всем матчам с даблами)
+// Логика — закрытые чекауты
 // ─────────────────────────────────────────────
 private fun computeClosedCheckouts(games: List<Game501Entity>, ownerName: String): Map<Int, Int> {
     val result = mutableMapOf<Int, Int>()
