@@ -21,6 +21,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.lodkin.dartstrainer.data.cricket.CricketGameEntity
 import com.lodkin.dartstrainer.data.cricket.CricketRepository
+import com.lodkin.dartstrainer.data.game501.CheckoutTable
 import com.lodkin.dartstrainer.data.game501.Game501Database
 import com.lodkin.dartstrainer.data.game501.Game501Entity
 import com.lodkin.dartstrainer.data.game501.Game501Repository
@@ -47,6 +48,14 @@ private enum class StatPeriod(val label: String, val daysBack: Long?) {
 }
 
 // ─────────────────────────────────────────────
+// Список всех валидных чекаутов (2..170 минус bogey numbers)
+// Bogey numbers: 159, 162, 163, 165, 166, 168, 169 — не закрываются за 3 дротика в Double Out.
+// ─────────────────────────────────────────────
+private val VALID_CHECKOUTS: List<Int> by lazy {
+    (2..170).filter { CheckoutTable.isCheckoutPossible(it) }
+}
+
+// ─────────────────────────────────────────────
 // Цвета чек-аутов (по количеству закрытий)
 // ─────────────────────────────────────────────
 private val CheckoutGray = Color(0xFF455A64)
@@ -59,7 +68,6 @@ private val CheckoutTeal = Color(0xFF00BCD4)
 private val CheckoutGold = Color(0xFFFFC107)
 private val CheckoutDiamond = Color(0xFFB3E5FC)
 
-// Возвращает пару: (цвет фона, цвет текста)
 private fun checkoutColor(count: Int): Pair<Color, Color> {
     return when {
         count >= 100 -> CheckoutDiamond to Color(0xFF0D1117)
@@ -249,7 +257,7 @@ fun StatsScreen(
 }
 
 // ─────────────────────────────────────────────
-// Контент вкладки Крикет (без изменений)
+// Контент вкладки Крикет
 // ─────────────────────────────────────────────
 @Composable
 private fun CricketTabContent(
@@ -446,16 +454,18 @@ private fun Game501TabContent(
             )
         }
 
-        // ── ЗАКРЫТЫЕ ЧЕКАУТЫ ──
+        // ── ЧЕКАУТЫ ──
         Spacer(Modifier.height(20.dp))
         SectionTitle("ЧЕКАУТЫ")
         Spacer(Modifier.height(8.dp))
 
-        val closedCount = agg.closedCheckouts.count { it.value > 0 }
-        val totalCount = 169 // 2..170
+        // Считаем только валидные чекауты (без bogey numbers)
+        val validTotal = VALID_CHECKOUTS.size
+        val closedCount = VALID_CHECKOUTS.count { (agg.closedCheckouts[it] ?: 0) > 0 }
+
         StatRowCard(
             label = "Закрыто чек-аутов",
-            value = "$closedCount из $totalCount",
+            value = "$closedCount из $validTotal",
             sub = "нажми, чтобы открыть список всех чек-аутов"
         )
         Spacer(Modifier.height(6.dp))
@@ -497,8 +507,8 @@ private fun CheckoutsDialog(
     closedCheckouts: Map<Int, Int>,
     onDismiss: () -> Unit
 ) {
-    val closedCount = (2..170).count { (closedCheckouts[it] ?: 0) > 0 }
-    val totalCount = 169
+    val validTotal = VALID_CHECKOUTS.size
+    val closedCount = VALID_CHECKOUTS.count { (closedCheckouts[it] ?: 0) > 0 }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -510,16 +520,15 @@ private fun CheckoutsDialog(
                 Text("Закрытые чек-ауты", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    "Закрыто $closedCount из $totalCount (${(closedCount * 100 / totalCount)}%)",
+                    "Закрыто $closedCount из $validTotal (${(closedCount * 100 / validTotal)}%)",
                     color = GoldAccent, fontSize = 13.sp, fontWeight = FontWeight.Medium
                 )
             }
         },
         text = {
             Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
-                // Сетка 5 в ряд
-                val values = (2..170).toList()
-                values.chunked(5).forEach { row ->
+                // Сетка 5 в ряд, только валидные чекауты
+                VALID_CHECKOUTS.chunked(5).forEach { row ->
                     Row(
                         modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
                         horizontalArrangement = Arrangement.spacedBy(4.dp)
@@ -844,7 +853,6 @@ private fun computeAggregate501(games: List<Game501Entity>): Game501Aggregate {
     val botMatches = mutableMapOf<String, MutableList<Game501Entity>>()
     val matchCandidates = mutableListOf<MatchInfo>()
 
-    // Счётчик закрытых чек-аутов: остаток → сколько раз закрыли
     val closedCheckouts = mutableMapOf<Int, Int>()
 
     for (g in games) {
@@ -868,7 +876,6 @@ private fun computeAggregate501(games: List<Game501Entity>): Game501Aggregate {
         val ncs = parseIntList(g.nonCloseScore)
         val ncd = parseIntList(g.nonCloseDarts)
 
-        // Парсим closeValues: у каждого игрока свой список остатков, разделённый запятыми
         val closeValuesByPlayer = g.closeValues.split("|")
 
         var hasHuman = false
@@ -901,7 +908,6 @@ private fun computeAggregate501(games: List<Game501Entity>): Game501Aggregate {
                 sumNonCloseScore += ncs.getOrElse(i) { 0 }
                 sumNonCloseDarts += ncd.getOrElse(i) { 0 }
 
-                // Закрытые чек-ауты — берём из closeValuesByPlayer[i]
                 val myCloseValues = closeValuesByPlayer.getOrNull(i) ?: ""
                 if (myCloseValues.isNotBlank()) {
                     myCloseValues.split(",").forEach { raw ->
