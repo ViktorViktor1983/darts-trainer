@@ -43,6 +43,8 @@ import com.lodkin.dartstrainer.ui.cricket.CricketStatsScreen
 import com.lodkin.dartstrainer.ui.game501.Game501Screen
 import com.lodkin.dartstrainer.ui.game501.Game501SetupScreen
 import com.lodkin.dartstrainer.ui.game501.Game501StatsScreen
+import com.lodkin.dartstrainer.ui.sector.SectorGameScreen
+import com.lodkin.dartstrainer.ui.sector.SectorSetupScreen
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.random.Random
@@ -82,6 +84,7 @@ fun DartsTrainerApp() {
 
     var cricketGame by remember { mutableStateOf<CricketGame?>(null) }
     var game501 by remember { mutableStateOf<Game501?>(null) }
+    var sectorToPlay by remember { mutableStateOf<Int?>(null) }
 
     if (stage == "loading") {
         LaunchedEffect(Unit) { delay(3000); stage = "main" }
@@ -119,10 +122,9 @@ fun DartsTrainerApp() {
             "settings" -> SettingsScreen(
                 onBack = { screen = "main" },
                 onFactoryReset = {
-                    // Сбрасываем состояние в памяти и возвращаемся на экран приветствия.
-                    // Данные уже удалены с диска внутри SettingsScreen.factoryReset().
                     cricketGame = null
                     game501 = null
+                    sectorToPlay = null
                     onboardingDone = false
                     screen = "main"
                     stage = "welcome"
@@ -134,6 +136,7 @@ fun DartsTrainerApp() {
             "game_select" -> GameSelectScreen(
                 onCricket = { screen = "cricket_setup" },
                 on501 = { screen = "game501_setup" },
+                onSector = { screen = "sector_setup" },
                 onBack = { screen = "main" }
             )
 
@@ -241,6 +244,31 @@ fun DartsTrainerApp() {
                         onBackToMenu = { game501 = null; screen = "main" }
                     )
                 } else screen = "main"
+            }
+
+            // ── Сектор ──
+            "sector_setup" -> SectorSetupScreen(
+                onStartGame = { sector ->
+                    sectorToPlay = sector
+                    screen = "sector_game"
+                },
+                onBack = { screen = "game_select" }
+            )
+
+            "sector_game" -> {
+                val sector = sectorToPlay
+                if (sector != null) {
+                    SectorGameScreen(
+                        sector = sector,
+                        onFinish = { _score ->
+                            // Пока просто возвращаемся в выбор игры.
+                            // Сохранение статистики — на следующем шаге.
+                            sectorToPlay = null
+                            screen = "game_select"
+                        },
+                        onBack = { screen = "game_select" }
+                    )
+                } else screen = "sector_setup"
             }
         }
     }
