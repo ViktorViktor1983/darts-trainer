@@ -47,6 +47,34 @@ private enum class StatPeriod(val label: String, val daysBack: Long?) {
 }
 
 // ─────────────────────────────────────────────
+// Цвета чек-аутов (по количеству закрытий)
+// ─────────────────────────────────────────────
+private val CheckoutGray = Color(0xFF455A64)
+private val CheckoutGreen = Color(0xFF4CAF50)
+private val CheckoutYellow = Color(0xFFFFD54F)
+private val CheckoutRed = Color(0xFFE53935)
+private val CheckoutPurple = Color(0xFF9C27B0)
+private val CheckoutIndigo = Color(0xFF3F51B5)
+private val CheckoutTeal = Color(0xFF00BCD4)
+private val CheckoutGold = Color(0xFFFFC107)
+private val CheckoutDiamond = Color(0xFFB3E5FC)
+
+// Возвращает пару: (цвет фона, цвет текста)
+private fun checkoutColor(count: Int): Pair<Color, Color> {
+    return when {
+        count >= 100 -> CheckoutDiamond to Color(0xFF0D1117)
+        count >= 50  -> CheckoutGold to Color(0xFF121212)
+        count >= 30  -> CheckoutTeal to Color(0xFF121212)
+        count >= 20  -> CheckoutIndigo to Color.White
+        count >= 10  -> CheckoutPurple to Color.White
+        count >= 5   -> CheckoutRed to Color.White
+        count >= 3   -> CheckoutYellow to Color(0xFF121212)
+        count >= 1   -> CheckoutGreen to Color.White
+        else         -> CheckoutGray to Color.White.copy(alpha = 0.45f)
+    }
+}
+
+// ─────────────────────────────────────────────
 // Агрегат крикета
 // ─────────────────────────────────────────────
 private data class CricketAggregate(
@@ -76,26 +104,21 @@ private data class Game501Aggregate(
     val bestMatchPpr: Double = 0.0,
     val bestLegPpr: Double = 0.0,
     val avgDartsPerLeg: Double = 0.0,
-    // Категории сумм — в среднем за лег
     val avgCount180: Double = 0.0,
     val avgCount170plus: Double = 0.0,
     val avgCount130plus: Double = 0.0,
     val avgCount90plus: Double = 0.0,
     val avgCount57plus: Double = 0.0,
     val avgCount57minus: Double = 0.0,
-    // Наборы
     val first9: Double = 0.0,
     val nonClose: Double = 0.0,
-    // Серии
     val currentStreak: Int = 0,
     val maxStreak: Int = 0,
-    // Тренд
     val trend: Double = 0.0,
     val hasTrend: Boolean = false,
-    // По ботам
     val byBot: List<BotStat> = emptyList(),
-    // Лучшие 5 матчей
-    val topMatches: List<MatchInfo> = emptyList()
+    val topMatches: List<MatchInfo> = emptyList(),
+    val closedCheckouts: Map<Int, Int> = emptyMap()
 )
 
 private data class BotStat(
@@ -283,7 +306,7 @@ private fun CricketTabContent(
 }
 
 // ─────────────────────────────────────────────
-// Контент вкладки 501 (НОВЫЙ)
+// Контент вкладки 501
 // ─────────────────────────────────────────────
 @Composable
 private fun Game501TabContent(
@@ -293,6 +316,7 @@ private fun Game501TabContent(
     onResetClick: () -> Unit
 ) {
     val agg = remember(games) { computeAggregate501(games) }
+    var showCheckoutsDialog by remember { mutableStateOf(false) }
 
     Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
         PeriodSelector(period = period, onPeriodChange = onPeriodChange)
@@ -322,7 +346,7 @@ private fun Game501TabContent(
 
         Spacer(Modifier.height(20.dp))
 
-        // ── КАТЕГОРИИ СУММ (среднее за лег) ──
+        // ── КАТЕГОРИИ СУММ ──
         SectionTitle("КАТЕГОРИИ СУММ (в среднем за лег)")
         Spacer(Modifier.height(8.dp))
         StatRowCard("180", "%.2f".format(Locale.US, agg.avgCount180))
@@ -392,11 +416,7 @@ private fun Game501TabContent(
 
         if (agg.topMatches.isNotEmpty()) {
             Spacer(Modifier.height(12.dp))
-            Text(
-                "ЛУЧШИЕ 5 МАТЧЕЙ",
-                color = Accent, fontSize = 13.sp, fontWeight = FontWeight.Medium,
-                letterSpacing = 3.sp, modifier = Modifier.fillMaxWidth()
-            )
+            SectionTitle("ЛУЧШИЕ 5 МАТЧЕЙ")
             Spacer(Modifier.height(8.dp))
             agg.topMatches.forEach { m ->
                 StatRowCard(
@@ -426,9 +446,151 @@ private fun Game501TabContent(
             )
         }
 
+        // ── ЗАКРЫТЫЕ ЧЕКАУТЫ ──
+        Spacer(Modifier.height(20.dp))
+        SectionTitle("ЧЕКАУТЫ")
+        Spacer(Modifier.height(8.dp))
+
+        val closedCount = agg.closedCheckouts.count { it.value > 0 }
+        val totalCount = 169 // 2..170
+        StatRowCard(
+            label = "Закрыто чек-аутов",
+            value = "$closedCount из $totalCount",
+            sub = "нажми, чтобы открыть список всех чек-аутов"
+        )
+        Spacer(Modifier.height(6.dp))
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(12.dp))
+                .background(Accent)
+                .clickable { showCheckoutsDialog = true }
+                .padding(vertical = 14.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                "📋 Открыть таблицу чек-аутов",
+                color = Color(0xFF121212),
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
+
         Spacer(Modifier.height(24.dp))
         ResetButton(onResetClick)
         Spacer(Modifier.height(24.dp))
+    }
+
+    if (showCheckoutsDialog) {
+        CheckoutsDialog(
+            closedCheckouts = agg.closedCheckouts,
+            onDismiss = { showCheckoutsDialog = false }
+        )
+    }
+}
+
+// ─────────────────────────────────────────────
+// Диалог со списком чек-аутов
+// ─────────────────────────────────────────────
+@Composable
+private fun CheckoutsDialog(
+    closedCheckouts: Map<Int, Int>,
+    onDismiss: () -> Unit
+) {
+    val closedCount = (2..170).count { (closedCheckouts[it] ?: 0) > 0 }
+    val totalCount = 169
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("OK", color = Accent) }
+        },
+        title = {
+            Column {
+                Text("Закрытые чек-ауты", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    "Закрыто $closedCount из $totalCount (${(closedCount * 100 / totalCount)}%)",
+                    color = GoldAccent, fontSize = 13.sp, fontWeight = FontWeight.Medium
+                )
+            }
+        },
+        text = {
+            Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                // Сетка 5 в ряд
+                val values = (2..170).toList()
+                values.chunked(5).forEach { row ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        row.forEach { value ->
+                            val count = closedCheckouts[value] ?: 0
+                            CheckoutCell(value = value, count = count, modifier = Modifier.weight(1f))
+                        }
+                        if (row.size < 5) {
+                            repeat(5 - row.size) { Spacer(Modifier.weight(1f)) }
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(12.dp))
+                Text("Легенда:", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(4.dp))
+                LegendRow(CheckoutGray, "не закрыт")
+                LegendRow(CheckoutGreen, "1 раз")
+                LegendRow(CheckoutYellow, "3 раза")
+                LegendRow(CheckoutRed, "5 раз")
+                LegendRow(CheckoutPurple, "10 раз")
+                LegendRow(CheckoutIndigo, "20 раз")
+                LegendRow(CheckoutTeal, "30 раз")
+                LegendRow(CheckoutGold, "50 раз")
+                LegendRow(CheckoutDiamond, "100 раз")
+            }
+        }
+    )
+}
+
+@Composable
+private fun CheckoutCell(value: Int, count: Int, modifier: Modifier) {
+    val (bg, fg) = checkoutColor(count)
+    Box(
+        modifier = modifier
+            .height(42.dp)
+            .clip(RoundedCornerShape(6.dp))
+            .background(bg),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(
+                "$value",
+                color = fg,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Bold
+            )
+            if (count > 0) {
+                Text(
+                    "$count",
+                    color = fg.copy(alpha = 0.75f),
+                    fontSize = 9.sp,
+                    fontWeight = FontWeight.Medium
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun LegendRow(color: Color, label: String) {
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 1.dp)) {
+        Box(
+            modifier = Modifier
+                .size(12.dp)
+                .clip(RoundedCornerShape(3.dp))
+                .background(color)
+        )
+        Spacer(Modifier.width(6.dp))
+        Text(label, color = Color.White.copy(alpha = 0.75f), fontSize = 10.sp)
     }
 }
 
@@ -579,7 +741,7 @@ private fun EmptyStats() {
 }
 
 // ─────────────────────────────────────────────
-// Хелперы для парсинга
+// Хелперы парсинга
 // ─────────────────────────────────────────────
 private fun parseStringList(s: String): List<String> =
     if (s.isBlank()) emptyList() else s.split("|")
@@ -677,13 +839,13 @@ private fun computeAggregate501(games: List<Game501Entity>): Game501Aggregate {
 
     val pprValues = mutableListOf<Double>()
     val bestLegPprValues = mutableListOf<Double>()
-    val allMatchesInOrder = mutableListOf<Boolean>() // true если победа (для серий)
+    val allMatchesInOrder = mutableListOf<Boolean>()
 
-    // Группировка по ботам
     val botMatches = mutableMapOf<String, MutableList<Game501Entity>>()
-
-    // Для топа матчей
     val matchCandidates = mutableListOf<MatchInfo>()
+
+    // Счётчик закрытых чек-аутов: остаток → сколько раз закрыли
+    val closedCheckouts = mutableMapOf<Int, Int>()
 
     for (g in games) {
         val bots = parseStringList(g.playerIsBot)
@@ -705,6 +867,9 @@ private fun computeAggregate501(games: List<Game501Entity>): Game501Aggregate {
         val f9d = parseIntList(g.first9Darts)
         val ncs = parseIntList(g.nonCloseScore)
         val ncd = parseIntList(g.nonCloseDarts)
+
+        // Парсим closeValues: у каждого игрока свой список остатков, разделённый запятыми
+        val closeValuesByPlayer = g.closeValues.split("|")
 
         var hasHuman = false
         var humanWon = false
@@ -735,6 +900,17 @@ private fun computeAggregate501(games: List<Game501Entity>): Game501Aggregate {
                 sumFirst9Darts += f9d.getOrElse(i) { 0 }
                 sumNonCloseScore += ncs.getOrElse(i) { 0 }
                 sumNonCloseDarts += ncd.getOrElse(i) { 0 }
+
+                // Закрытые чек-ауты — берём из closeValuesByPlayer[i]
+                val myCloseValues = closeValuesByPlayer.getOrNull(i) ?: ""
+                if (myCloseValues.isNotBlank()) {
+                    myCloseValues.split(",").forEach { raw ->
+                        val v = raw.trim().toIntOrNull()
+                        if (v != null && v in 2..170) {
+                            closedCheckouts[v] = (closedCheckouts[v] ?: 0) + 1
+                        }
+                    }
+                }
             }
         }
 
@@ -742,7 +918,6 @@ private fun computeAggregate501(games: List<Game501Entity>): Game501Aggregate {
             matches++
             legs += g.legsPlayed
 
-            // Соперник-бот (имена через +)
             val botNames = bots.indices.filter { bots[it] == "1" }
                 .mapNotNull { idx -> names.getOrNull(idx) }
             val opponentLabel = if (botNames.isEmpty()) "человек" else botNames.joinToString(" + ")
@@ -751,7 +926,6 @@ private fun computeAggregate501(games: List<Game501Entity>): Game501Aggregate {
                 botMatches.getOrPut(opponentLabel) { mutableListOf() }.add(g)
             }
 
-            // Топ-матч: беру PPR человека
             val humanIdx = bots.indexOfFirst { it == "0" }
             val humanPpr = pprList.getOrElse(humanIdx) { 0.0 }
             val humanDarts = dartsList.getOrElse(humanIdx) { 0 }
@@ -769,13 +943,11 @@ private fun computeAggregate501(games: List<Game501Entity>): Game501Aggregate {
         }
     }
 
-    // Средний PPR
     val avgPpr = if (pprValues.isEmpty()) 0.0 else pprValues.average()
     val bestMatchPpr = pprValues.maxOrNull() ?: 0.0
     val bestLegPpr = bestLegPprValues.maxOrNull() ?: 0.0
     val avgDartsPerLeg = if (legs > 0) darts.toDouble() / legs else 0.0
 
-    // Категории в среднем за лег
     val safeLegs = if (legs > 0) legs.toDouble() else 1.0
     val avg180 = sumCount180 / safeLegs
     val avg170 = sumCount170plus / safeLegs
@@ -784,17 +956,14 @@ private fun computeAggregate501(games: List<Game501Entity>): Game501Aggregate {
     val avg57p = sumCount57plus / safeLegs
     val avg57m = sumCount57minus / safeLegs
 
-    // Наборы
     val first9 = if (sumFirst9Darts > 0) sumFirst9Score.toDouble() / (sumFirst9Darts / 3.0) else 0.0
     val nonClose = if (sumNonCloseDarts > 0) sumNonCloseScore.toDouble() / (sumNonCloseDarts / 3.0) else 0.0
 
-    // Серии побед. allMatchesInOrder идёт от свежих к старым (БД отдаёт DESC).
     var currentStreak = 0
     for (won in allMatchesInOrder) {
         if (won) currentStreak++ else break
     }
 
-    // Максимальная серия — идём от старых к свежим
     var maxStreak = 0
     var run = 0
     for (i in allMatchesInOrder.indices.reversed()) {
@@ -806,7 +975,6 @@ private fun computeAggregate501(games: List<Game501Entity>): Game501Aggregate {
         }
     }
 
-    // Тренд: сравнить свежую половину матчей с предыдущей
     var trend = 0.0
     var hasTrend = false
     val matchPprs = games.mapNotNull { g ->
@@ -825,7 +993,6 @@ private fun computeAggregate501(games: List<Game501Entity>): Game501Aggregate {
         }
     }
 
-    // По ботам — сортировка от худшего PPR к лучшему
     val byBotList = botMatches.map { (name, list) ->
         val pprs = mutableListOf<Double>()
         var hitSum = 0
@@ -850,7 +1017,6 @@ private fun computeAggregate501(games: List<Game501Entity>): Game501Aggregate {
         )
     }.sortedBy { it.ppr }
 
-    // Топ-5 матчей
     val top5 = matchCandidates.sortedByDescending { it.ppr }.take(5)
 
     return Game501Aggregate(
@@ -877,6 +1043,7 @@ private fun computeAggregate501(games: List<Game501Entity>): Game501Aggregate {
         trend = trend,
         hasTrend = hasTrend,
         byBot = byBotList,
-        topMatches = top5
+        topMatches = top5,
+        closedCheckouts = closedCheckouts
     )
 }
