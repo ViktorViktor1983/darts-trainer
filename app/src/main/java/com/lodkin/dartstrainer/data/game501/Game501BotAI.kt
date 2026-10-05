@@ -21,7 +21,7 @@ object Game501BotAI {
         0.348,  // 11 КМС
         0.422,  // 12 Почти мастер
         0.467,  // 13 Мастер
-        0.510,  // 14 Чемпион   ← было 0.485
+        0.510,  // 14 Чемпион
         0.535,  // 15 Профи
         0.603   // 16 Легенда
     )
@@ -41,7 +41,7 @@ object Game501BotAI {
         0.270,    // 11
         0.293,    // 12
         0.325,    // 13
-        0.372,    // 14 Чемпион   ← было 0.345
+        0.372,    // 14
         0.408,    // 15
         0.455     // 16
     )
@@ -209,14 +209,25 @@ object Game501BotAI {
         }
     }
 
+    // ─────────────────────────────────────────────
+    // Промах из T-сектора (например, T20).
+    //
+    // Опорные точки для ур.1 / ур.7 / ур.16 (в % от промаха):
+    //   за борт:     7.37 / 0.63  / 0.64
+    //   S-целевой:  27.37 / 28.0  / 49.25  (S20)
+    //   S-соседи:   49.47 / 40.9  / 23.45  (S1+S5)
+    //   T-соседи:    6.32 / 20.3  / 23.45  (T1+T5)
+    //   D-соседи:    6.32 / 5.1   / 1.07   (D1+D5)
+    //   D-целевой:   3.16 / 5.1   / 2.13   (D20)
+    // ─────────────────────────────────────────────
     private fun missFromTriple(sector: Int, botLevel: Int): SimulatedThrow {
         val lvl = botLevel.coerceIn(1, 16)
-        val pOut = interp(10.0, 0.63, 0.1, lvl)
-        val pSTarget = interp(12.0, 28.0, 45.0, lvl)
-        val pSNeighbor = interp(40.0, 40.9, 30.0, lvl)
-        val pTNeighbor = interp(22.0, 20.3, 12.0, lvl)
-        val pDNeighbor = interp(8.0, 5.1, 4.0, lvl)
-        val pDTarget = interp(8.0, 5.1, 9.0, lvl)
+        val pOut = interp(7.37, 0.63, 0.64, lvl)
+        val pSTarget = interp(27.37, 28.0, 49.25, lvl)
+        val pSNeighbor = interp(49.47, 40.9, 23.45, lvl)
+        val pTNeighbor = interp(6.32, 20.3, 23.45, lvl)
+        val pDNeighbor = interp(6.32, 5.1, 1.07, lvl)
+        val pDTarget = interp(3.16, 5.1, 2.13, lvl)
 
         val total = pOut + pSTarget + pSNeighbor + pTNeighbor + pDNeighbor + pDTarget
         val r = Random.nextDouble() * total
@@ -246,14 +257,25 @@ object Game501BotAI {
         return SimulatedThrow(sector, 2, isHit = false)
     }
 
+    // ─────────────────────────────────────────────
+    // Промах из S-сектора (например, S20).
+    //
+    // Опорные точки для ур.1 / ур.7 / ур.16 (в % от промаха):
+    //   за борт:     10.67 / 2.1   / 2.0
+    //   T-целевой:    4.0  / 22.0  / 20.0   (T20)
+    //   S-соседи:    66.66 / 50.4  / 33.34  (S1+S5)
+    //   D-целевой:    6.67 / 17.0  / 31.33  (D20)
+    //   T-соседи:     8.0  / 4.3   / 10.66  (T1+T5)
+    //   D-соседи:     4.0  / 4.3   / 2.66   (D1+D5)
+    // ─────────────────────────────────────────────
     private fun missFromSingle(sector: Int, botLevel: Int): SimulatedThrow {
         val lvl = botLevel.coerceIn(1, 16)
-        val pOut = interp(8.0, 2.1, 0.5, lvl)
-        val pTTarget = interp(5.0, 22.0, 40.0, lvl)
-        val pSNeighbor = interp(60.0, 50.4, 35.0, lvl)
-        val pDTarget = interp(13.0, 17.0, 15.0, lvl)
-        val pTNeighbor = interp(7.0, 4.3, 5.0, lvl)
-        val pDNeighbor = interp(7.0, 4.3, 4.5, lvl)
+        val pOut = interp(10.67, 2.1, 2.0, lvl)
+        val pTTarget = interp(4.0, 22.0, 20.0, lvl)
+        val pSNeighbor = interp(66.66, 50.4, 33.34, lvl)
+        val pDTarget = interp(6.67, 17.0, 31.33, lvl)
+        val pTNeighbor = interp(8.0, 4.3, 10.66, lvl)
+        val pDNeighbor = interp(4.0, 4.3, 2.66, lvl)
 
         val total = pOut + pTTarget + pSNeighbor + pDTarget + pTNeighbor + pDNeighbor
         val r = Random.nextDouble() * total
@@ -285,13 +307,23 @@ object Game501BotAI {
         return SimulatedThrow(0, 0, isHit = false)
     }
 
+    // ─────────────────────────────────────────────
+    // Промах из D-сектора (например, D20).
+    //
+    // Опорные точки для ур.1 / ур.7 / ур.16 (в % от промаха):
+    //   за борт:      60.0 / 38.0  / 33.03
+    //   S-целевой:     8.0 / 36.2  / 40.37  (S20)
+    //   D-соседи:      8.0 / 12.3  / 7.34   (D1+D5)
+    //   S-соседи:     20.0 / 12.3  / 16.51  (S1+S5)
+    //   T-соседи:      4.0 / 1.2   / 2.75   (T1+T5)
+    // ─────────────────────────────────────────────
     private fun missFromDouble(sector: Int, botLevel: Int): SimulatedThrow {
         val lvl = botLevel.coerceIn(1, 16)
-        val pOut = interp(60.0, 38.0, 20.0, lvl)
-        val pSTarget = interp(8.0, 36.2, 45.0, lvl)
-        val pDNeighbor = interp(8.0, 12.3, 15.0, lvl)
-        val pSNeighbor = interp(20.0, 12.3, 15.0, lvl)
-        val pTNeighbor = interp(4.0, 1.2, 5.0, lvl)
+        val pOut = interp(60.0, 38.0, 33.03, lvl)
+        val pSTarget = interp(8.0, 36.2, 40.37, lvl)
+        val pDNeighbor = interp(8.0, 12.3, 7.34, lvl)
+        val pSNeighbor = interp(20.0, 12.3, 16.51, lvl)
+        val pTNeighbor = interp(4.0, 1.2, 2.75, lvl)
 
         val total = pOut + pSTarget + pDNeighbor + pSNeighbor + pTNeighbor
         val r = Random.nextDouble() * total
