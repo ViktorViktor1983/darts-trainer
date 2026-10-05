@@ -23,7 +23,8 @@ import com.lodkin.dartstrainer.theme.TileBgDark
 fun MainMenuScreen(
     onTraining: () -> Unit,
     onFreePlay: () -> Unit,
-    onStatsClick: () -> Unit
+    onStatsClick: () -> Unit,
+    onSettingsClick: () -> Unit
 ) {
     Column(
         modifier = Modifier
@@ -31,15 +32,42 @@ fun MainMenuScreen(
             .padding(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text(
-            text = "Darts Trainer",
-            fontSize = 28.sp,
-            fontWeight = FontWeight.Bold,
-            color = GoldAccent,
-            letterSpacing = 2.sp,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.padding(bottom = 12.dp)
-        )
+        // Заголовок с шестерёнкой справа
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Пустая ячейка слева (для симметрии)
+            Spacer(Modifier.size(48.dp))
+
+            Text(
+                text = "Darts Trainer",
+                fontSize = 28.sp,
+                fontWeight = FontWeight.Bold,
+                color = GoldAccent,
+                letterSpacing = 2.sp,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.weight(1f)
+            )
+
+            // Кнопка настроек — шестерёнка
+            Box(
+                modifier = Modifier
+                    .size(48.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(TileBgDark)
+                    .clickable { onSettingsClick() },
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "⚙",
+                    fontSize = 24.sp,
+                    color = Accent
+                )
+            }
+        }
+
+        Spacer(Modifier.height(20.dp))
 
         BigButton(
             title = "Тренировка",
