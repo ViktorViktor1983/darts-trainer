@@ -636,22 +636,43 @@ private fun SimResultRow(label: String, value: String) {
     }
 }
 
+// ─────────────────────────────────────────────
+// Загрузка слотов из сохранённых настроек.
+//
+// Приоритет для первого слота (слот 1):
+//   1. Имя владельца (из онбординга)
+//   2. Последнее сохранённое имя
+//   3. "Игрок 1"
+// ─────────────────────────────────────────────
 private fun loadSlots(context: android.content.Context, playerName: String): List<Slot501> {
     val bots = Game501SettingsStorage.getSlotIsBot(context)
     val names = Game501SettingsStorage.getSlotNames(context)
     val botIds = Game501SettingsStorage.getSlotBotIds(context)
+
+    val ownerName = when {
+        playerName.isNotBlank() -> playerName
+        PlayerNamesStorage.getLastPlayer1(context).isNotBlank() -> PlayerNamesStorage.getLastPlayer1(context)
+        else -> "Игрок 1"
+    }
+
     val defaults = listOf(
-        Slot501(false, PlayerNamesStorage.getLastPlayer1(context).ifBlank { playerName.ifBlank { "Игрок 1" } }, CRICKET_BOTS[2]),
+        Slot501(false, ownerName, CRICKET_BOTS[2]),
         Slot501(true, PlayerNamesStorage.getLastPlayer2(context).ifBlank { "Игрок 2" }, CRICKET_BOTS[2]),
         Slot501(true, "Игрок 3", CRICKET_BOTS[2]),
         Slot501(true, "Игрок 4", CRICKET_BOTS[2])
     )
+
     if (bots.size < 4 || names.size < 4 || botIds.size < 4) return defaults
+
     return List(4) { i ->
         val botIdx = (botIds[i] - 1).coerceIn(0, CRICKET_BOTS.lastIndex)
         val bot = CRICKET_BOTS[botIdx]
         val isBot = bots[i]
-        val name = if (isBot) bot.name else names[i]
+        val name = when {
+            isBot -> bot.name
+            i == 0 && playerName.isNotBlank() -> playerName
+            else -> names[i].ifBlank { if (i == 0) "Игрок 1" else "Игрок ${i + 1}" }
+        }
         Slot501(isBot, name, bot)
     }
 }
@@ -775,7 +796,6 @@ private fun SlotDropdown(
                 text = {
                     Column {
                         Text("${b.id}. ${b.name}", color = Color.White, fontWeight = FontWeight.Medium)
-                        // ─── ОБНОВЛЕНО: новая градация x01 ───
                         Text(b.pprLabel, color = Accent, fontSize = 11.sp)
                     }
                 },
