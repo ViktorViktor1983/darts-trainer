@@ -49,7 +49,7 @@ private enum class StatPeriod(val label: String, val daysBack: Long?) {
 }
 
 // ─────────────────────────────────────────────
-// Список валидных чекаутов (2..170 минус bogey numbers)
+// Список валидных чекаутов
 // ─────────────────────────────────────────────
 private val VALID_CHECKOUTS: List<Int> by lazy {
     (2..170).filter { CheckoutTable.isCheckoutPossible(it) }
@@ -153,8 +153,6 @@ fun StatsScreen(
     val game501Repo = remember {
         Game501Repository(Game501Database.get(context).game501Dao())
     }
-    // Имя владельца телефона (из онбординга).
-    // Если пустое — считаем статистику по всем людям (старое поведение).
     val ownerName = remember { SettingsStorage.getPlayerName(context).trim() }
 
     var selectedTab by remember { mutableStateOf(0) }
@@ -190,11 +188,7 @@ fun StatsScreen(
             Column {
                 Text("Статистика", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Color.White)
                 if (ownerName.isNotBlank()) {
-                    Text(
-                        "игрок: $ownerName",
-                        color = Accent,
-                        fontSize = 12.sp
-                    )
+                    Text("игрок: $ownerName", color = Accent, fontSize = 12.sp)
                 }
             }
         }
@@ -484,7 +478,7 @@ private fun Game501TabContent(
             contentAlignment = Alignment.Center
         ) {
             Text(
-                "📋 Открыть таблицу чек-аутов",
+                "🏆 Мои закрытые чекауты",
                 color = Color(0xFF121212),
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Bold
@@ -522,7 +516,7 @@ private fun CheckoutsDialog(
         },
         title = {
             Column {
-                Text("Закрытые чек-ауты", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                Text("Мои закрытые чекауты", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.height(4.dp))
                 Text(
                     "Закрыто $closedCount из $validTotal (${(closedCount * 100 / validTotal)}%)",
@@ -575,19 +569,9 @@ private fun CheckoutCell(value: Int, count: Int, modifier: Modifier) {
         contentAlignment = Alignment.Center
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(
-                "$value",
-                color = fg,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Bold
-            )
+            Text("$value", color = fg, fontSize = 13.sp, fontWeight = FontWeight.Bold)
             if (count > 0) {
-                Text(
-                    "$count",
-                    color = fg.copy(alpha = 0.75f),
-                    fontSize = 9.sp,
-                    fontWeight = FontWeight.Medium
-                )
+                Text("$count", color = fg.copy(alpha = 0.75f), fontSize = 9.sp, fontWeight = FontWeight.Medium)
             }
         }
     }
@@ -771,8 +755,6 @@ private fun percentLabel(part: Int, total: Int): String {
     return String.format(Locale.US, "%.1f%%", p)
 }
 
-// Возвращает true, если игрок с этим именем — это владелец.
-// Если ownerName пустой — считаем любого человека владельцем (старое поведение).
 private fun isOwner(isBotFlag: String, name: String, ownerName: String): Boolean {
     if (isBotFlag != "0") return false
     if (ownerName.isBlank()) return true
