@@ -34,6 +34,8 @@ import com.lodkin.dartstrainer.data.game501.Game501Repository
 import com.lodkin.dartstrainer.data.game501.GameType
 import com.lodkin.dartstrainer.data.game501.OutMode
 import com.lodkin.dartstrainer.data.game501.Player501
+import com.lodkin.dartstrainer.data.scoreset.ScoreSetDatabase
+import com.lodkin.dartstrainer.data.scoreset.ScoreSetRepository
 import com.lodkin.dartstrainer.data.sector.SectorDatabase
 import com.lodkin.dartstrainer.data.sector.SectorRepository
 import com.lodkin.dartstrainer.theme.Accent
@@ -58,6 +60,9 @@ import com.lodkin.dartstrainer.ui.cricket.CricketStatsScreen
 import com.lodkin.dartstrainer.ui.game501.Game501Screen
 import com.lodkin.dartstrainer.ui.game501.Game501SetupScreen
 import com.lodkin.dartstrainer.ui.game501.Game501StatsScreen
+import com.lodkin.dartstrainer.ui.scoreset.ScoreSetGameScreen
+import com.lodkin.dartstrainer.ui.scoreset.ScoreSetSetupScreen
+import com.lodkin.dartstrainer.ui.scoreset.ScoreSetStatsScreen
 import com.lodkin.dartstrainer.ui.sector.SectorGameScreen
 import com.lodkin.dartstrainer.ui.sector.SectorSetupScreen
 import com.lodkin.dartstrainer.ui.sector.SectorStatsScreen
@@ -97,6 +102,9 @@ fun DartsTrainerApp() {
     }
     val bigRoundRepository = remember {
         BigRoundRepository(BigRoundDatabase.get(context).bigRoundDao())
+    }
+    val scoreSetRepository = remember {
+        ScoreSetRepository(ScoreSetDatabase.get(context).scoreSetDao())
     }
 
     // ── Сессия ──
@@ -176,6 +184,7 @@ fun DartsTrainerApp() {
                 onSector = { screen = "sector_setup" },
                 onAroundClock = { screen = "aroundclock_setup" },
                 onBigRound = { screen = "biground_setup" },
+                onScoreSet = { screen = "scoreset_setup" },
                 onBack = { screen = "main" }
             )
 
@@ -395,6 +404,28 @@ fun DartsTrainerApp() {
             "biground_stats" -> BigRoundStatsScreen(
                 repository = bigRoundRepository,
                 onBack = { screen = "biground_setup" }
+            )
+
+            // ── Набор очков ──
+            "scoreset_setup" -> ScoreSetSetupScreen(
+                playerName = SettingsStorage.getPlayerName(context),
+                repository = scoreSetRepository,
+                onStartGame = { screen = "scoreset_game" },
+                onOpenStats = { screen = "scoreset_stats" },
+                onBack = { screen = "game_select" }
+            )
+
+            "scoreset_game" -> ScoreSetGameScreen(
+                repository = scoreSetRepository,
+                onFinish = { _score ->
+                    screen = "game_select"
+                },
+                onBack = { screen = "game_select" }
+            )
+
+            "scoreset_stats" -> ScoreSetStatsScreen(
+                repository = scoreSetRepository,
+                onBack = { screen = "scoreset_setup" }
             )
         }
     }
