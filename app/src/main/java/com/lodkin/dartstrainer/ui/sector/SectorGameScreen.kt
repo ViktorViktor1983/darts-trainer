@@ -385,12 +385,11 @@ fun SectorGameScreen(
 
     if (showFinishDialog) {
         val score = totalScore
-        // Ищем лучший подходящий норматив (первый в обратном порядке, чьи очки ≤ score)
         val achievedIdx = SECTOR_20_NORMS.indices.reversed()
             .firstOrNull { score >= SECTOR_20_NORMS[it].second }
         val achieved = if (achievedIdx != null) SECTOR_20_NORMS[achievedIdx] else null
-        // Следующий — на одну позицию выше в списке (индекс -1)
-        val next = if (achievedIdx != null && achievedIdx > 0) SECTOR_20_NORMS[achievedIdx - 1] else null
+        val next = if (achievedIdx != null && achievedIdx < SECTOR_20_NORMS.size - 1)
+            SECTOR_20_NORMS[achievedIdx + 1] else null
 
         AlertDialog(
             onDismissRequest = { },
@@ -492,6 +491,14 @@ fun SectorGameScreen(
                                     "До норматива «${next.first}» не хватило ${next.second - score} очков",
                                     color = Color.White.copy(alpha = 0.6f),
                                     fontSize = 12.sp
+                                )
+                            } else {
+                                Spacer(Modifier.height(6.dp))
+                                Text(
+                                    "Максимальный норматив достигнут!",
+                                    color = GoldAccent.copy(alpha = 0.85f),
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold
                                 )
                             }
                         } else {
