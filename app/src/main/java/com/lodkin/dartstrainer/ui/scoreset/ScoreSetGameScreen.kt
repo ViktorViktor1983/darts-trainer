@@ -89,7 +89,6 @@ fun ScoreSetGameScreen(
         autoOkActive = false
     }
 
-    // ── Автоок 3 сек ──
     LaunchedEffect(inputText, approaches.size) {
         if (isInputValid(inputText) && !isFinished && !showFinishDialog) {
             autoOkActive = true
@@ -105,7 +104,6 @@ fun ScoreSetGameScreen(
             .fillMaxSize()
             .background(DarkBg)
     ) {
-        // ── Шапка ──
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -138,7 +136,6 @@ fun ScoreSetGameScreen(
             )
         }
 
-        // ── Счёт ──
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -166,7 +163,6 @@ fun ScoreSetGameScreen(
             )
         }
 
-        // ── Поле ввода ──
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -214,7 +210,6 @@ fun ScoreSetGameScreen(
             }
         }
 
-        // ── Клавиатура ──
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -303,7 +298,6 @@ fun ScoreSetGameScreen(
 
             Spacer(Modifier.height(10.dp))
 
-            // История подходов
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -370,11 +364,13 @@ fun ScoreSetGameScreen(
 
     if (showFinishDialog) {
         val score = totalScore
-        // Лучший подходящий: первый в обратном порядке, чьи очки <= score
+        // Ищем лучший подходящий норматив
         val achievedIdx = SCORESET_NORMS.indices.reversed()
             .firstOrNull { score >= SCORESET_NORMS[it].second }
         val achieved = if (achievedIdx != null) SCORESET_NORMS[achievedIdx] else null
-        val next = if (achievedIdx != null && achievedIdx > 0) SCORESET_NORMS[achievedIdx - 1] else null
+        // Следующий (более высокий) — это индекс + 1 в этом списке
+        val next = if (achievedIdx != null && achievedIdx < SCORESET_NORMS.size - 1)
+            SCORESET_NORMS[achievedIdx + 1] else null
 
         AlertDialog(
             onDismissRequest = { },
@@ -466,6 +462,14 @@ fun ScoreSetGameScreen(
                                 "До норматива «${next.first}» не хватило ${next.second - score} очков",
                                 color = Color.White.copy(alpha = 0.6f),
                                 fontSize = 12.sp
+                            )
+                        } else {
+                            Spacer(Modifier.height(6.dp))
+                            Text(
+                                "Максимальный норматив достигнут!",
+                                color = GoldAccent.copy(alpha = 0.85f),
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold
                             )
                         }
                     } else {
