@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
@@ -18,6 +19,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.lodkin.dartstrainer.data.aroundclock.AroundClockOrder
+import com.lodkin.dartstrainer.data.aroundclock.AroundClockRepository
 import com.lodkin.dartstrainer.data.aroundclock.AroundClockTarget
 import com.lodkin.dartstrainer.theme.Accent
 import com.lodkin.dartstrainer.theme.DarkBg
@@ -25,6 +27,8 @@ import com.lodkin.dartstrainer.theme.ErrorColor
 import com.lodkin.dartstrainer.theme.GoldAccent
 import com.lodkin.dartstrainer.theme.TileBg
 import com.lodkin.dartstrainer.theme.TileBgDark
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlin.random.Random
 
 private val PaleYellow = Color(0xFFFFE082)
@@ -45,6 +49,7 @@ fun AroundClockGameScreen(
     target: AroundClockTarget,
     order: AroundClockOrder,
     hitsRequired: Int,
+    repository: AroundClockRepository,
     onFinish: (totalDarts: Int, completed: Boolean, sectorResults: Map<Int, Int>) -> Unit,
     onBack: () -> Unit
 ) {
@@ -57,6 +62,22 @@ fun AroundClockGameScreen(
 
     var showBackConfirm by remember { mutableStateOf(false) }
     var showFinishDialog by remember { mutableStateOf(false) }
+    var bestRecord by remember { mutableStateOf<Int?>(null) }
+
+    // Загружаем рекорд для текущего режима
+    LaunchedEffect(Unit) {
+        val games = withContext(Dispatchers.IO) {
+            repository.getAllGames()
+        }
+        bestRecord = games
+            .filter {
+                it.completed &&
+                it.targetName == target.name &&
+                it.orderName == order.name &&
+                it.hitsRequired == hitsRequired
+            }
+            .minOfOrNull { it.totalDarts }
+    }
 
     val state = remember(allThrows.size) {
         recalcState(allThrows.toList(), sectorSequence, hitsRequired)
@@ -91,14 +112,6 @@ fun AroundClockGameScreen(
         showFinishDialog = false
     }
 
-    fun clearApproach() {
-        if (throwsInCurrentApproach == 0) return
-        repeat(throwsInCurrentApproach) {
-            if (allThrows.isNotEmpty()) allThrows.removeAt(allThrows.lastIndex)
-        }
-        showFinishDialog = false
-    }
-
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -109,7 +122,7 @@ fun AroundClockGameScreen(
             modifier = Modifier
                 .fillMaxWidth()
                 .background(Color(0xFF1A2332))
-                .padding(horizontal = 12.dp, vertical = 10.dp),
+                .padding(horizontal = 12.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box(
@@ -117,16 +130,16 @@ fun AroundClockGameScreen(
                     .clip(RoundedCornerShape(10.dp))
                     .background(TileBg)
                     .clickable { showBackConfirm = true }
-                    .padding(horizontal = 12.dp, vertical = 8.dp)
+                    .padding(horizontal = 14.dp, vertical = 10.dp)
             ) {
-                Text("← Назад", color = Accent, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                Text("← Назад", color = Accent, fontSize = 14.sp, fontWeight = FontWeight.Bold)
             }
             Spacer(Modifier.width(10.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     "Кругосветка",
                     color = Color.White,
-                    fontSize = 17.sp,
+                    fontSize = 18.sp,
                     fontWeight = FontWeight.Bold
                 )
                 Text(
@@ -134,14 +147,34 @@ fun AroundClockGameScreen(
                         if (order == AroundClockOrder.ORDERED) "по порядку" else "случайно"
                     } · попаданий: $hitsRequired",
                     color = Accent,
-                    fontSize = 11.sp
+                    fontSize = 12.sp
                 )
             }
             Column(horizontalAlignment = Alignment.End) {
-                Text("ДРОТИКОВ", color = Color(0xFF99AABB), fontSize = 9.sp, letterSpacing = 1.sp)
-                Text("${allThrows.size}", color = GoldAccent, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                Text("ДРОТИКОВ", color = Color(0xFF99AABB), fontSize = 10.sp, letterSpacing = 1.sp)
+                Text("${allThrows.size}", color = GoldAccent, fontSize = 26.sp, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(4.dp))
+                // Три точки: остаток в подходе
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    for (i in 0..2) {
+                        val filled = i < throwsInCurrentApproach
+                        Box(
+                            modifier = Modifier
+                                .size(8.dp)
+                                .clip(CircleShape)
+                                .background(if (filled) Accent else Color.White.copy(alpha = 0.2f))
+                        )
+                    }
+                }
             }
         }
+
+        // ── Карта прогресса секторов ──
+        SectorProgressMap(
+            sequence = sectorSequence,
+            currentSector = currentSectorOrNull,
+            isFinished = isFinished
+        )
 
         // ── Текущая цель ──
         if (!isFinished && currentSectorOrNull != null) {
@@ -156,40 +189,49 @@ fun AroundClockGameScreen(
                 Text(
                     "ЦЕЛЬ",
                     color = Color(0xFF99AABB),
-                    fontSize = 10.sp,
+                    fontSize = 11.sp,
                     fontWeight = FontWeight.Bold,
                     letterSpacing = 2.sp
                 )
                 Text(
                     sectorLabel(cs, target),
                     color = GoldAccent,
-                    fontSize = 54.sp,
+                    fontSize = 58.sp,
                     fontWeight = FontWeight.Bold
                 )
                 Text(
                     "попаданий: ${state.hitsInCurrent} / $hitsRequired",
                     color = Color.White.copy(alpha = 0.6f),
-                    fontSize = 13.sp
+                    fontSize = 14.sp
                 )
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    "пройдено секторов: ${state.sectorsCompleted} / ${sectorSequence.size}",
-                    color = Color.White.copy(alpha = 0.45f),
-                    fontSize = 11.sp
-                )
+                Spacer(Modifier.height(6.dp))
+                if (bestRecord != null) {
+                    Text(
+                        "🏆 лучший результат: $bestRecord дротиков",
+                        color = GoldAccent.copy(alpha = 0.75f),
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                } else {
+                    Text(
+                        "рекорда ещё нет — установи первый!",
+                        color = Color.White.copy(alpha = 0.4f),
+                        fontSize = 11.sp
+                    )
+                }
             }
         } else {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(Color(0xFF16202C))
-                    .padding(vertical = 24.dp),
+                    .padding(vertical = 26.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text(
                     "КРУГ ПРОЙДЕН!",
                     color = GoldAccent,
-                    fontSize = 26.sp,
+                    fontSize = 28.sp,
                     fontWeight = FontWeight.Bold,
                     letterSpacing = 2.sp
                 )
@@ -197,7 +239,7 @@ fun AroundClockGameScreen(
                 Text(
                     "всего дротиков: ${allThrows.size}",
                     color = Color.White.copy(alpha = 0.7f),
-                    fontSize = 14.sp
+                    fontSize = 15.sp
                 )
             }
         }
@@ -209,7 +251,7 @@ fun AroundClockGameScreen(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp)
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             for (i in 0..2) {
                 val globalIndex = (allThrows.size - throwsInCurrentApproach) + i
@@ -231,28 +273,29 @@ fun AroundClockGameScreen(
 
         Spacer(Modifier.height(10.dp))
 
-        // ── Кнопки управления ──
+        // ── Кнопки ──
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 12.dp)
                 .weight(1f),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            val canMissAll = !isFinished && throwsInCurrentApproach in 1..2
+            // aOK
+            val canAutoOk = !isFinished && throwsInCurrentApproach in 1..2
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(58.dp)
+                    .height(64.dp)
                     .clip(RoundedCornerShape(10.dp))
-                    .background(if (canMissAll) TileBg else TileBg.copy(alpha = 0.4f))
-                    .clickable(enabled = canMissAll) { missAllRemaining() },
+                    .background(if (canAutoOk) TileBg else TileBg.copy(alpha = 0.4f))
+                    .clickable(enabled = canAutoOk) { missAllRemaining() },
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    "aOK / Все мимо",
-                    color = if (canMissAll) Color.White else Color.White.copy(alpha = 0.4f),
-                    fontSize = 16.sp,
+                    "aOK",
+                    color = if (canAutoOk) Color.White else Color.White.copy(alpha = 0.4f),
+                    fontSize = 18.sp,
                     fontWeight = FontWeight.Bold
                 )
             }
@@ -261,29 +304,31 @@ fun AroundClockGameScreen(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                val canClear = !isFinished && throwsInCurrentApproach > 0
+                // Все мимо
+                val canMissAll = !isFinished && throwsInCurrentApproach in 1..2
                 Box(
                     modifier = Modifier
                         .weight(1f)
-                        .height(52.dp)
+                        .height(60.dp)
                         .clip(RoundedCornerShape(10.dp))
-                        .background(if (canClear) TileBgDark else TileBgDark.copy(alpha = 0.4f))
-                        .clickable(enabled = canClear) { clearApproach() },
+                        .background(if (canMissAll) TileBgDark else TileBgDark.copy(alpha = 0.4f))
+                        .clickable(enabled = canMissAll) { missAllRemaining() },
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        "⌫ Стереть",
-                        color = if (canClear) Color.White else Color.White.copy(alpha = 0.4f),
-                        fontSize = 13.sp,
+                        "Все мимо",
+                        color = if (canMissAll) Color.White else Color.White.copy(alpha = 0.4f),
+                        fontSize = 15.sp,
                         fontWeight = FontWeight.Medium
                     )
                 }
 
+                // Ход назад
                 val canUndo = allThrows.isNotEmpty() && !showFinishDialog
                 Box(
                     modifier = Modifier
                         .weight(1f)
-                        .height(52.dp)
+                        .height(60.dp)
                         .clip(RoundedCornerShape(10.dp))
                         .background(if (canUndo) PaleYellow else PaleYellow.copy(alpha = 0.35f))
                         .clickable(enabled = canUndo) { undo() },
@@ -292,17 +337,16 @@ fun AroundClockGameScreen(
                     Text(
                         "↶ Ход назад",
                         color = PaleYellowText,
-                        fontSize = 13.sp,
+                        fontSize = 15.sp,
                         fontWeight = FontWeight.Bold
                     )
                 }
             }
         }
 
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(14.dp))
     }
 
-    // ── Подтверждение выхода ──
     if (showBackConfirm) {
         AlertDialog(
             onDismissRequest = { showBackConfirm = false },
@@ -322,18 +366,13 @@ fun AroundClockGameScreen(
         )
     }
 
-    // ── Финал ──
     if (showFinishDialog) {
         AlertDialog(
             onDismissRequest = { },
             confirmButton = {
                 TextButton(onClick = {
                     showFinishDialog = false
-                    onFinish(
-                        allThrows.size,
-                        true,
-                        state.sectorResults
-                    )
+                    onFinish(allThrows.size, true, state.sectorResults)
                 }) { Text("Продолжить", color = Accent) }
             },
             dismissButton = {
@@ -347,6 +386,18 @@ fun AroundClockGameScreen(
             },
             text = {
                 Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                    val prevRecord = bestRecord
+                    val isNewRecord = prevRecord == null || allThrows.size < prevRecord
+                    if (isNewRecord) {
+                        Text(
+                            "🏆 НОВЫЙ РЕКОРД!",
+                            color = GoldAccent,
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(Modifier.height(8.dp))
+                    }
+
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween
@@ -358,6 +409,20 @@ fun AroundClockGameScreen(
                             fontSize = 24.sp,
                             fontWeight = FontWeight.Bold
                         )
+                    }
+                    if (prevRecord != null) {
+                        Spacer(Modifier.height(4.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text("Твой рекорд:", color = Color.White.copy(alpha = 0.6f), fontSize = 13.sp)
+                            Text(
+                                "$prevRecord",
+                                color = Color.White.copy(alpha = 0.6f),
+                                fontSize = 13.sp
+                            )
+                        }
                     }
                     Spacer(Modifier.height(4.dp))
                     Row(
@@ -388,11 +453,7 @@ fun AroundClockGameScreen(
                                 .padding(vertical = 2.dp),
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Text(
-                                sectorLabel(sec, target),
-                                color = Color.White,
-                                fontSize = 13.sp
-                            )
+                            Text(sectorLabel(sec, target), color = Color.White, fontSize = 13.sp)
                             Text(
                                 "$darts",
                                 color = GoldAccent,
@@ -404,6 +465,64 @@ fun AroundClockGameScreen(
                 }
             }
         )
+    }
+}
+
+// ─────────────────────────────────────────────
+// Карта прогресса секторов
+// ─────────────────────────────────────────────
+@Composable
+private fun SectorProgressMap(
+    sequence: List<Int>,
+    currentSector: Int?,
+    isFinished: Boolean
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(Color(0xFF0D1117))
+            .padding(horizontal = 8.dp, vertical = 8.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(3.dp)
+        ) {
+            sequence.forEach { sec ->
+                val isPast = when {
+                    isFinished -> true
+                    currentSector == null -> false
+                    else -> sequence.indexOf(sec) < sequence.indexOf(currentSector)
+                }
+                val isCurrent = !isFinished && sec == currentSector
+
+                val bg = when {
+                    isCurrent -> Accent
+                    isPast -> HitGreen
+                    else -> TileBgDark
+                }
+                val fg = when {
+                    isCurrent || isPast -> Color(0xFF121212)
+                    else -> Color.White.copy(alpha = 0.5f)
+                }
+                val label = if (sec == 25) "B" else "$sec"
+
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(28.dp)
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(bg),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        label,
+                        color = fg,
+                        fontSize = 10.sp,
+                        fontWeight = if (isCurrent || isPast) FontWeight.Bold else FontWeight.Normal
+                    )
+                }
+            }
+        }
     }
 }
 
@@ -437,22 +556,22 @@ private fun ApproachRow(
 
     Row(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(6.dp)
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         Box(
             modifier = Modifier
                 .weight(1f)
-                .height(64.dp)
+                .height(72.dp)
                 .clip(RoundedCornerShape(10.dp))
                 .background(if (missEnabled) missBg else missBg.copy(alpha = 0.6f))
                 .clickable(enabled = missEnabled) { onMiss() },
             contentAlignment = Alignment.Center
         ) {
             Text(
-                "МИМО",
+                "ПРОМАХ",
                 color = if (currentResult == RowResult.MISS) Color.White
                 else Color.White.copy(alpha = if (missEnabled) 0.9f else 0.4f),
-                fontSize = 16.sp,
+                fontSize = 18.sp,
                 fontWeight = FontWeight.Bold
             )
         }
@@ -461,7 +580,7 @@ private fun ApproachRow(
         Box(
             modifier = Modifier
                 .weight(1f)
-                .height(64.dp)
+                .height(72.dp)
                 .clip(RoundedCornerShape(10.dp))
                 .background(if (hitEnabled) hitBg else hitBg.copy(alpha = 0.6f))
                 .clickable(enabled = hitEnabled) { onHit() },
@@ -471,7 +590,7 @@ private fun ApproachRow(
                 label,
                 color = if (currentResult == RowResult.HIT) Color.White
                 else Color.White.copy(alpha = if (hitEnabled) 0.9f else 0.4f),
-                fontSize = 16.sp,
+                fontSize = 18.sp,
                 fontWeight = FontWeight.Bold
             )
         }
@@ -479,7 +598,7 @@ private fun ApproachRow(
 }
 
 // ─────────────────────────────────────────────
-// Пересчёт состояния из истории
+// Пересчёт состояния
 // ─────────────────────────────────────────────
 private data class GameState(
     val currentSector: Int?,
