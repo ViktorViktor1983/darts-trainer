@@ -14,6 +14,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import com.lodkin.dartstrainer.data.SettingsStorage
+import com.lodkin.dartstrainer.data.aroundclock.AroundClockDatabase
+import com.lodkin.dartstrainer.data.aroundclock.AroundClockOrder
+import com.lodkin.dartstrainer.data.aroundclock.AroundClockRepository
+import com.lodkin.dartstrainer.data.aroundclock.AroundClockTarget
 import com.lodkin.dartstrainer.data.cricket.CricketDatabase
 import com.lodkin.dartstrainer.data.cricket.CricketGame
 import com.lodkin.dartstrainer.data.cricket.CricketLogic
@@ -39,6 +43,9 @@ import com.lodkin.dartstrainer.ui.OnboardingScreen
 import com.lodkin.dartstrainer.ui.SettingsScreen
 import com.lodkin.dartstrainer.ui.StatsScreen
 import com.lodkin.dartstrainer.ui.WelcomeScreen
+import com.lodkin.dartstrainer.ui.aroundclock.AroundClockGameScreen
+import com.lodkin.dartstrainer.ui.aroundclock.AroundClockSetupScreen
+import com.lodkin.dartstrainer.ui.aroundclock.AroundClockStatsScreen
 import com.lodkin.dartstrainer.ui.cricket.CricketGameScreen
 import com.lodkin.dartstrainer.ui.cricket.CricketSetupScreen
 import com.lodkin.dartstrainer.ui.cricket.CricketStatsScreen
@@ -79,6 +86,9 @@ fun DartsTrainerApp() {
     val sectorRepository = remember {
         SectorRepository(SectorDatabase.get(context).sectorDao())
     }
+    val aroundClockRepository = remember {
+        AroundClockRepository(AroundClockDatabase.get(context).aroundClockDao())
+    }
 
     // ── Сессия ──
     val sessionStartTime = remember { System.currentTimeMillis() }
@@ -91,6 +101,11 @@ fun DartsTrainerApp() {
     var cricketGame by remember { mutableStateOf<CricketGame?>(null) }
     var game501 by remember { mutableStateOf<Game501?>(null) }
     var sectorToPlay by remember { mutableStateOf<Int?>(null) }
+
+    // Параметры текущей игры «Кругосветка»
+    var aroundClockTarget by remember { mutableStateOf<AroundClockTarget?>(null) }
+    var aroundClockOrder by remember { mutableStateOf<AroundClockOrder?>(null) }
+    var aroundClockHits by remember { mutableStateOf(1) }
 
     if (stage == "loading") {
         LaunchedEffect(Unit) { delay(3000); stage = "main" }
@@ -131,6 +146,9 @@ fun DartsTrainerApp() {
                     cricketGame = null
                     game501 = null
                     sectorToPlay = null
+                    aroundClockTarget = null
+                    aroundClockOrder = null
+                    aroundClockHits = 1
                     onboardingDone = false
                     screen = "main"
                     stage = "welcome"
@@ -143,6 +161,7 @@ fun DartsTrainerApp() {
                 onCricket = { screen = "cricket_setup" },
                 on501 = { screen = "game501_setup" },
                 onSector = { screen = "sector_setup" },
+                onAroundClock = { screen = "aroundclock_setup" },
                 onBack = { screen = "main" }
             )
 
@@ -281,6 +300,54 @@ fun DartsTrainerApp() {
             "sector_stats" -> SectorStatsScreen(
                 repository = sectorRepository,
                 onBack = { screen = "sector_setup" }
+            )
+
+            // ── Кругосветка ──
+            "aroundclock_setup" -> AroundClockSetupScreen(
+                playerName = SettingsStorage.getPlayerName(context),
+                repository = aroundClockRepository,
+                onStartGame = { target, order, hits ->
+                    aroundClockTarget = target
+                    aroundClockOrder = order
+                    aroundClockHits = hits
+                    screen = "aroundclock_game"
+                },
+                onOpenStats = { screen = "aroundclock_stats" },
+                onBack = { screen = "game_select" }
+            )
+
+            "aroundclock_game" -> {
+                val t = aroundClockTarget
+                val o = aroundClockOrder
+                if (t != null && o != null) {
+                    AroundClockGameScreen(
+                        target = t,
+                        order = o,
+                        hitsRequired = aroundClockHits,
+                        onFinish = { totalDarts, completed, sectorResults ->
+                            scope.launch {
+                                aroundClockRepository.saveGame(
+                                    target = t,
+                                    order = o,
+                                    hitsRequired = aroundClockHits,
+                                    totalDarts = totalDarts,
+                                    completed = completed,
+                                    sectorResults = sectorResults
+                                )
+                            }
+                            aroundClockTarget = null
+                            aroundClockOrder = null
+                            aroundClockHits = 1
+                            screen = "game_select"
+                        },
+                        onBack = { screen = "game_select" }
+                    )
+                } else screen = "aroundclock_setup"
+            }
+
+            "aroundclock_stats" -> AroundClockStatsScreen(
+                repository = aroundClockRepository,
+                onBack = { screen = "aroundclock_setup" }
             )
         }
     }
