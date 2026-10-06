@@ -30,21 +30,19 @@ import kotlinx.coroutines.launch
 private val PaleYellow = Color(0xFFFFE082)
 private val PaleYellowText = Color(0xFF3E2723)
 
+// Нормативы для «Сектор 20» (официальная таблица).
+// Порядок — от низшего к высшему.
 private val SECTOR_20_NORMS: List<Pair<String, Int>> = listOf(
     "II юношеский" to 360,
     "I юношеский" to 400,
     "III разряд" to 460,
     "II разряд" to 540,
     "I разряд" to 600,
-    "КМС" to 760,
-    "МС" to 960
+    "КМС" to 720
 )
 
 private const val TOTAL_APPROACHES = 10
 private const val AUTO_OK_SECONDS = 3
-
-// Для секторов 1..20: макс 3 × 3 = 9 попаданий за подход.
-// Для Bull: макс 3 × 2 = 6 попаданий (три удвоения = 150 очков).
 private const val MAX_HITS_SECTOR = 9
 private const val MAX_HITS_BULL = 6
 
@@ -99,14 +97,11 @@ fun SectorGameScreen(
         autoOkActive = false
     }
 
-    // ── Автоок: 3 секунды ──
     LaunchedEffect(inputText, approaches.size) {
         if (isInputValid(inputText) && !isFinished && !showFinishDialog) {
             autoOkActive = true
             delay(AUTO_OK_SECONDS * 1000L)
-            if (isInputValid(inputText)) {
-                submitApproach()
-            }
+            if (isInputValid(inputText)) submitApproach()
         } else {
             autoOkActive = false
         }
@@ -234,7 +229,6 @@ fun SectorGameScreen(
                 .weight(1f)
         ) {
             val keyboardEnabled = !isFinished
-            // Для Bull кнопки 7, 8, 9 — неактивны
             val highDigitsEnabled = keyboardEnabled && !isBull
 
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -304,9 +298,7 @@ fun SectorGameScreen(
                     .height(52.dp)
                     .clip(RoundedCornerShape(10.dp))
                     .background(if (approaches.isNotEmpty()) PaleYellow else PaleYellow.copy(alpha = 0.35f))
-                    .clickable(enabled = approaches.isNotEmpty() && !showFinishDialog) {
-                        undoApproach()
-                    },
+                    .clickable(enabled = approaches.isNotEmpty() && !showFinishDialog) { undoApproach() },
                 contentAlignment = Alignment.Center
             ) {
                 Text(
@@ -319,7 +311,6 @@ fun SectorGameScreen(
 
             Spacer(Modifier.height(10.dp))
 
-            // История подходов
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -394,12 +385,12 @@ fun SectorGameScreen(
 
     if (showFinishDialog) {
         val score = totalScore
-        val bestRank = if (sector == 20) {
-            SECTOR_20_NORMS.reversed().firstOrNull { score >= it.second }
-        } else null
-        val nextRank = if (sector == 20 && bestRank != SECTOR_20_NORMS.lastOrNull()) {
-            SECTOR_20_NORMS.reversed().firstOrNull { score < it.second }
-        } else null
+        // Ищем лучший подходящий норматив (первый в обратном порядке, чьи очки ≤ score)
+        val achievedIdx = SECTOR_20_NORMS.indices.reversed()
+            .firstOrNull { score >= SECTOR_20_NORMS[it].second }
+        val achieved = if (achievedIdx != null) SECTOR_20_NORMS[achievedIdx] else null
+        // Следующий — на одну позицию выше в списке (индекс -1)
+        val next = if (achievedIdx != null && achievedIdx > 0) SECTOR_20_NORMS[achievedIdx - 1] else null
 
         AlertDialog(
             onDismissRequest = { },
@@ -443,7 +434,7 @@ fun SectorGameScreen(
                         Text(
                             "$totalHits",
                             color = Color.White,
-                            fontSize = 20.sp,
+                            fontSize = 18.sp,
                             fontWeight = FontWeight.Bold
                         )
                     }
@@ -464,14 +455,15 @@ fun SectorGameScreen(
                     if (sector == 20) {
                         Spacer(Modifier.height(14.dp))
                         Text(
-                            "РАЗРЯД",
+                            "НОРМАТИВ",
                             color = Accent,
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
                             letterSpacing = 2.sp
                         )
                         Spacer(Modifier.height(6.dp))
-                        if (bestRank != null) {
+
+                        if (achieved != null) {
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -482,29 +474,30 @@ fun SectorGameScreen(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(
-                                    bestRank.first,
+                                    achieved.first,
                                     color = GoldAccent,
                                     fontSize = 16.sp,
                                     fontWeight = FontWeight.Bold
                                 )
                                 Text(
-                                    "${bestRank.second}+",
+                                    "${achieved.second}+",
                                     color = GoldAccent,
                                     fontSize = 14.sp,
                                     fontWeight = FontWeight.Bold
                                 )
                             }
-                            if (nextRank != null) {
+                            if (next != null) {
                                 Spacer(Modifier.height(6.dp))
                                 Text(
-                                    "До разряда «${nextRank.first}» не хватило ${nextRank.second - score} очков",
+                                    "До норматива «${next.first}» не хватило ${next.second - score} очков",
                                     color = Color.White.copy(alpha = 0.6f),
                                     fontSize = 12.sp
                                 )
                             }
                         } else {
+                            val lowest = SECTOR_20_NORMS.first()
                             Text(
-                                "Пока без разряда. До II юношеского не хватило ${360 - score} очков.",
+                                "Пока без разряда. До «${lowest.first}» не хватило ${lowest.second - score} очков.",
                                 color = Color.White.copy(alpha = 0.6f),
                                 fontSize = 12.sp
                             )
