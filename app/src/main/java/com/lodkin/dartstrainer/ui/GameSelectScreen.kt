@@ -28,6 +28,7 @@ fun GameSelectScreen(
     onSector: () -> Unit,
     onAroundClock: () -> Unit,
     onBigRound: () -> Unit,
+    onScoreSet: () -> Unit,
     onBack: () -> Unit
 ) {
     Column(
@@ -103,6 +104,12 @@ fun GameSelectScreen(
                 subtitle = "21 сектор по 3 дротика. Нормативы разрядов",
                 modifier = Modifier.fillMaxWidth().height(140.dp),
                 onClick = onBigRound
+            )
+            GameCard(
+                title = "Набор очков",
+                subtitle = "10 подходов. Набери максимум очков. Нормативы",
+                modifier = Modifier.fillMaxWidth().height(140.dp),
+                onClick = onScoreSet
             )
         }
     }
