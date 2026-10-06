@@ -41,8 +41,12 @@ private val SECTOR_20_NORMS: List<Pair<String, Int>> = listOf(
 )
 
 private const val TOTAL_APPROACHES = 10
-private const val MAX_HITS_PER_APPROACH = 9
-private const val AUTO_OK_SECONDS = 5
+private const val AUTO_OK_SECONDS = 3
+
+// Для секторов 1..20: макс 3 × 3 = 9 попаданий за подход.
+// Для Bull: макс 3 × 2 = 6 попаданий (три удвоения = 150 очков).
+private const val MAX_HITS_SECTOR = 9
+private const val MAX_HITS_BULL = 6
 
 @Composable
 fun SectorGameScreen(
@@ -63,6 +67,7 @@ fun SectorGameScreen(
     val isBull = sector == 25
     val sectorLabel = if (isBull) "BULL" else "S$sector"
     val pointsPerHit = if (isBull) 25 else sector
+    val maxHits = if (isBull) MAX_HITS_BULL else MAX_HITS_SECTOR
 
     val currentApproachNumber = approaches.size + 1
     val totalHits = approaches.sum()
@@ -72,7 +77,7 @@ fun SectorGameScreen(
     fun isInputValid(text: String): Boolean {
         if (text.isBlank()) return false
         val v = text.toIntOrNull() ?: return false
-        return v in 0..MAX_HITS_PER_APPROACH
+        return v in 0..maxHits
     }
 
     fun submitApproach() {
@@ -94,14 +99,11 @@ fun SectorGameScreen(
         autoOkActive = false
     }
 
-    // ── Автоок ──
-    // Запускается, когда введено валидное число.
-    // Каждое изменение inputText или approaches — сбрасывает таймер.
+    // ── Автоок: 3 секунды ──
     LaunchedEffect(inputText, approaches.size) {
         if (isInputValid(inputText) && !isFinished && !showFinishDialog) {
             autoOkActive = true
             delay(AUTO_OK_SECONDS * 1000L)
-            // Если за это время ничего не изменилось — нажимаем OK
             if (isInputValid(inputText)) {
                 submitApproach()
             }
@@ -201,7 +203,7 @@ fun SectorGameScreen(
                     )
                     Spacer(Modifier.height(2.dp))
                     Text(
-                        "S=1 · D=2 · T=3",
+                        if (isBull) "25 = 1 · 50 = 2" else "S=1 · D=2 · T=3",
                         color = Color.White.copy(alpha = 0.4f),
                         fontSize = 10.sp
                     )
@@ -232,6 +234,8 @@ fun SectorGameScreen(
                 .weight(1f)
         ) {
             val keyboardEnabled = !isFinished
+            // Для Bull кнопки 7, 8, 9 — неактивны
+            val highDigitsEnabled = keyboardEnabled && !isBull
 
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 DigitKey("1", keyboardEnabled) { inputText = appendDigit(inputText, "1") }
@@ -246,9 +250,9 @@ fun SectorGameScreen(
             }
             Spacer(Modifier.height(8.dp))
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                DigitKey("7", keyboardEnabled) { inputText = appendDigit(inputText, "7") }
-                DigitKey("8", keyboardEnabled) { inputText = appendDigit(inputText, "8") }
-                DigitKey("9", keyboardEnabled) { inputText = appendDigit(inputText, "9") }
+                DigitKey("7", highDigitsEnabled) { inputText = appendDigit(inputText, "7") }
+                DigitKey("8", highDigitsEnabled) { inputText = appendDigit(inputText, "8") }
+                DigitKey("9", highDigitsEnabled) { inputText = appendDigit(inputText, "9") }
             }
             Spacer(Modifier.height(8.dp))
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -402,7 +406,6 @@ fun SectorGameScreen(
             confirmButton = {
                 TextButton(onClick = {
                     showFinishDialog = false
-                    // Сохраняем матч в БД
                     scope.launch {
                         repository.saveGame(
                             sector = sector,
@@ -536,7 +539,7 @@ private fun RowScope.DigitKey(
     ) {
         Text(
             digit,
-            color = Color.White,
+            color = if (enabled) Color.White else Color.White.copy(alpha = 0.3f),
             fontSize = 26.sp,
             fontWeight = FontWeight.Bold
         )
