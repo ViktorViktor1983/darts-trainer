@@ -64,7 +64,6 @@ fun AroundClockGameScreen(
     var showFinishDialog by remember { mutableStateOf(false) }
     var bestRecord by remember { mutableStateOf<Int?>(null) }
 
-    // Загружаем рекорд для текущего режима
     LaunchedEffect(Unit) {
         val games = withContext(Dispatchers.IO) {
             repository.getAllGames()
@@ -154,7 +153,6 @@ fun AroundClockGameScreen(
                 Text("ДРОТИКОВ", color = Color(0xFF99AABB), fontSize = 10.sp, letterSpacing = 1.sp)
                 Text("${allThrows.size}", color = GoldAccent, fontSize = 26.sp, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.height(4.dp))
-                // Три точки: остаток в подходе
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     for (i in 0..2) {
                         val filled = i < throwsInCurrentApproach
@@ -169,7 +167,7 @@ fun AroundClockGameScreen(
             }
         }
 
-        // ── Карта прогресса секторов ──
+        // ── Карта прогресса ──
         SectorProgressMap(
             sequence = sectorSequence,
             currentSector = currentSectorOrNull,
@@ -278,38 +276,18 @@ fun AroundClockGameScreen(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 12.dp)
-                .weight(1f),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+                .weight(1f)
         ) {
-            // aOK
-            val canAutoOk = !isFinished && throwsInCurrentApproach in 1..2
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(64.dp)
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(if (canAutoOk) TileBg else TileBg.copy(alpha = 0.4f))
-                    .clickable(enabled = canAutoOk) { missAllRemaining() },
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    "aOK",
-                    color = if (canAutoOk) Color.White else Color.White.copy(alpha = 0.4f),
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                // Все мимо
-                val canMissAll = !isFinished && throwsInCurrentApproach in 1..2
+                // Все мимо — активна всегда, пока игра не завершена
+                val canMissAll = !isFinished
                 Box(
                     modifier = Modifier
                         .weight(1f)
-                        .height(60.dp)
+                        .height(64.dp)
                         .clip(RoundedCornerShape(10.dp))
                         .background(if (canMissAll) TileBgDark else TileBgDark.copy(alpha = 0.4f))
                         .clickable(enabled = canMissAll) { missAllRemaining() },
@@ -318,8 +296,8 @@ fun AroundClockGameScreen(
                     Text(
                         "Все мимо",
                         color = if (canMissAll) Color.White else Color.White.copy(alpha = 0.4f),
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Medium
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold
                     )
                 }
 
@@ -328,7 +306,7 @@ fun AroundClockGameScreen(
                 Box(
                     modifier = Modifier
                         .weight(1f)
-                        .height(60.dp)
+                        .height(64.dp)
                         .clip(RoundedCornerShape(10.dp))
                         .background(if (canUndo) PaleYellow else PaleYellow.copy(alpha = 0.35f))
                         .clickable(enabled = canUndo) { undo() },
@@ -337,7 +315,7 @@ fun AroundClockGameScreen(
                     Text(
                         "↶ Ход назад",
                         color = PaleYellowText,
-                        fontSize = 15.sp,
+                        fontSize = 16.sp,
                         fontWeight = FontWeight.Bold
                     )
                 }
