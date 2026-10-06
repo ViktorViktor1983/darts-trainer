@@ -26,6 +26,7 @@ fun GameSelectScreen(
     onCricket: () -> Unit,
     on501: () -> Unit,
     onSector: () -> Unit,
+    onAroundClock: () -> Unit,
     onBack: () -> Unit
 ) {
     Column(
@@ -65,7 +66,6 @@ fun GameSelectScreen(
 
         Spacer(Modifier.height(20.dp))
 
-        // Список игр — прокручивается, если не влезает
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -90,6 +90,12 @@ fun GameSelectScreen(
                 subtitle = "30 дротиков в один сектор. Нормативы для S20",
                 modifier = Modifier.fillMaxWidth().height(140.dp),
                 onClick = onSector
+            )
+            GameCard(
+                title = "Кругосветка",
+                subtitle = "Пройди сектора 1–20 и Bull по кругу",
+                modifier = Modifier.fillMaxWidth().height(140.dp),
+                onClick = onAroundClock
             )
         }
     }
