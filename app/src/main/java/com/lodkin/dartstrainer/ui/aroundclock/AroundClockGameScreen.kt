@@ -15,7 +15,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.lodkin.dartstrainer.data.aroundclock.AroundClockOrder
@@ -34,11 +33,10 @@ private val PaleYellowText = Color(0xFF3E2723)
 private val HitGreen = Color(0xFF4CAF50)
 private val MissRed = Color(0xFF8B2A2A)
 
-// Секторы 1..20 + Bull (25)
 private val ALL_SECTORS = (1..20).toList() + 25
 
 private data class ThrowInApproach(
-    val sector: Int,        // целевой сектор на момент броска
+    val sector: Int,
     val hit: Boolean
 )
 
@@ -50,38 +48,33 @@ fun AroundClockGameScreen(
     onFinish: (totalDarts: Int, completed: Boolean, sectorResults: Map<Int, Int>) -> Unit,
     onBack: () -> Unit
 ) {
-    // Последовательность секторов для игры — фиксируется один раз при старте
     val sectorSequence = remember {
         if (order == AroundClockOrder.ORDERED) ALL_SECTORS
         else ALL_SECTORS.shuffled(Random(System.currentTimeMillis()))
     }
 
-    // Все сделанные броски (история для откатов)
     val allThrows = remember { mutableStateListOf<ThrowInApproach>() }
 
     var showBackConfirm by remember { mutableStateOf(false) }
     var showFinishDialog by remember { mutableStateOf(false) }
 
-    // ── Пересчёт состояния из истории бросков ──
     val state = remember(allThrows.size) {
         recalcState(allThrows.toList(), sectorSequence, hitsRequired)
     }
 
-    val currentSector = state.currentSector
-    val isFinished = state.finished
+    val currentSectorOrNull: Int? = state.currentSector
+    val isFinished: Boolean = state.finished
 
-    // Автозапуск финального диалога
     LaunchedEffect(isFinished) {
         if (isFinished) showFinishDialog = true
     }
 
-    // Текущий подход: последние броски после последнего кратного 3
     val throwsInCurrentApproach = allThrows.size % 3
 
     fun addThrow(hit: Boolean) {
         if (isFinished) return
-        // Сектор на момент броска — тот, что сейчас активен
-        allThrows.add(ThrowInApproach(sector = currentSector, hit = hit))
+        val cs = currentSectorOrNull ?: return
+        allThrows.add(ThrowInApproach(sector = cs, hit = hit))
     }
 
     fun missAllRemaining() {
@@ -151,7 +144,8 @@ fun AroundClockGameScreen(
         }
 
         // ── Текущая цель ──
-        if (!isFinished && currentSector != null) {
+        if (!isFinished && currentSectorOrNull != null) {
+            val cs = currentSectorOrNull
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -167,7 +161,7 @@ fun AroundClockGameScreen(
                     letterSpacing = 2.sp
                 )
                 Text(
-                    sectorLabel(currentSector, target),
+                    sectorLabel(cs, target),
                     color = GoldAccent,
                     fontSize = 54.sp,
                     fontWeight = FontWeight.Bold
@@ -185,7 +179,6 @@ fun AroundClockGameScreen(
                 )
             }
         } else {
-            // Финальный баннер
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -220,10 +213,13 @@ fun AroundClockGameScreen(
         ) {
             for (i in 0..2) {
                 val globalIndex = (allThrows.size - throwsInCurrentApproach) + i
-                val existing = if (globalIndex < allThrows.size) allThrows[globalIndex] else null
+                val existing: ThrowInApproach? =
+                    if (globalIndex < allThrows.size) allThrows[globalIndex] else null
+
+                val rowSector: Int? = existing?.sector ?: currentSectorOrNull
 
                 ApproachRow(
-                    sector = existing?.sector ?: currentSector,
+                    sector = rowSector,
                     target = target,
                     result = existing?.let { if (it.hit) RowResult.HIT else RowResult.MISS },
                     enabled = !isFinished && existing == null && i == throwsInCurrentApproach,
@@ -243,7 +239,6 @@ fun AroundClockGameScreen(
                 .weight(1f),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            // aOK / Все мимо
             val canMissAll = !isFinished && throwsInCurrentApproach in 1..2
             Box(
                 modifier = Modifier
@@ -266,7 +261,6 @@ fun AroundClockGameScreen(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                // Стереть
                 val canClear = !isFinished && throwsInCurrentApproach > 0
                 Box(
                     modifier = Modifier
@@ -285,7 +279,6 @@ fun AroundClockGameScreen(
                     )
                 }
 
-                // Ход назад
                 val canUndo = allThrows.isNotEmpty() && !showFinishDialog
                 Box(
                     modifier = Modifier
@@ -446,7 +439,6 @@ private fun ApproachRow(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(6.dp)
     ) {
-        // МИМО
         Box(
             modifier = Modifier
                 .weight(1f)
@@ -465,7 +457,6 @@ private fun ApproachRow(
             )
         }
 
-        // ЦЕЛЕВОЙ СЕКТОР
         val label = sector?.let { sectorLabel(it, target) } ?: "—"
         Box(
             modifier = Modifier
@@ -488,13 +479,13 @@ private fun ApproachRow(
 }
 
 // ─────────────────────────────────────────────
-// Пересчёт состояния из истории бросков
+// Пересчёт состояния из истории
 // ─────────────────────────────────────────────
 private data class GameState(
     val currentSector: Int?,
     val hitsInCurrent: Int,
     val sectorsCompleted: Int,
-    val sectorResults: Map<Int, Int>,  // потрачено дротиков на каждый сектор
+    val sectorResults: Map<Int, Int>,
     val finished: Boolean
 )
 
@@ -510,15 +501,13 @@ private fun recalcState(
 
     for (t in history) {
         if (targetIndex >= sequence.size) break
-        val currentSector = sequence[targetIndex]
+        val cur = sequence[targetIndex]
 
-        // Увеличиваем счётчик дротиков на текущий сектор
-        sectorResults[currentSector] = (sectorResults[currentSector] ?: 0) + 1
+        sectorResults[cur] = (sectorResults[cur] ?: 0) + 1
 
         if (t.hit) {
             hitsInCurrent++
             if (hitsInCurrent >= hitsRequired) {
-                // Сектор закрыт
                 sectorsCompleted++
                 targetIndex++
                 hitsInCurrent = 0
@@ -527,7 +516,7 @@ private fun recalcState(
     }
 
     val finished = targetIndex >= sequence.size
-    val currentSector = if (finished) null else sequence[targetIndex]
+    val currentSector: Int? = if (finished) null else sequence[targetIndex]
 
     return GameState(
         currentSector = currentSector,
@@ -539,7 +528,7 @@ private fun recalcState(
 }
 
 // ─────────────────────────────────────────────
-// Метки секторов
+// Метки
 // ─────────────────────────────────────────────
 private fun sectorLabel(sector: Int, target: AroundClockTarget): String {
     if (sector == 25) {
