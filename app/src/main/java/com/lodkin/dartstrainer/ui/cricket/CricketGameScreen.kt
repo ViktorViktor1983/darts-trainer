@@ -27,6 +27,22 @@ import com.lodkin.dartstrainer.theme.TileBgDark
 import kotlinx.coroutines.delay
 import java.util.Locale
 
+// ─────────────────────────────────────────────
+// Нормативы американского крикета (по количеству БРОСКОВ, меньше = лучше).
+// Порядок — от лучшего к худшему.
+// ─────────────────────────────────────────────
+private data class CricketNorm(val name: String, val maxDarts: Int)
+
+private val AMERICAN_CRICKET_NORMS: List<CricketNorm> = listOf(
+    CricketNorm("КМС", 24),
+    CricketNorm("I разряд", 36),
+    CricketNorm("II разряд", 48),
+    CricketNorm("III разряд", 57),
+    CricketNorm("I юношеский", 62),
+    CricketNorm("II юношеский", 67),
+    CricketNorm("III юношеский", 72)
+)
+
 @Composable
 fun CricketGameScreen(
     initialGame: CricketGame,
@@ -73,7 +89,6 @@ fun CricketGameScreen(
         return g.copy(players = updated, legHistory = newHistory)
     }
 
-    // Автоход бота
     LaunchedEffect(game.currentPlayerIndex, game.isFinished, showLegWonDialog, showSetWonDialog, showWinDialog) {
         val currentPlayer = game.players.getOrNull(game.currentPlayerIndex) ?: return@LaunchedEffect
         if (game.isFinished || showLegWonDialog || showSetWonDialog || showWinDialog) return@LaunchedEffect
@@ -85,7 +100,6 @@ fun CricketGameScreen(
         game = CricketBotAI.performTurn(game, game.currentPlayerIndex)
     }
 
-    // АвтоОК
     LaunchedEffect(game.currentTurnDarts, game.currentPlayerIndex, game.isFinished, showLegWonDialog, showSetWonDialog, showWinDialog) {
         if (game.autoOkSeconds <= 0 || game.isFinished) return@LaunchedEffect
         if (showLegWonDialog || showSetWonDialog || showWinDialog) return@LaunchedEffect
@@ -100,7 +114,6 @@ fun CricketGameScreen(
         game = CricketLogic.finishTurn(game)
     }
 
-    // Диалог ЛЕГА — показываем ВСЕГДА, если есть победитель (даже если матч закончился)
     LaunchedEffect(game.lastLegWinnerIndex) {
         val teamIdx = game.lastLegWinnerIndex
         if (teamIdx != null) {
@@ -110,7 +123,6 @@ fun CricketGameScreen(
         }
     }
 
-    // Диалог СЕТА — только после закрытия диалога лега
     LaunchedEffect(game.lastSetWinnerIndex, showLegWonDialog) {
         val teamIdx = game.lastSetWinnerIndex
         if (teamIdx != null && !showLegWonDialog && !showWinDialog) {
@@ -119,7 +131,6 @@ fun CricketGameScreen(
         }
     }
 
-    // Диалог ПОБЕДЫ — только после закрытия всех остальных
     LaunchedEffect(game.isFinished, showLegWonDialog, showSetWonDialog) {
         if (game.isFinished && !showLegWonDialog && !showSetWonDialog && !showWinDialog) {
             showWinDialog = true
@@ -167,7 +178,6 @@ fun CricketGameScreen(
         }
     }
 
-    // Диалог ЛЕГА
     if (showLegWonDialog) {
         val winnerTeam = game.lastLegWinnerIndex ?: 0
         val humanWon = game.playersOfTeam(winnerTeam).any { !it.isBot }
@@ -604,6 +614,67 @@ private fun WinDialog(game: CricketGame, onUndo: () -> Unit, onContinue: () -> U
                 Text("Сеты: $teamSets из ${game.setsPerMatch}", color = Color.White, fontSize = 14.sp)
                 Text("Очки за матч: $teamMatchScore", color = Color.White, fontSize = 14.sp)
                 Text("Бросков: $teamDarts", color = Color.White, fontSize = 14.sp)
+
+                // ── Норматив для АМЕРИКАНСКОГО крикета ──
+                if (game.type == CricketType.AMERICAN) {
+                    Spacer(Modifier.height(14.dp))
+                    Text(
+                        "НОРМАТИВ",
+                        color = Accent,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 2.sp
+                    )
+                    Spacer(Modifier.height(6.dp))
+
+                    val darts = teamDarts
+                    // Ищем лучший подходящий (первый, где darts <= maxDarts)
+                    val achievedIdx = AMERICAN_CRICKET_NORMS.indexOfFirst { darts <= it.maxDarts }
+                    val achieved = if (achievedIdx >= 0) AMERICAN_CRICKET_NORMS[achievedIdx] else null
+                    // Следующий (более высокий) — на один индекс раньше
+                    val next = if (achievedIdx > 0) AMERICAN_CRICKET_NORMS[achievedIdx - 1] else null
+
+                    if (achieved != null) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth()
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(TileBg)
+                                .padding(10.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                achieved.name,
+                                color = GoldAccent,
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                "≤ ${achieved.maxDarts}",
+                                color = GoldAccent,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                        if (next != null) {
+                            Spacer(Modifier.height(6.dp))
+                            Text(
+                                "До норматива «${next.name}» нужно было сыграть на ${darts - next.maxDarts} бросков меньше",
+                                color = Color.White.copy(alpha = 0.6f),
+                                fontSize = 12.sp,
+                                lineHeight = 16.sp
+                            )
+                        }
+                    } else {
+                        val lowest = AMERICAN_CRICKET_NORMS.last()
+                        Text(
+                            "Пока без разряда. До «${lowest.name}» нужно было сыграть на ${darts - lowest.maxDarts} бросков меньше.",
+                            color = Color.White.copy(alpha = 0.6f),
+                            fontSize = 12.sp,
+                            lineHeight = 16.sp
+                        )
+                    }
+                }
             }
         }
     )
