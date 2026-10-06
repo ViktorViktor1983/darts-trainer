@@ -36,23 +36,25 @@ private val SECTORS: List<Int> = (1..20).toList() + 25
 
 private const val TOTAL_APPROACHES = 21
 private const val AUTO_OK_SECONDS = 3
-private const val MAX_HITS_SECTOR = 9  // три утроения
-private const val MAX_HITS_BULL = 6     // три красных булла
+private const val MAX_HITS_SECTOR = 9
+private const val MAX_HITS_BULL = 6
 
-// Нормативы «Большой раунд»
+// ─────────────────────────────────────────────
+// Нормативы «Большой раунд» (от низшего к высшему).
+// ─────────────────────────────────────────────
 private data class BigRoundNorm(val name: String, val points: Int)
 
 private val NORMS_MALE: List<BigRoundNorm> = listOf(
-    BigRoundNorm("КМС", 750),
-    BigRoundNorm("I разряд", 660),
+    BigRoundNorm("III разряд", 420),
     BigRoundNorm("II разряд", 550),
-    BigRoundNorm("III разряд", 420)
+    BigRoundNorm("I разряд", 660),
+    BigRoundNorm("КМС", 750)
 )
 
 private val NORMS_YOUTH: List<BigRoundNorm> = listOf(
-    BigRoundNorm("I юношеский", 390),
+    BigRoundNorm("III юношеский", 250),
     BigRoundNorm("II юношеский", 320),
-    BigRoundNorm("III юношеский", 250)
+    BigRoundNorm("I юношеский", 390)
 )
 
 @Composable
@@ -64,7 +66,6 @@ fun BigRoundGameScreen(
 ) {
     val scope = rememberCoroutineScope()
 
-    // Попадания за каждый завершённый подход
     val approaches = remember { mutableStateListOf<Int>() }
     var inputText by remember { mutableStateOf("") }
     var autoOkActive by remember { mutableStateOf(false) }
@@ -72,7 +73,7 @@ fun BigRoundGameScreen(
     var showBackConfirm by remember { mutableStateOf(false) }
     var showFinishDialog by remember { mutableStateOf(false) }
 
-    val currentApproachIndex = approaches.size  // 0..20
+    val currentApproachIndex = approaches.size
     val isFinished = approaches.size >= TOTAL_APPROACHES
 
     val currentSector: Int =
@@ -81,7 +82,6 @@ fun BigRoundGameScreen(
     val sectorLabel = if (isBull) "BULL" else "S$currentSector"
     val maxHits = if (isBull) MAX_HITS_BULL else MAX_HITS_SECTOR
 
-    // Очки за один подход
     val totalScore = approaches.withIndex().sumOf { (idx, hits) ->
         val sec = if (idx < SECTORS.size) SECTORS[idx] else 25
         val mult = if (sec == 25) 25 else sec
@@ -114,7 +114,6 @@ fun BigRoundGameScreen(
         autoOkActive = false
     }
 
-    // ── Автоок 3 сек ──
     LaunchedEffect(inputText, approaches.size) {
         if (isInputValid(inputText) && !isFinished && !showFinishDialog) {
             autoOkActive = true
@@ -336,7 +335,6 @@ fun BigRoundGameScreen(
 
             Spacer(Modifier.height(10.dp))
 
-            // История подходов
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -392,7 +390,6 @@ fun BigRoundGameScreen(
         Spacer(Modifier.height(12.dp))
     }
 
-    // ── Подтверждение выхода ──
     if (showBackConfirm) {
         AlertDialog(
             onDismissRequest = { showBackConfirm = false },
@@ -412,16 +409,17 @@ fun BigRoundGameScreen(
         )
     }
 
-    // ── Финал ──
     if (showFinishDialog) {
         val score = totalScore
         val norms = if (category == BigRoundCategory.MALE) NORMS_MALE else NORMS_YOUTH
 
-        // Найти лучший подходящий норматив (первый, чьи очки <= score)
-        val achievedIdx = norms.indexOfFirst { score >= it.points }
-        val achieved = if (achievedIdx >= 0) norms[achievedIdx] else null
-        // Следующий (более высокий) — тот, что на одну позицию выше в списке (по индексу -1)
-        val next = if (achievedIdx > 0) norms[achievedIdx - 1] else null
+        // Лучший подходящий: первый с конца (самый высокий), чьи очки <= score
+        val achievedIdx = norms.indices.reversed()
+            .firstOrNull { score >= norms[it].points }
+        val achieved = if (achievedIdx != null) norms[achievedIdx] else null
+        // Следующий (более высокий) — на индекс больше
+        val next = if (achievedIdx != null && achievedIdx < norms.size - 1)
+            norms[achievedIdx + 1] else null
 
         AlertDialog(
             onDismissRequest = { },
@@ -523,10 +521,17 @@ fun BigRoundGameScreen(
                                 color = Color.White.copy(alpha = 0.6f),
                                 fontSize = 12.sp
                             )
+                        } else {
+                            Spacer(Modifier.height(6.dp))
+                            Text(
+                                "Максимальный норматив достигнут!",
+                                color = GoldAccent.copy(alpha = 0.85f),
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold
+                            )
                         }
                     } else {
-                        // Ниже самого низкого норматива
-                        val lowest = norms.last()
+                        val lowest = norms.first()
                         Text(
                             "Пока без разряда. До «${lowest.name}» не хватило ${lowest.points - score} очков.",
                             color = Color.White.copy(alpha = 0.6f),
