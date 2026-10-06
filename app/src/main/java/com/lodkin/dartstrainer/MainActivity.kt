@@ -18,6 +18,9 @@ import com.lodkin.dartstrainer.data.aroundclock.AroundClockDatabase
 import com.lodkin.dartstrainer.data.aroundclock.AroundClockOrder
 import com.lodkin.dartstrainer.data.aroundclock.AroundClockRepository
 import com.lodkin.dartstrainer.data.aroundclock.AroundClockTarget
+import com.lodkin.dartstrainer.data.biground.BigRoundCategory
+import com.lodkin.dartstrainer.data.biground.BigRoundDatabase
+import com.lodkin.dartstrainer.data.biground.BigRoundRepository
 import com.lodkin.dartstrainer.data.cricket.CricketDatabase
 import com.lodkin.dartstrainer.data.cricket.CricketGame
 import com.lodkin.dartstrainer.data.cricket.CricketLogic
@@ -46,6 +49,9 @@ import com.lodkin.dartstrainer.ui.WelcomeScreen
 import com.lodkin.dartstrainer.ui.aroundclock.AroundClockGameScreen
 import com.lodkin.dartstrainer.ui.aroundclock.AroundClockSetupScreen
 import com.lodkin.dartstrainer.ui.aroundclock.AroundClockStatsScreen
+import com.lodkin.dartstrainer.ui.biground.BigRoundGameScreen
+import com.lodkin.dartstrainer.ui.biground.BigRoundSetupScreen
+import com.lodkin.dartstrainer.ui.biground.BigRoundStatsScreen
 import com.lodkin.dartstrainer.ui.cricket.CricketGameScreen
 import com.lodkin.dartstrainer.ui.cricket.CricketSetupScreen
 import com.lodkin.dartstrainer.ui.cricket.CricketStatsScreen
@@ -89,6 +95,9 @@ fun DartsTrainerApp() {
     val aroundClockRepository = remember {
         AroundClockRepository(AroundClockDatabase.get(context).aroundClockDao())
     }
+    val bigRoundRepository = remember {
+        BigRoundRepository(BigRoundDatabase.get(context).bigRoundDao())
+    }
 
     // ── Сессия ──
     val sessionStartTime = remember { System.currentTimeMillis() }
@@ -106,6 +115,9 @@ fun DartsTrainerApp() {
     var aroundClockTarget by remember { mutableStateOf<AroundClockTarget?>(null) }
     var aroundClockOrder by remember { mutableStateOf<AroundClockOrder?>(null) }
     var aroundClockHits by remember { mutableStateOf(1) }
+
+    // Категория «Большого раунда»
+    var bigRoundCategory by remember { mutableStateOf<BigRoundCategory?>(null) }
 
     if (stage == "loading") {
         LaunchedEffect(Unit) { delay(3000); stage = "main" }
@@ -149,6 +161,7 @@ fun DartsTrainerApp() {
                     aroundClockTarget = null
                     aroundClockOrder = null
                     aroundClockHits = 1
+                    bigRoundCategory = null
                     onboardingDone = false
                     screen = "main"
                     stage = "welcome"
@@ -162,6 +175,7 @@ fun DartsTrainerApp() {
                 on501 = { screen = "game501_setup" },
                 onSector = { screen = "sector_setup" },
                 onAroundClock = { screen = "aroundclock_setup" },
+                onBigRound = { screen = "biground_setup" },
                 onBack = { screen = "main" }
             )
 
@@ -349,6 +363,38 @@ fun DartsTrainerApp() {
             "aroundclock_stats" -> AroundClockStatsScreen(
                 repository = aroundClockRepository,
                 onBack = { screen = "aroundclock_setup" }
+            )
+
+            // ── Большой раунд ──
+            "biground_setup" -> BigRoundSetupScreen(
+                playerName = SettingsStorage.getPlayerName(context),
+                repository = bigRoundRepository,
+                onStartGame = { category ->
+                    bigRoundCategory = category
+                    screen = "biground_game"
+                },
+                onOpenStats = { screen = "biground_stats" },
+                onBack = { screen = "game_select" }
+            )
+
+            "biground_game" -> {
+                val cat = bigRoundCategory
+                if (cat != null) {
+                    BigRoundGameScreen(
+                        category = cat,
+                        repository = bigRoundRepository,
+                        onFinish = { _score ->
+                            bigRoundCategory = null
+                            screen = "game_select"
+                        },
+                        onBack = { screen = "game_select" }
+                    )
+                } else screen = "biground_setup"
+            }
+
+            "biground_stats" -> BigRoundStatsScreen(
+                repository = bigRoundRepository,
+                onBack = { screen = "biground_setup" }
             )
         }
     }
