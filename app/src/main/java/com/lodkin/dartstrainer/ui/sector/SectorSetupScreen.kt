@@ -32,20 +32,8 @@ import com.lodkin.dartstrainer.theme.GoldAccent
 import com.lodkin.dartstrainer.theme.TileBg
 import com.lodkin.dartstrainer.theme.TileBgDark
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.Locale
-
-// Нормативы для сектора 20 (от низшего к высшему)
-private val SECTOR_20_NORMS: List<Pair<String, Int>> = listOf(
-    "II юношеский" to 360,
-    "I юношеский" to 400,
-    "III разряд" to 460,
-    "II разряд" to 540,
-    "I разряд" to 600,
-    "КМС" to 760,
-    "МС" to 960
-)
 
 // Список секторов для dropdown: Bull первый, потом 20 вниз до 1
 private val SECTOR_LIST: List<Int> = listOf(25) + (20 downTo 1)
@@ -167,68 +155,37 @@ fun SectorSetupScreen(
 
             Spacer(Modifier.height(24.dp))
 
-            // ── Нормативы / подсказка ──
-            if (selectedSector == 20) {
-                Text(
-                    "НОРМАТИВЫ · СЕКТОР 20 · 30 ДРОТИКОВ",
-                    color = Accent,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Medium,
-                    letterSpacing = 2.sp,
-                    modifier = Modifier.fillMaxWidth(),
-                    textAlign = TextAlign.Center
-                )
-                Spacer(Modifier.height(10.dp))
-
-                SECTOR_20_NORMS.reversed().forEach { (name, points) ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 3.dp)
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(TileBgDark)
-                            .padding(horizontal = 14.dp, vertical = 10.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(name, color = Color.White, fontSize = 14.sp)
+            // ── Подсказка ──
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(TileBgDark)
+                    .padding(16.dp)
+            ) {
+                Column {
+                    Text(
+                        "Сектор ${sectorLabel(selectedSector)}",
+                        color = GoldAccent,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        "10 подходов по 3 дротика. Вводишь число попаданий " +
+                        "за подход (S=1, D=2, T=3). Приложение считает очки. " +
+                        "После партии увидишь норматив.",
+                        color = Color.White.copy(alpha = 0.75f),
+                        fontSize = 13.sp,
+                        lineHeight = 18.sp
+                    )
+                    if (selectedSector == 20) {
+                        Spacer(Modifier.height(10.dp))
                         Text(
-                            "$points",
-                            color = GoldAccent,
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                }
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    "Очки считаются как: 1 за одинарный, 2 за двойной, 3 за утроенный.",
-                    color = Color.White.copy(alpha = 0.5f),
-                    fontSize = 11.sp,
-                    lineHeight = 16.sp
-                )
-            } else {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(TileBgDark)
-                        .padding(16.dp)
-                ) {
-                    Column {
-                        Text(
-                            "Сектор ${sectorLabel(selectedSector)}",
-                            color = GoldAccent,
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Spacer(Modifier.height(6.dp))
-                        Text(
-                            "10 подходов по 3 дротика. Вводишь число попаданий " +
-                            "за подход (S=1, D=2, T=3). Приложение считает очки.",
-                            color = Color.White.copy(alpha = 0.75f),
-                            fontSize = 13.sp,
-                            lineHeight = 18.sp
+                            "Для Сектора 20 действуют официальные нормативы разрядов.",
+                            color = Accent.copy(alpha = 0.8f),
+                            fontSize = 11.sp,
+                            lineHeight = 16.sp
                         )
                     }
                 }
@@ -302,7 +259,7 @@ private fun SectorChartDialog(
         loading = true
         games = withContext(Dispatchers.IO) {
             repository.getGamesBySector(chartSector)
-        }.reversed() // от старых к новым для графика
+        }.reversed()
         loading = false
     }
 
