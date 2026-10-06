@@ -324,6 +324,7 @@ fun DartsTrainerApp() {
                         target = t,
                         order = o,
                         hitsRequired = aroundClockHits,
+                        repository = aroundClockRepository,
                         onFinish = { totalDarts, completed, sectorResults ->
                             scope.launch {
                                 aroundClockRepository.saveGame(
