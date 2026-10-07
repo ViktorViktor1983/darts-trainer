@@ -3,9 +3,7 @@ package com.lodkin.dartstrainer.ui
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -36,7 +34,7 @@ fun GameSelectScreen(
             .fillMaxSize()
             .padding(16.dp)
     ) {
-        // Верхняя панель
+        // ── Верхняя панель ──
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(
                 modifier = Modifier
@@ -68,49 +66,69 @@ fun GameSelectScreen(
 
         Spacer(Modifier.height(20.dp))
 
+        // ── Сетка 2×3 ──
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .weight(1f)
-                .verticalScroll(rememberScrollState()),
+                .weight(1f),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            GameCard(
-                title = "501",
-                subtitle = "Классика. Дойди от 501 до нуля",
-                modifier = Modifier.fillMaxWidth().height(140.dp),
-                onClick = on501
-            )
-            GameCard(
-                title = "Крикет",
-                subtitle = "Закрой сектора 15–20 и Bull",
-                modifier = Modifier.fillMaxWidth().height(140.dp),
-                onClick = onCricket
-            )
-            GameCard(
-                title = "Сектор",
-                subtitle = "30 дротиков в один сектор. Нормативы для S20",
-                modifier = Modifier.fillMaxWidth().height(140.dp),
-                onClick = onSector
-            )
-            GameCard(
-                title = "Кругосветка",
-                subtitle = "Пройди сектора 1–20 и Bull по кругу",
-                modifier = Modifier.fillMaxWidth().height(140.dp),
-                onClick = onAroundClock
-            )
-            GameCard(
-                title = "Большой раунд",
-                subtitle = "21 сектор по 3 дротика. Нормативы разрядов",
-                modifier = Modifier.fillMaxWidth().height(140.dp),
-                onClick = onBigRound
-            )
-            GameCard(
-                title = "Набор очков",
-                subtitle = "10 подходов. Набери максимум очков. Нормативы",
-                modifier = Modifier.fillMaxWidth().height(140.dp),
-                onClick = onScoreSet
-            )
+            // Ряд 1: 501 | Крикет
+            Row(
+                modifier = Modifier.fillMaxWidth().weight(1f),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                GameCard(
+                    title = "501",
+                    subtitle = "Дойди от 501 до нуля",
+                    modifier = Modifier.fillMaxHeight().weight(1f),
+                    onClick = on501
+                )
+                GameCard(
+                    title = "Крикет",
+                    subtitle = "Сектора 15–20 и Bull",
+                    modifier = Modifier.fillMaxHeight().weight(1f),
+                    onClick = onCricket
+                )
+            }
+
+            // Ряд 2: Сектор | Большой раунд
+            Row(
+                modifier = Modifier.fillMaxWidth().weight(1f),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                GameCard(
+                    title = "Сектор",
+                    subtitle = "30 дротиков в один сектор",
+                    modifier = Modifier.fillMaxHeight().weight(1f),
+                    onClick = onSector
+                )
+                GameCard(
+                    title = "Большой раунд",
+                    subtitle = "21 сектор × 3 дротика",
+                    modifier = Modifier.fillMaxHeight().weight(1f),
+                    onClick = onBigRound
+                )
+            }
+
+            // Ряд 3: Набор очков | Кругосветка
+            Row(
+                modifier = Modifier.fillMaxWidth().weight(1f),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                GameCard(
+                    title = "Набор очков",
+                    subtitle = "10 подходов на максимум",
+                    modifier = Modifier.fillMaxHeight().weight(1f),
+                    onClick = onScoreSet
+                )
+                GameCard(
+                    title = "Кругосветка",
+                    subtitle = "Сектора 1–20 и Bull по кругу",
+                    modifier = Modifier.fillMaxHeight().weight(1f),
+                    onClick = onAroundClock
+                )
+            }
         }
     }
 }
@@ -126,7 +144,8 @@ private fun GameCard(
         modifier = modifier
             .clip(RoundedCornerShape(20.dp))
             .background(TileBg)
-            .clickable { onClick() },
+            .clickable { onClick() }
+            .padding(8.dp),
         contentAlignment = Alignment.Center
     ) {
         Column(
@@ -135,17 +154,19 @@ private fun GameCard(
         ) {
             Text(
                 title,
-                fontSize = 28.sp,
+                fontSize = 20.sp,
                 fontWeight = FontWeight.Bold,
                 color = GoldAccent,
-                textAlign = TextAlign.Center
+                textAlign = TextAlign.Center,
+                lineHeight = 24.sp
             )
             Text(
                 subtitle,
-                fontSize = 13.sp,
+                fontSize = 11.sp,
                 color = Accent,
                 textAlign = TextAlign.Center,
-                modifier = Modifier.padding(horizontal = 24.dp)
+                lineHeight = 14.sp,
+                modifier = Modifier.padding(horizontal = 4.dp)
             )
         }
     }
