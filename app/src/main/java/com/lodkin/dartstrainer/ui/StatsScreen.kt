@@ -170,6 +170,7 @@ private data class MatchInfo(
 fun StatsScreen(
     repository: CricketRepository,
     initialTab: Int = 0,
+    showTabs: Boolean = true,
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
@@ -272,47 +273,64 @@ fun StatsScreen(
 
         Spacer(Modifier.height(16.dp))
 
-        // ── ТАБЫ ──
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            TabButton("КРИКЕТ", selectedTab == 0, { selectedTab = 0 }, Modifier.weight(1f))
+        // ── ТАБЫ (только если showTabs = true) ──
+        if (showTabs) {
             Row(
-                modifier = Modifier
-                    .weight(1f)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(if (selectedTab == 1) Accent else TileBgDark)
-                    .clickable { selectedTab = 1 }
-                    .padding(vertical = 12.dp, horizontal = 12.dp),
-                horizontalArrangement = Arrangement.Center,
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    "501",
-                    color = if (selectedTab == 1) Color(0xFF121212) else Color.White,
-                    fontSize = 14.sp,
-                    fontWeight = if (selectedTab == 1) FontWeight.Bold else FontWeight.Medium,
-                    letterSpacing = 2.sp
-                )
-                if (selectedTab == 1) {
-                    Spacer(Modifier.width(6.dp))
-                    Box(
-                        modifier = Modifier
-                            .size(24.dp)
-                            .clip(RoundedCornerShape(6.dp))
-                            .background(Color(0xFF121212).copy(alpha = 0.15f))
-                            .clickable { showVariantDialog = true },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text("▼", color = Color(0xFF121212), fontSize = 12.sp)
+                TabButton("КРИКЕТ", selectedTab == 0, { selectedTab = 0 }, Modifier.weight(1f))
+                Row(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(if (selectedTab == 1) Accent else TileBgDark)
+                        .clickable { selectedTab = 1 }
+                        .padding(vertical = 12.dp, horizontal = 12.dp),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        "501",
+                        color = if (selectedTab == 1) Color(0xFF121212) else Color.White,
+                        fontSize = 14.sp,
+                        fontWeight = if (selectedTab == 1) FontWeight.Bold else FontWeight.Medium,
+                        letterSpacing = 2.sp
+                    )
+                    if (selectedTab == 1) {
+                        Spacer(Modifier.width(6.dp))
+                        Box(
+                            modifier = Modifier
+                                .size(24.dp)
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(Color(0xFF121212).copy(alpha = 0.15f))
+                                .clickable { showVariantDialog = true },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text("▼", color = Color(0xFF121212), fontSize = 12.sp)
+                        }
                     }
                 }
             }
+        } else {
+            // Когда вкладки скрыты — показываем просто заголовок игры
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center
+            ) {
+                Text(
+                    if (selectedTab == 0) "КРИКЕТ" else "501",
+                    color = Accent,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 3.sp
+                )
+            }
         }
 
-        // ── Строка активного фильтра ──
+        // ── Строка активного фильтра (только для 501) ──
         if (selectedTab == 1 && selectedVariant != GameVariant.ALL) {
             Spacer(Modifier.height(8.dp))
             Row(
@@ -589,7 +607,6 @@ private fun LineChart(
 
         val range = (yMax - yMin).coerceAtLeast(0.0001)
 
-        // Горизонтальные линии-сетка (5 штук)
         val gridSteps = 5
         for (i in 0..gridSteps) {
             val y = topPad + plotH * i / gridSteps
@@ -601,7 +618,6 @@ private fun LineChart(
             )
         }
 
-        // Точки
         val n = points.size
         val xStep = if (n > 1) plotW / (n - 1).toFloat() else 0f
         val coords = points.mapIndexed { i, v ->
@@ -611,7 +627,6 @@ private fun LineChart(
             Offset(x, y)
         }
 
-        // Линия
         if (coords.size >= 2) {
             val path = Path().apply {
                 moveTo(coords[0].x, coords[0].y)
@@ -620,7 +635,6 @@ private fun LineChart(
             drawPath(path, color = lineColor, style = Stroke(width = 2.dp.toPx()))
         }
 
-        // Точки сверху
         val dotRadius = 3.dp.toPx()
         coords.forEach { c ->
             drawCircle(color = lineColor, radius = dotRadius, center = c)
@@ -636,7 +650,6 @@ private fun computeCricketChartData(
     games: List<CricketGameEntity>,
     ownerName: String
 ): List<Double> {
-    // Идём от старых к новым (games приходит DESC)
     val sorted = games.sortedBy { it.dateMillis }
     val out = mutableListOf<Double>()
     for (g in sorted) {
@@ -659,7 +672,6 @@ private fun compute501ChartData(
     ownerName: String,
     variant: GameVariant
 ): List<ChartSpec> {
-    // Фильтр: без даблов всегда исключаем; + фильтр варианта.
     val filtered = games.filter { g ->
         if (g.outModeName == "STRAIGHT_OUT") return@filter false
         if (variant == GameVariant.ALL) return@filter true
