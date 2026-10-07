@@ -46,7 +46,6 @@ fun StatsMenuScreen(
     }
     val ownerName = remember { SettingsStorage.getPlayerName(context).trim() }
 
-    // Метрики. null = ещё грузится, "—" = нет данных.
     var avg501Ppr by remember { mutableStateOf<String?>(null) }
     var avgCricketMpr by remember { mutableStateOf<String?>(null) }
 
@@ -117,69 +116,78 @@ fun StatsMenuScreen(
             }
         }
 
-        Spacer(Modifier.height(20.dp))
+        Spacer(Modifier.height(16.dp))
 
-        // ── СЕТКА 2 x 3 ──
-        // Ряд 1: 501 | Крикет
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        // ── СЕТКА 2 x 3 (карточки растягиваются через weight) ──
+        // Ряд 1
+        Row(
+            modifier = Modifier.fillMaxWidth().weight(1f),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
             StatsCard(
                 title = "501",
                 metric = avg501Ppr ?: "...",
                 metricLabel = "Средний PPR",
                 onClick = on501,
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.weight(1f).fillMaxHeight()
             )
             StatsCard(
                 title = "Крикет",
                 metric = avgCricketMpr ?: "...",
                 metricLabel = "Средний MPR",
                 onClick = onCricket,
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.weight(1f).fillMaxHeight()
             )
         }
         Spacer(Modifier.height(10.dp))
 
-        // Ряд 2: Сектор | Большой раунд
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        // Ряд 2
+        Row(
+            modifier = Modifier.fillMaxWidth().weight(1f),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
             StatsCard(
                 title = "Сектор",
                 metric = "—",
                 metricLabel = "Лучший результат",
                 onClick = onSector,
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.weight(1f).fillMaxHeight()
             )
             StatsCard(
                 title = "Большой раунд",
                 metric = "—",
                 metricLabel = "Лучший результат",
                 onClick = onBigRound,
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.weight(1f).fillMaxHeight()
             )
         }
         Spacer(Modifier.height(10.dp))
 
-        // Ряд 3: Набор очков | Кругосветка
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        // Ряд 3
+        Row(
+            modifier = Modifier.fillMaxWidth().weight(1f),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
             StatsCard(
                 title = "Набор очков",
                 metric = "—",
                 metricLabel = "Лучший результат",
                 onClick = onScoreSet,
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.weight(1f).fillMaxHeight()
             )
             StatsCard(
                 title = "Кругосветка",
                 metric = "—",
                 metricLabel = "Лучший результат",
                 onClick = onAroundClock,
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.weight(1f).fillMaxHeight()
             )
         }
     }
 }
 
 // ─────────────────────────────────────────────
-// Карточка одной игры — крупная, как в «Выборе игры»
+// Карточка одной игры — растягивается по высоте ряда
 // ─────────────────────────────────────────────
 @Composable
 private fun StatsCard(
@@ -191,7 +199,6 @@ private fun StatsCard(
 ) {
     Column(
         modifier = modifier
-            .height(160.dp)
             .clip(RoundedCornerShape(16.dp))
             .background(TileBg)
             .clickable { onClick() }
@@ -202,31 +209,31 @@ private fun StatsCard(
         Text(
             title,
             color = GoldAccent,
+            fontSize = 28.sp,
+            fontWeight = FontWeight.Bold,
+            textAlign = TextAlign.Center
+        )
+        Spacer(Modifier.height(14.dp))
+        Text(
+            metric,
+            color = Color.White,
             fontSize = 24.sp,
             fontWeight = FontWeight.Bold,
             textAlign = TextAlign.Center
         )
-        Spacer(Modifier.height(12.dp))
-        Text(
-            metric,
-            color = Color.White,
-            fontSize = 22.sp,
-            fontWeight = FontWeight.Bold,
-            textAlign = TextAlign.Center
-        )
-        Spacer(Modifier.height(6.dp))
+        Spacer(Modifier.height(8.dp))
         Text(
             metricLabel,
             color = Accent,
-            fontSize = 11.sp,
+            fontSize = 12.sp,
             textAlign = TextAlign.Center,
-            lineHeight = 14.sp
+            lineHeight = 15.sp
         )
     }
 }
 
 // ─────────────────────────────────────────────
-// Хелперы (локальные, чтобы файл был самодостаточным)
+// Хелперы
 // ─────────────────────────────────────────────
 private fun parseStringList(s: String): List<String> =
     if (s.isBlank()) emptyList() else s.split("|")
