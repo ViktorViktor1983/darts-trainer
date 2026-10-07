@@ -137,7 +137,7 @@ private fun FreePlayCard(
             .background(TileBg)
             .clickable { onFreePlay() }
     ) {
-        // Центральный текст (как у BigButton)
+        // Центральный текст
         Column(
             modifier = Modifier.fillMaxSize(),
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -158,24 +158,33 @@ private fun FreePlayCard(
             )
         }
 
-        // Кнопка статистики в правом нижнем углу
+        // Кнопка статистики в правом нижнем углу — выше в 3 раза
         Box(
             modifier = Modifier
                 .align(Alignment.BottomEnd)
                 .padding(10.dp)
-                .clip(RoundedCornerShape(10.dp))
+                .clip(RoundedCornerShape(12.dp))
                 .background(TileBgDark)
                 .clickable { onStatsClick() }
-                .padding(horizontal = 10.dp, vertical = 6.dp)
+                .padding(horizontal = 12.dp, vertical = 14.dp),
+            contentAlignment = Alignment.Center
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("📊", fontSize = 14.sp)
-                Spacer(Modifier.width(4.dp))
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text("📊", fontSize = 22.sp)
+                Spacer(Modifier.height(2.dp))
                 Text(
-                    "Подробная статистика",
+                    "Статистика",
                     color = Accent,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Medium
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    "матчи · прогресс · достижения",
+                    color = Color.White.copy(alpha = 0.55f),
+                    fontSize = 9.sp,
+                    textAlign = TextAlign.Center,
+                    lineHeight = 11.sp
                 )
             }
         }
