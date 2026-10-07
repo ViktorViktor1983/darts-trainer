@@ -72,10 +72,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.random.Random
 
-// ─────────────────────────────────────────────
-// Карта: с какого экрана куда возвращаться
-// при нажатии системной кнопки «Назад».
-// ─────────────────────────────────────────────
 private val PARENT_SCREEN: Map<String, String> = mapOf(
     "stats_menu" to "main",
     "stats_cricket" to "stats_menu",
@@ -146,7 +142,6 @@ fun DartsTrainerApp() {
         ScoreSetRepository(ScoreSetDatabase.get(context).scoreSetDao())
     }
 
-    // ── Сессия ──
     val sessionStartTime = remember { System.currentTimeMillis() }
     val sessionForm = remember { 0.85 + Random.nextDouble() * 0.30 }
 
@@ -158,18 +153,12 @@ fun DartsTrainerApp() {
     var game501 by remember { mutableStateOf<Game501?>(null) }
     var sectorToPlay by remember { mutableStateOf<Int?>(null) }
 
-    // Параметры текущей игры «Кругосветка»
     var aroundClockTarget by remember { mutableStateOf<AroundClockTarget?>(null) }
     var aroundClockOrder by remember { mutableStateOf<AroundClockOrder?>(null) }
     var aroundClockHits by remember { mutableStateOf(1) }
 
-    // Категория «Большого раунда»
     var bigRoundCategory by remember { mutableStateOf<BigRoundCategory?>(null) }
 
-    // ── Системная кнопка «Назад» ──
-    // Работает только на этапе "main". Возвращает на родительский экран.
-    // На главном экране (screen == "main") — не перехватывает,
-    // Android сам закроет приложение.
     BackHandler(enabled = stage == "main" && screen != "main") {
         PARENT_SCREEN[screen]?.let { parent -> screen = parent }
     }
@@ -202,7 +191,7 @@ fun DartsTrainerApp() {
                 onSettingsClick = { screen = "settings" }
             )
 
-            // ── НОВЫЙ экран-меню статистики (сетка 2x3) ──
+            // ── Меню статистики (сетка 2x3) ──
             "stats_menu" -> StatsMenuScreen(
                 cricketRepository = cricketRepository,
                 onCricket = { screen = "stats_cricket" },
@@ -214,17 +203,19 @@ fun DartsTrainerApp() {
                 onBack = { screen = "main" }
             )
 
-            // ── Статистика Крикета (открывается сразу на вкладке 0) ──
+            // ── Статистика Крикета (только крикет, без вкладок) ──
             "stats_cricket" -> StatsScreen(
                 repository = cricketRepository,
                 initialTab = 0,
+                showTabs = false,
                 onBack = { screen = "stats_menu" }
             )
 
-            // ── Статистика 501 (открывается сразу на вкладке 1) ──
+            // ── Статистика 501 (только 501, без вкладок) ──
             "stats_501" -> StatsScreen(
                 repository = cricketRepository,
                 initialTab = 1,
+                showTabs = false,
                 onBack = { screen = "stats_menu" }
             )
 
