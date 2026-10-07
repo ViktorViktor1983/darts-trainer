@@ -78,7 +78,8 @@ import kotlin.random.Random
 // ─────────────────────────────────────────────
 private val PARENT_SCREEN: Map<String, String> = mapOf(
     "stats_menu" to "main",
-    "stats" to "main",
+    "stats_cricket" to "stats_menu",
+    "stats_501" to "stats_menu",
     "settings" to "main",
     "training" to "main",
     "game_select" to "main",
@@ -204,8 +205,8 @@ fun DartsTrainerApp() {
             // ── НОВЫЙ экран-меню статистики (сетка 2x3) ──
             "stats_menu" -> StatsMenuScreen(
                 cricketRepository = cricketRepository,
-                onCricket = { screen = "stats" },
-                on501 = { screen = "stats" },
+                onCricket = { screen = "stats_cricket" },
+                on501 = { screen = "stats_501" },
                 onSector = { screen = "sector_stats" },
                 onBigRound = { screen = "biground_stats" },
                 onScoreSet = { screen = "scoreset_stats" },
@@ -213,10 +214,17 @@ fun DartsTrainerApp() {
                 onBack = { screen = "main" }
             )
 
-            // Старый StatsScreen (вкладки Крикет / 501).
-            // Пока используется как общий экран для карточек 501 и Крикета.
-            "stats" -> StatsScreen(
+            // ── Статистика Крикета (открывается сразу на вкладке 0) ──
+            "stats_cricket" -> StatsScreen(
                 repository = cricketRepository,
+                initialTab = 0,
+                onBack = { screen = "stats_menu" }
+            )
+
+            // ── Статистика 501 (открывается сразу на вкладке 1) ──
+            "stats_501" -> StatsScreen(
+                repository = cricketRepository,
+                initialTab = 1,
                 onBack = { screen = "stats_menu" }
             )
 
