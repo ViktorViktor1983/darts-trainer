@@ -118,7 +118,7 @@ fun StatsMenuScreen(
 
         Spacer(Modifier.height(16.dp))
 
-        // ── СЕТКА 2 x 3 (карточки растягиваются через weight) ──
+        // ── СЕТКА 2 x 3 ──
         // Ряд 1
         Row(
             modifier = Modifier.fillMaxWidth().weight(1f),
@@ -187,7 +187,7 @@ fun StatsMenuScreen(
 }
 
 // ─────────────────────────────────────────────
-// Карточка одной игры — растягивается по высоте ряда
+// Карточка одной игры
 // ─────────────────────────────────────────────
 @Composable
 private fun StatsCard(
@@ -202,14 +202,14 @@ private fun StatsCard(
             .clip(RoundedCornerShape(16.dp))
             .background(TileBg)
             .clickable { onClick() }
-            .padding(horizontal = 10.dp, vertical = 14.dp),
+            .padding(horizontal = 8.dp, vertical = 14.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
         Text(
             title,
             color = GoldAccent,
-            fontSize = 28.sp,
+            fontSize = 22.sp,
             fontWeight = FontWeight.Bold,
             textAlign = TextAlign.Center
         )
