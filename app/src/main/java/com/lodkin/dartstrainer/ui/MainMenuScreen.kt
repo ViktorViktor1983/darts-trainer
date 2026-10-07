@@ -37,7 +37,6 @@ fun MainMenuScreen(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Пустая ячейка слева (для симметрии)
             Spacer(Modifier.size(48.dp))
 
             Text(
@@ -50,7 +49,6 @@ fun MainMenuScreen(
                 modifier = Modifier.weight(1f)
             )
 
-            // Кнопка настроек — шестерёнка
             Box(
                 modifier = Modifier
                     .size(48.dp)
@@ -69,33 +67,25 @@ fun MainMenuScreen(
 
         Spacer(Modifier.height(20.dp))
 
+        // Тренировка
         BigButton(
             title = "Тренировка",
             subtitle = "По программе тренера",
             modifier = Modifier
                 .fillMaxWidth()
-                .weight(40f),
+                .weight(50f),
             onClick = onTraining
         )
 
         Spacer(Modifier.height(12.dp))
 
-        StatsBlock(
+        // Просто поиграть с кнопкой статистики в правом нижнем углу
+        FreePlayCard(
             modifier = Modifier
                 .fillMaxWidth()
-                .weight(20f),
-            onClick = onStatsClick
-        )
-
-        Spacer(Modifier.height(12.dp))
-
-        BigButton(
-            title = "Просто поиграть",
-            subtitle = "Свободная игра",
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(40f),
-            onClick = onFreePlay
+                .weight(50f),
+            onFreePlay = onFreePlay,
+            onStatsClick = onStatsClick
         )
     }
 }
@@ -136,44 +126,58 @@ fun BigButton(
 }
 
 @Composable
-fun StatsBlock(
+private fun FreePlayCard(
     modifier: Modifier,
-    onClick: () -> Unit
+    onFreePlay: () -> Unit,
+    onStatsClick: () -> Unit
 ) {
     Box(
         modifier = modifier
-            .clip(RoundedCornerShape(16.dp))
-            .background(TileBgDark)
-            .clickable { onClick() }
-            .padding(horizontal = 16.dp, vertical = 10.dp),
-        contentAlignment = Alignment.Center
+            .clip(RoundedCornerShape(20.dp))
+            .background(TileBg)
+            .clickable { onFreePlay() }
     ) {
+        // Центральный текст (как у BigButton)
         Column(
+            modifier = Modifier.fillMaxSize(),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
             Text(
-                text = "ТВОЙ УРОВЕНЬ",
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Medium,
-                color = Accent,
-                letterSpacing = 3.sp
-            )
-            Spacer(Modifier.height(4.dp))
-            Text(
-                text = "Не определён",
-                fontSize = 18.sp,
+                text = "Просто поиграть",
+                fontSize = 26.sp,
                 fontWeight = FontWeight.Bold,
                 color = Color.White,
                 textAlign = TextAlign.Center
             )
-            Spacer(Modifier.height(2.dp))
             Text(
-                text = "Нажми, чтобы посмотреть статистику",
-                fontSize = 10.sp,
+                text = "Свободная игра",
+                fontSize = 14.sp,
                 color = Accent,
                 textAlign = TextAlign.Center
             )
+        }
+
+        // Кнопка статистики в правом нижнем углу
+        Box(
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(10.dp)
+                .clip(RoundedCornerShape(10.dp))
+                .background(TileBgDark)
+                .clickable { onStatsClick() }
+                .padding(horizontal = 10.dp, vertical = 6.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("📊", fontSize = 14.sp)
+                Spacer(Modifier.width(4.dp))
+                Text(
+                    "Подробная статистика",
+                    color = Accent,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Medium
+                )
+            }
         }
     }
 }
