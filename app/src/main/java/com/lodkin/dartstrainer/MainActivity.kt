@@ -47,6 +47,7 @@ import com.lodkin.dartstrainer.ui.MainMenuScreen
 import com.lodkin.dartstrainer.ui.OnboardingResult
 import com.lodkin.dartstrainer.ui.OnboardingScreen
 import com.lodkin.dartstrainer.ui.SettingsScreen
+import com.lodkin.dartstrainer.ui.StatsMenuScreen
 import com.lodkin.dartstrainer.ui.StatsScreen
 import com.lodkin.dartstrainer.ui.WelcomeScreen
 import com.lodkin.dartstrainer.ui.aroundclock.AroundClockGameScreen
@@ -76,6 +77,7 @@ import kotlin.random.Random
 // при нажатии системной кнопки «Назад».
 // ─────────────────────────────────────────────
 private val PARENT_SCREEN: Map<String, String> = mapOf(
+    "stats_menu" to "main",
     "stats" to "main",
     "settings" to "main",
     "training" to "main",
@@ -91,19 +93,19 @@ private val PARENT_SCREEN: Map<String, String> = mapOf(
 
     "sector_setup" to "game_select",
     "sector_game" to "game_select",
-    "sector_stats" to "sector_setup",
+    "sector_stats" to "stats_menu",
 
     "aroundclock_setup" to "game_select",
     "aroundclock_game" to "game_select",
-    "aroundclock_stats" to "aroundclock_setup",
+    "aroundclock_stats" to "stats_menu",
 
     "biground_setup" to "game_select",
     "biground_game" to "game_select",
-    "biground_stats" to "biground_setup",
+    "biground_stats" to "stats_menu",
 
     "scoreset_setup" to "game_select",
     "scoreset_game" to "game_select",
-    "scoreset_stats" to "scoreset_setup"
+    "scoreset_stats" to "stats_menu"
 )
 
 class MainActivity : ComponentActivity() {
@@ -195,13 +197,27 @@ fun DartsTrainerApp() {
             "main" -> MainMenuScreen(
                 onTraining = { screen = "training" },
                 onFreePlay = { screen = "game_select" },
-                onStatsClick = { screen = "stats" },
+                onStatsClick = { screen = "stats_menu" },
                 onSettingsClick = { screen = "settings" }
             )
 
+            // ── НОВЫЙ экран-меню статистики (сетка 2x3) ──
+            "stats_menu" -> StatsMenuScreen(
+                cricketRepository = cricketRepository,
+                onCricket = { screen = "stats" },
+                on501 = { screen = "stats" },
+                onSector = { screen = "sector_stats" },
+                onBigRound = { screen = "biground_stats" },
+                onScoreSet = { screen = "scoreset_stats" },
+                onAroundClock = { screen = "aroundclock_stats" },
+                onBack = { screen = "main" }
+            )
+
+            // Старый StatsScreen (вкладки Крикет / 501).
+            // Пока используется как общий экран для карточек 501 и Крикета.
             "stats" -> StatsScreen(
                 repository = cricketRepository,
-                onBack = { screen = "main" }
+                onBack = { screen = "stats_menu" }
             )
 
             "settings" -> SettingsScreen(
@@ -366,7 +382,7 @@ fun DartsTrainerApp() {
 
             "sector_stats" -> SectorStatsScreen(
                 repository = sectorRepository,
-                onBack = { screen = "sector_setup" }
+                onBack = { screen = "stats_menu" }
             )
 
             // ── Кругосветка ──
@@ -415,7 +431,7 @@ fun DartsTrainerApp() {
 
             "aroundclock_stats" -> AroundClockStatsScreen(
                 repository = aroundClockRepository,
-                onBack = { screen = "aroundclock_setup" }
+                onBack = { screen = "stats_menu" }
             )
 
             // ── Большой раунд ──
@@ -447,7 +463,7 @@ fun DartsTrainerApp() {
 
             "biground_stats" -> BigRoundStatsScreen(
                 repository = bigRoundRepository,
-                onBack = { screen = "biground_setup" }
+                onBack = { screen = "stats_menu" }
             )
 
             // ── Набор очков ──
@@ -469,7 +485,7 @@ fun DartsTrainerApp() {
 
             "scoreset_stats" -> ScoreSetStatsScreen(
                 repository = scoreSetRepository,
-                onBack = { screen = "scoreset_setup" }
+                onBack = { screen = "stats_menu" }
             )
         }
     }
