@@ -2,6 +2,7 @@ package com.lodkin.dartstrainer
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -70,6 +71,41 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.random.Random
 
+// ─────────────────────────────────────────────
+// Карта: с какого экрана куда возвращаться
+// при нажатии системной кнопки «Назад».
+// ─────────────────────────────────────────────
+private val PARENT_SCREEN: Map<String, String> = mapOf(
+    "stats" to "main",
+    "settings" to "main",
+    "training" to "main",
+    "game_select" to "main",
+
+    "cricket_setup" to "game_select",
+    "cricket_game" to "game_select",
+    "cricket_stats" to "main",
+
+    "game501_setup" to "game_select",
+    "game501_game" to "game_select",
+    "game501_stats" to "main",
+
+    "sector_setup" to "game_select",
+    "sector_game" to "game_select",
+    "sector_stats" to "sector_setup",
+
+    "aroundclock_setup" to "game_select",
+    "aroundclock_game" to "game_select",
+    "aroundclock_stats" to "aroundclock_setup",
+
+    "biground_setup" to "game_select",
+    "biground_game" to "game_select",
+    "biground_stats" to "biground_setup",
+
+    "scoreset_setup" to "game_select",
+    "scoreset_game" to "game_select",
+    "scoreset_stats" to "scoreset_setup"
+)
+
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -126,6 +162,14 @@ fun DartsTrainerApp() {
 
     // Категория «Большого раунда»
     var bigRoundCategory by remember { mutableStateOf<BigRoundCategory?>(null) }
+
+    // ── Системная кнопка «Назад» ──
+    // Работает только на этапе "main". Возвращает на родительский экран.
+    // На главном экране (screen == "main") — не перехватывает,
+    // Android сам закроет приложение.
+    BackHandler(enabled = stage == "main" && screen != "main") {
+        PARENT_SCREEN[screen]?.let { parent -> screen = parent }
+    }
 
     if (stage == "loading") {
         LaunchedEffect(Unit) { delay(3000); stage = "main" }
