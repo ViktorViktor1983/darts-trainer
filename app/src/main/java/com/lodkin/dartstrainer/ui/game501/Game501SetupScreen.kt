@@ -285,7 +285,6 @@ fun Game501SetupScreen(
 
             Spacer(Modifier.height(20.dp))
 
-            // ── ИГРА и ЗАКРЫТИЕ в одну строку ──
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -724,10 +723,12 @@ private fun loadSlots(context: android.content.Context, playerName: String): Lis
     }
 }
 
+// Бросок в Bull для розыгрыша первого хода.
+// Множитель 0.8 — понижено по просьбе автора (раньше было 0.9).
 private fun generateBotBullResult(bot: CricketBot): Int {
     val lvl = bot.id.coerceIn(1, 16)
-    val pRed = (0.05 + (lvl - 1) * 0.027) * 0.9
-    val pGreen = (0.25 + (lvl - 1) * 0.013) * 0.9
+    val pRed = (0.05 + (lvl - 1) * 0.027) * 0.8
+    val pGreen = (0.25 + (lvl - 1) * 0.013) * 0.8
     val r = Random.nextDouble()
     return when {
         r < pRed -> 2
