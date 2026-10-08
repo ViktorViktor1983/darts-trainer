@@ -43,13 +43,6 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-/**
- * Новый экран статистики — меню с 6 карточками игр.
- * Тап по карточке открывает подробную статистику этой игры.
- *
- * Если у игры есть незавершённая партия, на карточке
- * в правом верхнем углу появляется красный значок ⏸.
- */
 @Composable
 fun StatsMenuScreen(
     cricketRepository: CricketRepository,
@@ -91,15 +84,12 @@ fun StatsMenuScreen(
     var bestScoreSetScore by remember { mutableStateOf<String?>(null) }
     var bestAroundClock by remember { mutableStateOf<String?>(null) }
 
-    // Незавершённые партии
     var unfinished501 by remember { mutableStateOf<List<Game501Entity>>(emptyList()) }
     var unfinishedCricket by remember { mutableStateOf<List<CricketGameEntity>>(emptyList()) }
 
-    // Диалог выбора действия с незавершённой партией
     var showUnfinishedDialog501 by remember { mutableStateOf(false) }
     var showUnfinishedDialogCricket by remember { mutableStateOf(false) }
 
-    // Локальный счётчик — чтобы перечитать данные после удаления
     var localReloadKey by remember { mutableStateOf(0) }
 
     LaunchedEffect(reloadKey, localReloadKey) {
@@ -168,28 +158,28 @@ fun StatsMenuScreen(
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
 
-        // ── ШАПКА ──
+        // ── ШАПКА (заголовок и подпись ×2, кнопка Назад длиннее) ──
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box(
                 modifier = Modifier
-                    .clip(RoundedCornerShape(10.dp))
+                    .clip(RoundedCornerShape(12.dp))
                     .background(TileBgDark)
                     .clickable { onBack() }
-                    .padding(horizontal = 10.dp, vertical = 8.dp)
+                    .padding(horizontal = 22.dp, vertical = 12.dp)
             ) {
-                Text("←", color = Accent, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                Text("←", color = Accent, fontSize = 30.sp, fontWeight = FontWeight.Bold)
             }
-            Spacer(Modifier.width(12.dp))
+            Spacer(Modifier.width(14.dp))
             Column {
                 Text(
                     "Статистика",
-                    color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold
+                    color = Color.White, fontSize = 40.sp, fontWeight = FontWeight.Bold
                 )
                 if (ownerName.isNotBlank()) {
-                    Text("игрок: $ownerName", color = Accent, fontSize = 11.sp)
+                    Text("игрок: $ownerName", color = Accent, fontSize = 22.sp)
                 }
             }
         }
@@ -272,7 +262,6 @@ fun StatsMenuScreen(
         }
     }
 
-    // ── Диалог незавершённых партий 501 ──
     if (showUnfinishedDialog501) {
         UnfinishedDialog501(
             games = unfinished501,
@@ -290,7 +279,6 @@ fun StatsMenuScreen(
         )
     }
 
-    // ── Диалог незавершённых партий Крикета ──
     if (showUnfinishedDialogCricket) {
         UnfinishedDialogCricket(
             games = unfinishedCricket,
@@ -309,9 +297,6 @@ fun StatsMenuScreen(
     }
 }
 
-// ─────────────────────────────────────────────
-// Карточка одной игры (со значком в правом верхнем углу)
-// ─────────────────────────────────────────────
 @Composable
 private fun StatsCard(
     title: String,
@@ -380,9 +365,6 @@ private fun StatsCard(
     }
 }
 
-// ─────────────────────────────────────────────
-// Диалог незавершённых партий 501
-// ─────────────────────────────────────────────
 @Composable
 private fun UnfinishedDialog501(
     games: List<Game501Entity>,
@@ -535,9 +517,6 @@ private fun UnfinishedCard501(
     }
 }
 
-// ─────────────────────────────────────────────
-// Диалог незавершённых партий Крикета
-// ─────────────────────────────────────────────
 @Composable
 private fun UnfinishedDialogCricket(
     games: List<CricketGameEntity>,
@@ -689,9 +668,6 @@ private fun UnfinishedCardCricket(
     }
 }
 
-// ─────────────────────────────────────────────
-// Хелперы
-// ─────────────────────────────────────────────
 private fun parseStringList(s: String): List<String> =
     if (s.isBlank()) emptyList() else s.split("|")
 
