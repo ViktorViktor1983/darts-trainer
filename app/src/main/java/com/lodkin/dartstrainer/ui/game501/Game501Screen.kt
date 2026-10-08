@@ -45,8 +45,6 @@ fun Game501Screen(
     var game by remember { mutableStateOf(initialGame) }
     var inputText by remember { mutableStateOf("") }
 
-    // id сохранённой незавершённой партии.
-    // 0 = партия ещё не сохранена (только началась или уже была завершена).
     var currentId by remember { mutableStateOf(existingId) }
 
     var lastScoreA by remember { mutableStateOf<Int?>(null) }
@@ -96,11 +94,6 @@ fun Game501Screen(
         recordSum = null
     }
 
-    // ─────────────────────────────────────────
-    // АВТОСОХРАНЕНИЕ.
-    // Срабатывает при каждом изменении game, если партия ещё не завершена.
-    // currentId обновляется — последующие сохранения будут обновлять ту же запись.
-    // ─────────────────────────────────────────
     LaunchedEffect(game) {
         if (!game.isFinished) {
             currentId = repository.saveUnfinishedGame(game, currentId)
@@ -282,14 +275,14 @@ fun Game501Screen(
 
         Row(
             modifier = Modifier.fillMaxWidth().background(Color(0xFF16202C))
-                .padding(horizontal = 12.dp, vertical = 8.dp),
+                .padding(horizontal = 12.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             PrevScoreBlock("Пред.", lastScoreA, activeTeam == 0, Alignment.Start)
             Text(
                 if (inputText.isEmpty()) "—" else inputText,
                 color = if (inputText.isEmpty()) Color.White.copy(alpha = 0.3f) else GoldAccent,
-                fontSize = 32.sp, fontWeight = FontWeight.Bold,
+                fontSize = 36.sp, fontWeight = FontWeight.Bold,
                 modifier = Modifier.weight(1f), textAlign = TextAlign.Center
             )
             PrevScoreBlock("Пред.", lastScoreB, activeTeam == 1, Alignment.End)
@@ -517,7 +510,6 @@ fun Game501Screen(
             dismissButton = {
                 TextButton(onClick = {
                     showBackConfirm = false
-                    // Удаляем сохранённую незавершённую партию и выходим
                     scope.launch {
                         if (currentId > 0L) repository.deleteGame(currentId)
                         onBack()
@@ -544,9 +536,9 @@ private fun PrevScoreBlock(
 ) {
     val nameColor = if (isActive) Accent else Color.White.copy(alpha = 0.45f)
     val valueColor = if (isActive) Color.White else Color.White.copy(alpha = 0.55f)
-    Column(modifier = Modifier.width(60.dp), horizontalAlignment = alignment) {
-        Text(label, color = nameColor, fontSize = 10.sp)
-        Text(if (value != null) "$value" else "—", color = valueColor, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+    Column(modifier = Modifier.width(80.dp), horizontalAlignment = alignment) {
+        Text(label, color = nameColor, fontSize = 13.sp)
+        Text(if (value != null) "$value" else "—", color = valueColor, fontSize = 28.sp, fontWeight = FontWeight.Bold)
     }
 }
 
@@ -561,7 +553,7 @@ private fun PlayersHeader501(game: Game501) {
     val setsA = teamA.firstOrNull()?.setsWon ?: 0
     val setsB = teamB.firstOrNull()?.setsWon ?: 0
 
-    Column(modifier = Modifier.fillMaxWidth().background(Color(0xFF16202C)).padding(vertical = 14.dp)) {
+    Column(modifier = Modifier.fillMaxWidth().background(Color(0xFF16202C)).padding(vertical = 8.dp)) {
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             PlayerScoreCol(
                 name = teamA.joinToString("/") { it.name },
@@ -571,13 +563,13 @@ private fun PlayersHeader501(game: Game501) {
                 isActive = activeTeam == 0,
                 modifier = Modifier.weight(1f)
             )
-            Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(horizontal = 8.dp)) {
-                Text("СЕТ", color = Color(0xFF99AABB), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+            Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(horizontal = 4.dp)) {
+                Text("СЕТ", color = Color(0xFF99AABB), fontSize = 11.sp, fontWeight = FontWeight.Bold)
                 Text("$setsA : $setsB", color = Color.White.copy(alpha = 0.85f),
-                    fontSize = 16.sp, fontWeight = FontWeight.Bold)
-                Spacer(Modifier.height(4.dp))
+                    fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(2.dp))
                 Text("ЛЕГ", color = Color(0xFF99AABB), fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                Text("$legsA : $legsB", color = Color.White, fontSize = 34.sp, fontWeight = FontWeight.Bold)
+                Text("$legsA : $legsB", color = Color.White, fontSize = 36.sp, fontWeight = FontWeight.Bold)
             }
             PlayerScoreCol(
                 name = teamB.joinToString("/") { it.name },
@@ -600,18 +592,19 @@ private fun PlayerScoreCol(
         Text(name, color = if (isActive) Accent else Color.White, fontSize = 20.sp,
             fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
         Text("$score", color = if (isActive) GoldAccent else Color.White,
-            fontSize = 55.sp, fontWeight = FontWeight.Bold)
+            fontSize = 78.sp, fontWeight = FontWeight.Bold,
+            maxLines = 1)
         Text("ср. ${String.format(Locale.US, "%.1f", ppr)}",
-            color = Color.White.copy(alpha = 0.6f), fontSize = 15.sp)
-        Spacer(Modifier.height(2.dp))
-        Text("🎯 $legDarts", color = Color.White.copy(alpha = 0.75f), fontSize = 14.sp, fontWeight = FontWeight.Medium)
+            color = Color.White.copy(alpha = 0.6f), fontSize = 16.sp)
+        Spacer(Modifier.height(1.dp))
+        Text("🎯 $legDarts", color = Color.White.copy(alpha = 0.75f), fontSize = 15.sp, fontWeight = FontWeight.Medium)
     }
 }
 
 @Composable
 private fun TopBar501(game: Game501, onBack: () -> Unit) {
     Row(
-        modifier = Modifier.fillMaxWidth().background(Color(0xFF1A2332)).padding(horizontal = 12.dp, vertical = 10.dp),
+        modifier = Modifier.fillMaxWidth().background(Color(0xFF1A2332)).padding(horizontal = 12.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(game.modeLabel, color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold,
@@ -630,13 +623,13 @@ private fun QuickButtonsWithLeg(
     sums: List<Int>, enabled: Boolean, onQuick: (Int) -> Unit, onLeg: () -> Unit
 ) {
     val rows = sums.chunked(6)
-    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 4.dp)) {
+    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 3.dp)) {
         rows.forEachIndexed { rowIdx, row ->
             Row(modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
                 horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 row.forEach { sum ->
                     Box(
-                        modifier = Modifier.weight(1f).height(48.dp).clip(RoundedCornerShape(8.dp))
+                        modifier = Modifier.weight(1f).height(44.dp).clip(RoundedCornerShape(8.dp))
                             .background(TileBg).clickable(enabled = enabled) { onQuick(sum) },
                         contentAlignment = Alignment.Center
                     ) { Text("$sum", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Medium) }
@@ -645,7 +638,7 @@ private fun QuickButtonsWithLeg(
                     val freeSlots = 6 - row.size
                     if (freeSlots > 1) repeat(freeSlots - 1) { Spacer(Modifier.weight(1f)) }
                     Box(
-                        modifier = Modifier.weight(1f).height(48.dp).clip(RoundedCornerShape(8.dp))
+                        modifier = Modifier.weight(1f).height(44.dp).clip(RoundedCornerShape(8.dp))
                             .background(if (enabled) ErrorColor else ErrorColor.copy(alpha = 0.4f))
                             .clickable(enabled = enabled) { onLeg() },
                         contentAlignment = Alignment.Center
@@ -662,7 +655,7 @@ private fun BigActionButton(
     modifier: Modifier, onClick: () -> Unit
 ) {
     Box(
-        modifier = modifier.height(68.dp).clip(RoundedCornerShape(10.dp))
+        modifier = modifier.height(60.dp).clip(RoundedCornerShape(10.dp))
             .background(if (enabled) color else color.copy(alpha = 0.4f))
             .clickable(enabled = enabled) { onClick() },
         contentAlignment = Alignment.Center
@@ -675,59 +668,59 @@ private fun Keyboard501(
     onDigit: (String) -> Unit, onBackspace: () -> Unit,
     onClear: () -> Unit, onUndo: () -> Unit
 ) {
-    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 4.dp)) {
+    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 2.dp)) {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             DigitKey("1", enabled, onDigit, Modifier.weight(1f))
             DigitKey("2", enabled, onDigit, Modifier.weight(1f))
             DigitKey("3", enabled, onDigit, Modifier.weight(1f))
         }
-        Spacer(Modifier.height(6.dp))
+        Spacer(Modifier.height(5.dp))
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             DigitKey("4", enabled, onDigit, Modifier.weight(1f))
             DigitKey("5", enabled, onDigit, Modifier.weight(1f))
             DigitKey("6", enabled, onDigit, Modifier.weight(1f))
         }
-        Spacer(Modifier.height(6.dp))
+        Spacer(Modifier.height(5.dp))
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             DigitKey("7", enabled, onDigit, Modifier.weight(1f))
             DigitKey("8", enabled, onDigit, Modifier.weight(1f))
             DigitKey("9", enabled, onDigit, Modifier.weight(1f))
         }
-        Spacer(Modifier.height(6.dp))
+        Spacer(Modifier.height(5.dp))
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             Box(
-                modifier = Modifier.weight(1f).height(60.dp).clip(RoundedCornerShape(10.dp))
+                modifier = Modifier.weight(1f).height(54.dp).clip(RoundedCornerShape(10.dp))
                     .background(TileBgDark).clickable(enabled = enabled) { onClear() },
                 contentAlignment = Alignment.Center
             ) { Text("C", color = ErrorColor, fontSize = 22.sp, fontWeight = FontWeight.Bold) }
             DigitKey("0", enabled, onDigit, Modifier.weight(1f))
             Box(
-                modifier = Modifier.weight(1f).height(60.dp).clip(RoundedCornerShape(10.dp))
+                modifier = Modifier.weight(1f).height(54.dp).clip(RoundedCornerShape(10.dp))
                     .background(TileBgDark).clickable(enabled = enabled) { onBackspace() },
                 contentAlignment = Alignment.Center
             ) { Text("⌫", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold) }
         }
-        Spacer(Modifier.height(6.dp))
+        Spacer(Modifier.height(5.dp))
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             Spacer(Modifier.weight(1f))
             Box(
-                modifier = Modifier.weight(1f).height(60.dp).clip(RoundedCornerShape(10.dp))
+                modifier = Modifier.weight(1f).height(54.dp).clip(RoundedCornerShape(10.dp))
                     .background(if (canUndo) PaleYellow else PaleYellow.copy(alpha = 0.35f))
                     .clickable(enabled = canUndo) { onUndo() },
                 contentAlignment = Alignment.Center
             ) {
-                Text("↶", color = PaleYellowText, fontSize = 36.sp, fontWeight = FontWeight.Black)
+                Text("↶", color = PaleYellowText, fontSize = 34.sp, fontWeight = FontWeight.Black)
             }
             Spacer(Modifier.weight(1f))
         }
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(6.dp))
     }
 }
 
 @Composable
 private fun DigitKey(digit: String, enabled: Boolean, onDigit: (String) -> Unit, modifier: Modifier) {
     Box(
-        modifier = modifier.height(60.dp).clip(RoundedCornerShape(10.dp))
+        modifier = modifier.height(54.dp).clip(RoundedCornerShape(10.dp))
             .background(TileBg).clickable(enabled = enabled) { onDigit(digit) },
         contentAlignment = Alignment.Center
     ) { Text(digit, color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold) }
