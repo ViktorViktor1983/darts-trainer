@@ -29,8 +29,7 @@ import kotlinx.coroutines.launch
 import java.util.Locale
 
 // ─────────────────────────────────────────────
-// Нормативы американского крикета (по количеству БРОСКОВ, меньше = лучше).
-// Порядок — от лучшего к худшему.
+// Нормативы американского крикета
 // ─────────────────────────────────────────────
 private data class CricketNorm(val name: String, val maxDarts: Int)
 
@@ -54,9 +53,6 @@ fun CricketGameScreen(
 ) {
     val scope = rememberCoroutineScope()
     var game by remember { mutableStateOf(initialGame) }
-
-    // id сохранённой незавершённой партии.
-    // 0 = партия ещё не сохранена (только началась или уже была завершена).
     var currentId by remember { mutableStateOf(existingId) }
 
     var showWinDialog by remember { mutableStateOf(false) }
@@ -67,15 +63,14 @@ fun CricketGameScreen(
     var setWinnerLabel by remember { mutableStateOf("") }
     var dartsSelected by remember { mutableStateOf(0) }
 
+    // Флаг блокировки ОК после автоперехода хода
+    var okBlocked by remember { mutableStateOf(false) }
+
     val history = remember { mutableStateListOf<CricketGame>() }
 
     fun saveHistory() { history.add(game); if (history.size > 300) history.removeAt(0) }
     fun undo() { if (history.isNotEmpty()) game = history.removeAt(history.lastIndex) }
 
-    // ─────────────────────────────────────────
-    // АВТОСОХРАНЕНИЕ.
-    // Срабатывает при каждом изменении game, если партия ещё не завершена.
-    // ─────────────────────────────────────────
     LaunchedEffect(game) {
         if (!game.isFinished) {
             currentId = repository.saveUnfinishedGame(game, currentId)
@@ -133,6 +128,20 @@ fun CricketGameScreen(
         game = CricketLogic.finishTurn(game)
     }
 
+    // ── Блокировка ОК после автоперехода хода ──
+    // Следим за сменой игрока: если ход перешёл (currentPlayerIndex изменился),
+    // и это произошло «само» (после 3-го дротика), блокируем ОК на 3 секунды.
+    var lastCurrentPlayerIndex by remember { mutableStateOf(game.currentPlayerIndex) }
+    LaunchedEffect(game.currentPlayerIndex, game.currentTurnDarts) {
+        if (game.currentPlayerIndex != lastCurrentPlayerIndex) {
+            // Ход перешёл — блокируем ОК на 3 секунды
+            okBlocked = true
+            lastCurrentPlayerIndex = game.currentPlayerIndex
+            delay(3000L)
+            okBlocked = false
+        }
+    }
+
     LaunchedEffect(game.lastLegWinnerIndex) {
         val teamIdx = game.lastLegWinnerIndex
         if (teamIdx != null) {
@@ -163,10 +172,11 @@ fun CricketGameScreen(
         ScoreControlRow(
             game = game,
             canUndo = history.isNotEmpty(),
+            okBlocked = okBlocked,
             onUndo = { undo() },
             onOk = {
                 val currentPlayer = game.players.getOrNull(game.currentPlayerIndex)
-                if (!game.isFinished && currentPlayer?.isBot != true) {
+                if (!game.isFinished && currentPlayer?.isBot != true && !okBlocked) {
                     saveHistory()
                     game = CricketLogic.finishTurn(game)
                 }
@@ -305,7 +315,6 @@ fun CricketGameScreen(
             dismissButton = {
                 TextButton(onClick = {
                     showBackConfirm = false
-                    // Удаляем сохранённую незавершённую партию и выходим
                     scope.launch {
                         if (currentId > 0L) repository.deleteGame(currentId)
                         onBack()
@@ -459,7 +468,13 @@ private fun SetBadge(sets: Int) {
 }
 
 @Composable
-private fun ScoreControlRow(game: CricketGame, canUndo: Boolean, onUndo: () -> Unit, onOk: () -> Unit) {
+private fun ScoreControlRow(
+    game: CricketGame,
+    canUndo: Boolean,
+    okBlocked: Boolean,
+    onUndo: () -> Unit,
+    onOk: () -> Unit
+) {
     val currentPlayer = game.players.getOrNull(game.currentPlayerIndex)
     val isBotTurn = currentPlayer?.isBot == true
     val dartsA = game.playersOfTeam(0).sumOf { it.dartsThrown }
@@ -468,6 +483,8 @@ private fun ScoreControlRow(game: CricketGame, canUndo: Boolean, onUndo: () -> U
     val scoreB = CricketLogic.teamTotalScore(game, 1)
     val diffA = scoreA - scoreB
     val diffB = -diffA
+
+    val okEnabled = !game.isFinished && !isBotTurn && !okBlocked
 
     Row(modifier = Modifier.fillMaxWidth().background(Color(0xFF16202C))
         .padding(horizontal = 8.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -480,13 +497,13 @@ private fun ScoreControlRow(game: CricketGame, canUndo: Boolean, onUndo: () -> U
         Spacer(Modifier.weight(1f))
         Box(
             modifier = Modifier.clip(RoundedCornerShape(8.dp))
-                .background(if (isBotTurn) TileBgDark else Accent)
-                .clickable(enabled = !game.isFinished && !isBotTurn) { onOk() }
+                .background(if (okEnabled) Accent else TileBgDark)
+                .clickable(enabled = okEnabled) { onOk() }
                 .padding(horizontal = 32.dp, vertical = 10.dp),
             contentAlignment = Alignment.Center
         ) {
             Text(if (isBotTurn) "..." else "OK",
-                color = if (isBotTurn) Accent.copy(alpha = 0.5f) else Color(0xFF121212),
+                color = if (okEnabled) Color(0xFF121212) else Accent.copy(alpha = 0.5f),
                 fontSize = 18.sp, fontWeight = FontWeight.Bold)
         }
         Spacer(Modifier.weight(1f))
@@ -510,12 +527,13 @@ private fun UndoButton(enabled: Boolean, onClick: () -> Unit) {
     ) { Text("↶", color = if (enabled) Accent else Accent.copy(alpha = 0.3f), fontSize = 22.sp, fontWeight = FontWeight.Bold) }
 }
 
+// ── Увеличенная плашка разницы очков ──
 @Composable
 private fun ScoreDiffBadge(text: String, positive: Boolean) {
-    Box(modifier = Modifier.clip(RoundedCornerShape(6.dp)).background(TileBgDark)
-        .padding(horizontal = 8.dp, vertical = 6.dp)) {
+    Box(modifier = Modifier.clip(RoundedCornerShape(8.dp)).background(TileBgDark)
+        .padding(horizontal = 14.dp, vertical = 10.dp)) {
         Text(text, color = if (positive) GoldAccent else Color(0xFFE57373),
-            fontSize = 13.sp, fontWeight = FontWeight.Bold)
+            fontSize = 26.sp, fontWeight = FontWeight.Bold)
     }
 }
 
@@ -655,7 +673,6 @@ private fun WinDialog(game: CricketGame, onUndo: () -> Unit, onContinue: () -> U
                 Text("Очки за матч: $teamMatchScore", color = Color.White, fontSize = 14.sp)
                 Text("Бросков: $teamDarts", color = Color.White, fontSize = 14.sp)
 
-                // ── Норматив для АМЕРИКАНСКОГО крикета ──
                 if (game.type == CricketType.AMERICAN) {
                     Spacer(Modifier.height(14.dp))
                     Text(
