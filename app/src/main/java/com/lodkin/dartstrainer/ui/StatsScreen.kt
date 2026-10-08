@@ -27,14 +27,18 @@ import com.lodkin.dartstrainer.data.SettingsStorage
 import com.lodkin.dartstrainer.data.cricket.CricketGameEntity
 import com.lodkin.dartstrainer.data.cricket.CricketRepository
 import com.lodkin.dartstrainer.data.game501.CheckoutTable
+import com.lodkin.dartstrainer.data.game501.Game501
 import com.lodkin.dartstrainer.data.game501.Game501Database
 import com.lodkin.dartstrainer.data.game501.Game501Entity
+import com.lodkin.dartstrainer.data.game501.Game501EntityConverter
 import com.lodkin.dartstrainer.data.game501.Game501Repository
 import com.lodkin.dartstrainer.theme.Accent
 import com.lodkin.dartstrainer.theme.ErrorColor
 import com.lodkin.dartstrainer.theme.GoldAccent
 import com.lodkin.dartstrainer.theme.TileBg
 import com.lodkin.dartstrainer.theme.TileBgDark
+import com.lodkin.dartstrainer.ui.game501.Game501StatsScreen
+import com.lodkin.dartstrainer.ui.game501.MatchesListDialog501
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -195,6 +199,12 @@ fun StatsScreen(
     var show501Chart by remember { mutableStateOf(false) }
     var showCheckoutsDialog by remember { mutableStateOf(false) }
 
+    // Список матчей
+    var showMatchesList by remember { mutableStateOf(false) }
+
+    // Просмотр подробной статистики старого матча
+    var viewingGame by remember { mutableStateOf<Game501?>(null) }
+
     LaunchedEffect(period, reloadKey) {
         val cutoff = period.daysBack?.let {
             System.currentTimeMillis() - it * 24L * 60L * 60L * 1000L
@@ -213,12 +223,24 @@ fun StatsScreen(
         compute501ChartData(games501, ownerName, selectedVariant)
     }
 
-    // Чекауты считаем только по завершённым играм
     val allCheckouts = remember(games501, ownerName) {
         computeClosedCheckouts(
             games501.filter { it.isFinished && it.outModeName != "STRAIGHT_OUT" },
             ownerName
         )
+    }
+
+    // ─────────────────────────────────────────
+    // Просмотр подробной статистики старого матча
+    // ─────────────────────────────────────────
+    val viewing = viewingGame
+    if (viewing != null) {
+        Game501StatsScreen(
+            game = viewing,
+            onPlayAgain = { viewingGame = null },
+            onBackToMenu = { viewingGame = null }
+        )
+        return
     }
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
@@ -371,14 +393,21 @@ fun StatsScreen(
                 onResetClick = { showResetDialog = true }
             )
         } else {
+            // Кнопка «Список матчей» — сверху, компактная.
+            val unfinishedCount = remember(games501) { games501.count { !it.isFinished } }
+            MatchesButton(
+                unfinishedCount = unfinishedCount,
+                onClick = { showMatchesList = true }
+            )
+            Spacer(Modifier.height(12.dp))
+
             Game501TabContent(
                 games = games501,
                 ownerName = ownerName,
                 variant = selectedVariant,
                 period = period,
                 onPeriodChange = { period = it },
-                onResetClick = { showResetDialog = true },
-                onResumeGame501 = onResumeGame501
+                onResetClick = { showResetDialog = true }
             )
         }
     }
@@ -422,6 +451,28 @@ fun StatsScreen(
         )
     }
 
+    if (showMatchesList) {
+        MatchesListDialog501(
+            games = games501,
+            onResume = { entity ->
+                showMatchesList = false
+                onResumeGame501(entity)
+            },
+            onViewMatch = { entity ->
+                showMatchesList = false
+                val restored = Game501EntityConverter.toGame501(entity)
+                if (restored != null) viewingGame = restored
+            },
+            onDelete = { entity ->
+                scope.launch {
+                    game501Repo.deleteGame(entity.id)
+                    reloadKey++
+                }
+            },
+            onDismiss = { showMatchesList = false }
+        )
+    }
+
     if (showResetDialog) {
         val isCricket = selectedTab == 0
         AlertDialog(
@@ -456,6 +507,53 @@ fun StatsScreen(
                 )
             }
         )
+    }
+}
+
+// ─────────────────────────────────────────────
+// Кнопка «Список матчей» (компактная, сверху)
+// ─────────────────────────────────────────────
+@Composable
+private fun MatchesButton(
+    unfinishedCount: Int,
+    onClick: () -> Unit
+) {
+    val bg = if (unfinishedCount > 0) ErrorColor else TileBgDark
+    val fg = Color.White
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(10.dp))
+            .background(bg)
+            .clickable { onClick() }
+            .padding(horizontal = 14.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            "📋  Список матчей",
+            color = fg,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.weight(1f)
+        )
+        if (unfinishedCount > 0) {
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(Color.White.copy(alpha = 0.25f))
+                    .padding(horizontal = 8.dp, vertical = 2.dp)
+            ) {
+                Text(
+                    "⏸ $unfinishedCount",
+                    color = fg,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        } else {
+            Text("▶", color = fg, fontSize = 14.sp)
+        }
     }
 }
 
@@ -866,12 +964,8 @@ private fun Game501TabContent(
     variant: GameVariant,
     period: StatPeriod,
     onPeriodChange: (StatPeriod) -> Unit,
-    onResetClick: () -> Unit,
-    onResumeGame501: (Game501Entity) -> Unit
+    onResetClick: () -> Unit
 ) {
-    // Незавершённые партии — показываем отдельно, красным.
-    val unfinished = remember(games) { games.filter { !it.isFinished } }
-
     // Для агрегатов — только завершённые.
     val filteredGames = remember(games, variant) {
         games.filter { g ->
@@ -886,22 +980,11 @@ private fun Game501TabContent(
 
     Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
 
-        // ── НЕЗАВЕРШЁННЫЕ ПАРТИИ ──
-        if (unfinished.isNotEmpty()) {
-            SectionTitle("НЕЗАВЕРШЁННЫЕ (${unfinished.size})")
-            Spacer(Modifier.height(8.dp))
-            unfinished.forEach { entity ->
-                Unfinished501Card(entity, onClick = { onResumeGame501(entity) })
-                Spacer(Modifier.height(6.dp))
-            }
-            Spacer(Modifier.height(16.dp))
-        }
-
         PeriodSelector(period = period, onPeriodChange = onPeriodChange)
         Spacer(Modifier.height(16.dp))
 
         if (agg.totalMatches == 0) {
-            if (unfinished.isEmpty()) EmptyStats()
+            EmptyStats()
             return@Column
         }
 
@@ -1021,69 +1104,6 @@ private fun Game501TabContent(
         Spacer(Modifier.height(24.dp))
         ResetButton(onResetClick)
         Spacer(Modifier.height(24.dp))
-    }
-}
-
-// ─────────────────────────────────────────────
-// Карточка незавершённой партии 501
-// ─────────────────────────────────────────────
-@Composable
-private fun Unfinished501Card(entity: Game501Entity, onClick: () -> Unit) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .background(Color(0xFF3A1A1A))
-            .clickable { onClick() }
-            .padding(horizontal = 14.dp, vertical = 12.dp)
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                "⏸  НЕЗАВЕРШЕНА",
-                color = ErrorColor,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 2.sp,
-                modifier = Modifier.weight(1f)
-            )
-            Text(
-                formatDate(entity.lastUpdateMillis.takeIf { it > 0 } ?: entity.dateMillis),
-                color = Color.White.copy(alpha = 0.6f),
-                fontSize = 11.sp
-            )
-        }
-        Spacer(Modifier.height(6.dp))
-        val names = entity.playerNames.split("|")
-        val scores = entity.matchScore.split("|")
-        val legsPlayed = entity.legsPlayed
-        Text(
-            names.joinToString("  ·  "),
-            color = Color.White,
-            fontSize = 14.sp,
-            fontWeight = FontWeight.Bold
-        )
-        Spacer(Modifier.height(4.dp))
-        Text(
-            buildString {
-                append("Легов сыграно: $legsPlayed")
-                if (scores.size == names.size && scores.isNotEmpty()) {
-                    append("   ·   набрано очков: ")
-                    append(scores.joinToString(" / "))
-                }
-            },
-            color = Color.White.copy(alpha = 0.7f),
-            fontSize = 12.sp
-        )
-        Spacer(Modifier.height(6.dp))
-        Text(
-            "Нажми, чтобы продолжить",
-            color = GoldAccent,
-            fontSize = 12.sp,
-            fontWeight = FontWeight.Medium
-        )
     }
 }
 
