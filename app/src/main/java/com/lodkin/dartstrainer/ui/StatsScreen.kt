@@ -24,6 +24,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.lodkin.dartstrainer.data.SettingsStorage
+import com.lodkin.dartstrainer.data.cricket.CricketEntityConverter
+import com.lodkin.dartstrainer.data.cricket.CricketGame
 import com.lodkin.dartstrainer.data.cricket.CricketGameEntity
 import com.lodkin.dartstrainer.data.cricket.CricketRepository
 import com.lodkin.dartstrainer.data.game501.CheckoutTable
@@ -37,6 +39,8 @@ import com.lodkin.dartstrainer.theme.ErrorColor
 import com.lodkin.dartstrainer.theme.GoldAccent
 import com.lodkin.dartstrainer.theme.TileBg
 import com.lodkin.dartstrainer.theme.TileBgDark
+import com.lodkin.dartstrainer.ui.cricket.CricketStatsScreen
+import com.lodkin.dartstrainer.ui.cricket.MatchesListDialogCricket
 import com.lodkin.dartstrainer.ui.game501.Game501StatsScreen
 import com.lodkin.dartstrainer.ui.game501.MatchesListDialog501
 import kotlinx.coroutines.launch
@@ -176,6 +180,7 @@ fun StatsScreen(
     initialTab: Int = 0,
     showTabs: Boolean = true,
     onResumeGame501: (Game501Entity) -> Unit = {},
+    onResumeCricket: (CricketGameEntity) -> Unit = {},
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
@@ -188,6 +193,7 @@ fun StatsScreen(
     var selectedTab by remember { mutableStateOf(initialTab) }
     var period by remember { mutableStateOf(StatPeriod.ALL) }
     var games by remember { mutableStateOf<List<CricketGameEntity>>(emptyList()) }
+    var allCricketGames by remember { mutableStateOf<List<CricketGameEntity>>(emptyList()) }
     var games501 by remember { mutableStateOf<List<Game501Entity>>(emptyList()) }
     var showResetDialog by remember { mutableStateOf(false) }
     var reloadKey by remember { mutableStateOf(0) }
@@ -199,18 +205,25 @@ fun StatsScreen(
     var show501Chart by remember { mutableStateOf(false) }
     var showCheckoutsDialog by remember { mutableStateOf(false) }
 
-    // Список матчей
-    var showMatchesList by remember { mutableStateOf(false) }
+    // Список матчей 501
+    var showMatchesList501 by remember { mutableStateOf(false) }
+    // Список матчей Крикета
+    var showMatchesListCricket by remember { mutableStateOf(false) }
 
     // Просмотр подробной статистики старого матча
-    var viewingGame by remember { mutableStateOf<Game501?>(null) }
+    var viewingGame501 by remember { mutableStateOf<Game501?>(null) }
+    var viewingCricket by remember { mutableStateOf<CricketGame?>(null) }
 
     LaunchedEffect(period, reloadKey) {
         val cutoff = period.daysBack?.let {
             System.currentTimeMillis() - it * 24L * 60L * 60L * 1000L
         }
-        val allCricket = repository.getAllGames()
-        games = if (cutoff == null) allCricket else allCricket.filter { it.dateMillis >= cutoff }
+
+        // Крикет: загружаем ВСЕ партии (для списка), фильтруем по периоду.
+        val allCricket = repository.getAllGamesIncludingUnfinished()
+        allCricketGames = if (cutoff == null) allCricket else allCricket.filter { it.dateMillis >= cutoff }
+        // Для агрегатов — только завершённые.
+        games = allCricketGames.filter { it.isFinished }
 
         val all501 = game501Repo.getAllGames()
         games501 = if (cutoff == null) all501 else all501.filter { it.dateMillis >= cutoff }
@@ -233,12 +246,22 @@ fun StatsScreen(
     // ─────────────────────────────────────────
     // Просмотр подробной статистики старого матча
     // ─────────────────────────────────────────
-    val viewing = viewingGame
-    if (viewing != null) {
+    val viewing501 = viewingGame501
+    if (viewing501 != null) {
         Game501StatsScreen(
-            game = viewing,
-            onPlayAgain = { viewingGame = null },
-            onBackToMenu = { viewingGame = null }
+            game = viewing501,
+            onPlayAgain = { viewingGame501 = null },
+            onBackToMenu = { viewingGame501 = null }
+        )
+        return
+    }
+
+    val viewingCrick = viewingCricket
+    if (viewingCrick != null) {
+        CricketStatsScreen(
+            game = viewingCrick,
+            onPlayAgain = { viewingCricket = null },
+            onBackToMenu = { viewingCricket = null }
         )
         return
     }
@@ -385,6 +408,16 @@ fun StatsScreen(
         Spacer(Modifier.height(16.dp))
 
         if (selectedTab == 0) {
+            // Кнопка «Список матчей» — сверху.
+            val unfinishedCount = remember(allCricketGames) {
+                allCricketGames.count { !it.isFinished }
+            }
+            MatchesButton(
+                unfinishedCount = unfinishedCount,
+                onClick = { showMatchesListCricket = true }
+            )
+            Spacer(Modifier.height(12.dp))
+
             CricketTabContent(
                 games = games,
                 ownerName = ownerName,
@@ -393,11 +426,10 @@ fun StatsScreen(
                 onResetClick = { showResetDialog = true }
             )
         } else {
-            // Кнопка «Список матчей» — сверху, компактная.
             val unfinishedCount = remember(games501) { games501.count { !it.isFinished } }
             MatchesButton(
                 unfinishedCount = unfinishedCount,
-                onClick = { showMatchesList = true }
+                onClick = { showMatchesList501 = true }
             )
             Spacer(Modifier.height(12.dp))
 
@@ -451,17 +483,17 @@ fun StatsScreen(
         )
     }
 
-    if (showMatchesList) {
+    if (showMatchesList501) {
         MatchesListDialog501(
             games = games501,
             onResume = { entity ->
-                showMatchesList = false
+                showMatchesList501 = false
                 onResumeGame501(entity)
             },
             onViewMatch = { entity ->
-                showMatchesList = false
+                showMatchesList501 = false
                 val restored = Game501EntityConverter.toGame501(entity)
-                if (restored != null) viewingGame = restored
+                if (restored != null) viewingGame501 = restored
             },
             onDelete = { entity ->
                 scope.launch {
@@ -469,7 +501,29 @@ fun StatsScreen(
                     reloadKey++
                 }
             },
-            onDismiss = { showMatchesList = false }
+            onDismiss = { showMatchesList501 = false }
+        )
+    }
+
+    if (showMatchesListCricket) {
+        MatchesListDialogCricket(
+            games = allCricketGames,
+            onResume = { entity ->
+                showMatchesListCricket = false
+                onResumeCricket(entity)
+            },
+            onViewMatch = { entity ->
+                showMatchesListCricket = false
+                val restored = CricketEntityConverter.toCricketGame(entity)
+                if (restored != null) viewingCricket = restored
+            },
+            onDelete = { entity ->
+                scope.launch {
+                    repository.deleteGame(entity.id)
+                    reloadKey++
+                }
+            },
+            onDismiss = { showMatchesListCricket = false }
         )
     }
 
@@ -966,7 +1020,6 @@ private fun Game501TabContent(
     onPeriodChange: (StatPeriod) -> Unit,
     onResetClick: () -> Unit
 ) {
-    // Для агрегатов — только завершённые.
     val filteredGames = remember(games, variant) {
         games.filter { g ->
             if (!g.isFinished) return@filter false
