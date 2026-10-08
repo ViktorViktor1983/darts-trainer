@@ -21,6 +21,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.lodkin.dartstrainer.data.SettingsStorage
@@ -48,16 +49,10 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-// ─────────────────────────────────────────────
-// Валидные чекауты (только для диалога чекаутов)
-// ─────────────────────────────────────────────
 private val VALID_CHECKOUTS: List<Int> by lazy {
     (2..170).filter { CheckoutTable.isCheckoutPossible(it) }
 }
 
-// ─────────────────────────────────────────────
-// Цвета чек-аутов
-// ─────────────────────────────────────────────
 private val CheckoutGray = Color(0xFF455A64)
 private val CheckoutGreen = Color(0xFF4CAF50)
 private val CheckoutYellow = Color(0xFFFFD54F)
@@ -82,9 +77,6 @@ private fun checkoutColor(count: Int): Pair<Color, Color> {
     }
 }
 
-// ─────────────────────────────────────────────
-// Экран статистики
-// ─────────────────────────────────────────────
 @Composable
 fun StatsScreen(
     repository: CricketRepository,
@@ -149,9 +141,6 @@ fun StatsScreen(
         )
     }
 
-    // ─────────────────────────────────────────
-    // Просмотр подробной статистики старого матча
-    // ─────────────────────────────────────────
     val viewing501 = viewingGame501
     if (viewing501 != null) {
         Game501StatsScreen(
@@ -175,24 +164,23 @@ fun StatsScreen(
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
 
         // ── ШАПКА ──
-        // Слева — только «Назад» (длиннее, стрелка крупнее).
-        // По центру — «Статистика» и «игрок: …» ×2.
-        // Справа — только активные кнопки:
-        //   Крикет: 📈 (график MPR)
-        //   501:    📈 (график PPR/D%) + 🏆 (чекауты)
+        // Кнопка «← Назад» — прямоугольная плашка, как в секторе 20.
+        // Заголовок — уменьшен, чтобы «Статистика» влезло в одну строку.
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box(
                 modifier = Modifier
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(TileBgDark)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(TileBg)
                     .clickable { onBack() }
-                    .padding(horizontal = 24.dp, vertical = 14.dp)
+                    .padding(horizontal = 14.dp, vertical = 8.dp)
             ) {
-                Text("←", color = Accent, fontSize = 32.sp, fontWeight = FontWeight.Bold)
+                Text("← Назад", color = Accent, fontSize = 14.sp, fontWeight = FontWeight.Bold)
             }
+
+            Spacer(Modifier.width(8.dp))
 
             Column(
                 modifier = Modifier.weight(1f),
@@ -200,24 +188,32 @@ fun StatsScreen(
             ) {
                 Text(
                     "Статистика",
-                    fontSize = 40.sp,
+                    fontSize = 18.sp,
                     fontWeight = FontWeight.Bold,
-                    color = Color.White
+                    color = Color.White,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
                 if (ownerName.isNotBlank()) {
-                    Text("игрок: $ownerName", color = Accent, fontSize = 22.sp)
+                    Text(
+                        "игрок: $ownerName",
+                        color = Accent,
+                        fontSize = 12.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
                 }
             }
 
+            Spacer(Modifier.width(8.dp))
+
             if (selectedTab == 0) {
-                // Крикет: одна кнопка 📈
                 HeaderIconButton(
                     icon = "📈",
                     active = true,
                     onClick = { showCricketChart = true }
                 )
             } else {
-                // 501: 📈 + 🏆
                 HeaderIconButton(
                     icon = "📈",
                     active = true,
@@ -234,7 +230,6 @@ fun StatsScreen(
 
         Spacer(Modifier.height(16.dp))
 
-        // ── ТАБЫ ──
         if (showTabs) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -290,7 +285,6 @@ fun StatsScreen(
             }
         }
 
-        // ── Строка активного фильтра ──
         if (selectedTab == 1 && selectedVariant != GameVariant.ALL) {
             Spacer(Modifier.height(8.dp))
             Row(
@@ -478,9 +472,6 @@ fun StatsScreen(
     }
 }
 
-// ─────────────────────────────────────────────
-// Кнопка «Список матчей» (компактная, сверху)
-// ─────────────────────────────────────────────
 @Composable
 private fun MatchesButton(
     unfinishedCount: Int,
@@ -525,9 +516,6 @@ private fun MatchesButton(
     }
 }
 
-// ─────────────────────────────────────────────
-// Кнопка-иконка в шапке
-// ─────────────────────────────────────────────
 @Composable
 private fun HeaderIconButton(
     icon: String,
@@ -537,19 +525,16 @@ private fun HeaderIconButton(
     val alpha = if (active) 1.0f else 0.4f
     Box(
         modifier = Modifier
-            .size(48.dp)
-            .clip(RoundedCornerShape(12.dp))
+            .size(44.dp)
+            .clip(RoundedCornerShape(10.dp))
             .background(TileBgDark)
             .clickable(enabled = active) { onClick() },
         contentAlignment = Alignment.Center
     ) {
-        Text(icon, fontSize = 22.sp, color = Color.White.copy(alpha = alpha))
+        Text(icon, fontSize = 20.sp, color = Color.White.copy(alpha = alpha))
     }
 }
 
-// ─────────────────────────────────────────────
-// График
-// ─────────────────────────────────────────────
 @Composable
 private fun ChartDialog(
     title: String,
@@ -698,9 +683,6 @@ private fun LineChart(
     }
 }
 
-// ─────────────────────────────────────────────
-// Диалог выбора модификации игры
-// ─────────────────────────────────────────────
 @Composable
 private fun VariantDialog(
     selected: GameVariant,
@@ -780,9 +762,6 @@ private fun VariantRow(
     }
 }
 
-// ─────────────────────────────────────────────
-// Контент вкладки Крикет
-// ─────────────────────────────────────────────
 @Composable
 private fun CricketTabContent(
     games: List<CricketGameEntity>,
@@ -840,9 +819,6 @@ private fun CricketTabContent(
     }
 }
 
-// ─────────────────────────────────────────────
-// Контент вкладки 501
-// ─────────────────────────────────────────────
 @Composable
 private fun Game501TabContent(
     games: List<Game501Entity>,
@@ -994,9 +970,6 @@ private fun Game501TabContent(
     }
 }
 
-// ─────────────────────────────────────────────
-// Диалог со списком чек-аутов
-// ─────────────────────────────────────────────
 @Composable
 private fun CheckoutsDialog(
     closedCheckouts: Map<Int, Int>,
@@ -1107,9 +1080,6 @@ private fun formatDate(millis: Long): String {
     return fmt.format(Date(millis))
 }
 
-// ─────────────────────────────────────────────
-// Фильтр по периоду
-// ─────────────────────────────────────────────
 @Composable
 private fun PeriodSelector(period: StatPeriod, onPeriodChange: (StatPeriod) -> Unit) {
     Column {
@@ -1147,9 +1117,6 @@ private fun PeriodChip(label: String, selected: Boolean, onClick: () -> Unit, mo
     }
 }
 
-// ─────────────────────────────────────────────
-// UI-компоненты
-// ─────────────────────────────────────────────
 @Composable
 private fun TabButton(label: String, selected: Boolean, onClick: () -> Unit, modifier: Modifier) {
     Box(
