@@ -216,6 +216,14 @@ fun DartsTrainerApp() {
                         screen = "game501_game"
                     }
                 },
+                onResumeCricket = { entity ->
+                    val restored = CricketSerializer.fromJson(entity.stateBlob)
+                    if (restored != null) {
+                        cricketGame = restored
+                        cricketExistingId = entity.id
+                        screen = "cricket_game"
+                    }
+                },
                 onCricket = { screen = "stats_cricket" },
                 on501 = { screen = "stats_501" },
                 onSector = { screen = "sector_stats" },
