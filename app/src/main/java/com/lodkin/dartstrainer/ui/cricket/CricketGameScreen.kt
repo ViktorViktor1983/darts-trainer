@@ -25,6 +25,7 @@ import com.lodkin.dartstrainer.theme.GoldAccent
 import com.lodkin.dartstrainer.theme.TileBg
 import com.lodkin.dartstrainer.theme.TileBgDark
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import java.util.Locale
 
 // ─────────────────────────────────────────────
@@ -45,11 +46,19 @@ private val AMERICAN_CRICKET_NORMS: List<CricketNorm> = listOf(
 
 @Composable
 fun CricketGameScreen(
+    repository: CricketRepository,
     initialGame: CricketGame,
-    onGameFinish: (CricketGame) -> Unit,
+    existingId: Long = 0L,
+    onGameFinish: (CricketGame, Long) -> Unit,
     onBack: () -> Unit
 ) {
+    val scope = rememberCoroutineScope()
     var game by remember { mutableStateOf(initialGame) }
+
+    // id сохранённой незавершённой партии.
+    // 0 = партия ещё не сохранена (только началась или уже была завершена).
+    var currentId by remember { mutableStateOf(existingId) }
+
     var showWinDialog by remember { mutableStateOf(false) }
     var showBackConfirm by remember { mutableStateOf(false) }
     var showLegWonDialog by remember { mutableStateOf(false) }
@@ -62,6 +71,16 @@ fun CricketGameScreen(
 
     fun saveHistory() { history.add(game); if (history.size > 300) history.removeAt(0) }
     fun undo() { if (history.isNotEmpty()) game = history.removeAt(history.lastIndex) }
+
+    // ─────────────────────────────────────────
+    // АВТОСОХРАНЕНИЕ.
+    // Срабатывает при каждом изменении game, если партия ещё не завершена.
+    // ─────────────────────────────────────────
+    LaunchedEffect(game) {
+        if (!game.isFinished) {
+            currentId = repository.saveUnfinishedGame(game, currentId)
+        }
+    }
 
     fun applyDartsCorrection(g: CricketGame, realDarts: Int): CricketGame {
         val winnerIdx = g.lastLegWinnerPlayerIndex ?: return g
@@ -267,7 +286,10 @@ fun CricketGameScreen(
         WinDialog(
             game = game,
             onUndo = { undo(); showWinDialog = false },
-            onContinue = { showWinDialog = false; onGameFinish(game) }
+            onContinue = {
+                showWinDialog = false
+                onGameFinish(game, currentId)
+            }
         )
     }
 
@@ -275,13 +297,31 @@ fun CricketGameScreen(
         AlertDialog(
             onDismissRequest = { showBackConfirm = false },
             confirmButton = {
-                TextButton(onClick = { showBackConfirm = false; onBack() }) { Text("ДА", color = ErrorColor) }
+                TextButton(onClick = {
+                    showBackConfirm = false
+                    onBack()
+                }) { Text("Продолжить позже", color = Accent) }
             },
             dismissButton = {
-                TextButton(onClick = { showBackConfirm = false }) { Text("НЕТ", color = Accent) }
+                TextButton(onClick = {
+                    showBackConfirm = false
+                    // Удаляем сохранённую незавершённую партию и выходим
+                    scope.launch {
+                        if (currentId > 0L) repository.deleteGame(currentId)
+                        onBack()
+                    }
+                }) { Text("Удалить партию", color = ErrorColor) }
             },
-            title = { Text("Выйти из игры?", color = Color.White) },
-            text = { Text("Прогресс не сохранится.", color = Color.White) }
+            title = { Text("Прервать игру?", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold) },
+            text = {
+                Text(
+                    "Партия автоматически сохраняется. Ты можешь вернуться к ней позже " +
+                    "из статистики — она будет отмечена красным.\n\n" +
+                    "Либо удалить её навсегда.",
+                    color = Color.White,
+                    fontSize = 14.sp
+                )
+            }
         )
     }
 }
@@ -628,10 +668,8 @@ private fun WinDialog(game: CricketGame, onUndo: () -> Unit, onContinue: () -> U
                     Spacer(Modifier.height(6.dp))
 
                     val darts = teamDarts
-                    // Ищем лучший подходящий (первый, где darts <= maxDarts)
                     val achievedIdx = AMERICAN_CRICKET_NORMS.indexOfFirst { darts <= it.maxDarts }
                     val achieved = if (achievedIdx >= 0) AMERICAN_CRICKET_NORMS[achievedIdx] else null
-                    // Следующий (более высокий) — на один индекс раньше
                     val next = if (achievedIdx > 0) AMERICAN_CRICKET_NORMS[achievedIdx - 1] else null
 
                     if (achieved != null) {
