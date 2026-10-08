@@ -24,6 +24,7 @@ import com.lodkin.dartstrainer.data.aroundclock.AroundClockDatabase
 import com.lodkin.dartstrainer.data.aroundclock.AroundClockRepository
 import com.lodkin.dartstrainer.data.biground.BigRoundDatabase
 import com.lodkin.dartstrainer.data.biground.BigRoundRepository
+import com.lodkin.dartstrainer.data.cricket.CricketGameEntity
 import com.lodkin.dartstrainer.data.cricket.CricketRepository
 import com.lodkin.dartstrainer.data.game501.Game501Database
 import com.lodkin.dartstrainer.data.game501.Game501Entity
@@ -54,6 +55,7 @@ fun StatsMenuScreen(
     cricketRepository: CricketRepository,
     reloadKey: Int = 0,
     onResumeGame501: (Game501Entity) -> Unit = {},
+    onResumeCricket: (CricketGameEntity) -> Unit = {},
     onCricket: () -> Unit,
     on501: () -> Unit,
     onSector: () -> Unit,
@@ -89,17 +91,19 @@ fun StatsMenuScreen(
     var bestScoreSetScore by remember { mutableStateOf<String?>(null) }
     var bestAroundClock by remember { mutableStateOf<String?>(null) }
 
-    // Незавершённые партии 501
+    // Незавершённые партии
     var unfinished501 by remember { mutableStateOf<List<Game501Entity>>(emptyList()) }
+    var unfinishedCricket by remember { mutableStateOf<List<CricketGameEntity>>(emptyList()) }
 
     // Диалог выбора действия с незавершённой партией
-    var showUnfinishedDialog by remember { mutableStateOf(false) }
+    var showUnfinishedDialog501 by remember { mutableStateOf(false) }
+    var showUnfinishedDialogCricket by remember { mutableStateOf(false) }
 
     // Локальный счётчик — чтобы перечитать данные после удаления
     var localReloadKey by remember { mutableStateOf(0) }
 
     LaunchedEffect(reloadKey, localReloadKey) {
-        // ── 501: средний PPR за всё время ──
+        // ── 501: средний PPR ──
         val games501 = game501Repo.getAllGames()
         var pprSum = 0.0
         var pprCount = 0
@@ -119,15 +123,15 @@ fun StatsMenuScreen(
         }
         avg501Ppr = if (pprCount > 0) "%.2f".format(Locale.US, pprSum / pprCount) else "—"
 
-        // Незавершённые партии 501
         unfinished501 = games501.filter { !it.isFinished }
             .sortedByDescending { it.lastUpdateMillis }
 
         // ── Крикет: средний MPR ──
-        val gamesCricket = cricketRepository.getAllGames()
+        val gamesCricket = cricketRepository.getAllGamesIncludingUnfinished()
         var mprSum = 0.0
         var mprCount = 0
         for (g in gamesCricket) {
+            if (!g.isFinished) continue
             val bots = parseStringList(g.playerIsBot)
             val names = parseStringList(g.playerNames)
             val mprList = parseDoubleList(g.mpr)
@@ -140,6 +144,9 @@ fun StatsMenuScreen(
             }
         }
         avgCricketMpr = if (mprCount > 0) "%.2f".format(Locale.US, mprSum / mprCount) else "—"
+
+        unfinishedCricket = gamesCricket.filter { !it.isFinished }
+            .sortedByDescending { it.lastUpdateMillis }
 
         val sectorGames = sectorRepo.getAllGames()
         val bestSector = sectorGames.maxOfOrNull { it.totalScore }
@@ -200,16 +207,16 @@ fun StatsMenuScreen(
                 metricLabel = "Средний PPR",
                 badge = unfinished501.size,
                 onClick = on501,
-                onBadgeClick = { showUnfinishedDialog = true },
+                onBadgeClick = { showUnfinishedDialog501 = true },
                 modifier = Modifier.weight(1f).fillMaxHeight()
             )
             StatsCard(
                 title = "Крикет",
                 metric = avgCricketMpr ?: "...",
                 metricLabel = "Средний MPR",
-                badge = 0,
+                badge = unfinishedCricket.size,
                 onClick = onCricket,
-                onBadgeClick = {},
+                onBadgeClick = { showUnfinishedDialogCricket = true },
                 modifier = Modifier.weight(1f).fillMaxHeight()
             )
         }
@@ -266,11 +273,11 @@ fun StatsMenuScreen(
     }
 
     // ── Диалог незавершённых партий 501 ──
-    if (showUnfinishedDialog) {
+    if (showUnfinishedDialog501) {
         UnfinishedDialog501(
             games = unfinished501,
             onResume = { entity ->
-                showUnfinishedDialog = false
+                showUnfinishedDialog501 = false
                 onResumeGame501(entity)
             },
             onDelete = { entity ->
@@ -279,7 +286,25 @@ fun StatsMenuScreen(
                     localReloadKey++
                 }
             },
-            onDismiss = { showUnfinishedDialog = false }
+            onDismiss = { showUnfinishedDialog501 = false }
+        )
+    }
+
+    // ── Диалог незавершённых партий Крикета ──
+    if (showUnfinishedDialogCricket) {
+        UnfinishedDialogCricket(
+            games = unfinishedCricket,
+            onResume = { entity ->
+                showUnfinishedDialogCricket = false
+                onResumeCricket(entity)
+            },
+            onDelete = { entity ->
+                scope.launch {
+                    cricketRepository.deleteGame(entity.id)
+                    localReloadKey++
+                }
+            },
+            onDismiss = { showUnfinishedDialogCricket = false }
         )
     }
 }
@@ -298,7 +323,6 @@ private fun StatsCard(
     modifier: Modifier = Modifier
 ) {
     Box(modifier = modifier) {
-        // Сама карточка
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -334,7 +358,6 @@ private fun StatsCard(
             )
         }
 
-        // Значок в правом верхнем углу
         if (badge > 0) {
             Box(
                 modifier = Modifier
@@ -375,7 +398,7 @@ private fun UnfinishedDialog501(
         title = {
             Column {
                 Text(
-                    "Незавершённая партия",
+                    "Незавершённые партии 501",
                     color = Color.White,
                     fontSize = 20.sp,
                     fontWeight = FontWeight.Bold
@@ -467,6 +490,160 @@ private fun UnfinishedCard501(
                     append("   ·   очков: ")
                     append(scores.joinToString(" / "))
                 }
+            },
+            color = Color.White.copy(alpha = 0.7f),
+            fontSize = 11.sp
+        )
+        Spacer(Modifier.height(10.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Accent)
+                    .clickable { onResume() }
+                    .padding(vertical = 10.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    "Продолжить",
+                    color = Color(0xFF121212),
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(TileBgDark)
+                    .clickable { onDelete() }
+                    .padding(vertical = 10.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    "Удалить",
+                    color = ErrorColor,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        }
+    }
+}
+
+// ─────────────────────────────────────────────
+// Диалог незавершённых партий Крикета
+// ─────────────────────────────────────────────
+@Composable
+private fun UnfinishedDialogCricket(
+    games: List<CricketGameEntity>,
+    onResume: (CricketGameEntity) -> Unit,
+    onDelete: (CricketGameEntity) -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("Отложить", color = Accent) }
+        },
+        title = {
+            Column {
+                Text(
+                    "Незавершённые партии в крикет",
+                    color = Color.White,
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    if (games.size == 1) "Можно продолжить или удалить."
+                    else "Найдено ${games.size} партий.",
+                    color = Color.White.copy(alpha = 0.6f),
+                    fontSize = 12.sp
+                )
+            }
+        },
+        text = {
+            if (games.isEmpty()) {
+                Text(
+                    "Пока нет незавершённых партий.",
+                    color = Color.White.copy(alpha = 0.7f),
+                    fontSize = 14.sp
+                )
+            } else {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 420.dp)
+                        .verticalScroll(rememberScrollState())
+                ) {
+                    games.forEach { entity ->
+                        UnfinishedCardCricket(
+                            entity = entity,
+                            onResume = { onResume(entity) },
+                            onDelete = { onDelete(entity) }
+                        )
+                        Spacer(Modifier.height(8.dp))
+                    }
+                }
+            }
+        }
+    )
+}
+
+@Composable
+private fun UnfinishedCardCricket(
+    entity: CricketGameEntity,
+    onResume: () -> Unit,
+    onDelete: () -> Unit
+) {
+    val names = entity.playerNames.split("|")
+    val mprs = entity.mpr.split("|")
+    val dateStr = formatDate(entity.lastUpdateMillis.takeIf { it > 0 } ?: entity.dateMillis)
+    val mode = if (entity.cricketType == "AMERICAN") "Американский" else "Без набора"
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(Color(0xFF3A1A1A))
+            .padding(12.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                "⏸ НЕЗАВЕРШЕНА",
+                color = ErrorColor,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 2.sp,
+                modifier = Modifier.weight(1f)
+            )
+            Text(
+                dateStr,
+                color = Color.White.copy(alpha = 0.6f),
+                fontSize = 11.sp
+            )
+        }
+        Spacer(Modifier.height(6.dp))
+        Text(
+            names.joinToString("  ·  "),
+            color = Color.White,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Medium
+        )
+        Spacer(Modifier.height(2.dp))
+        Text(
+            buildString {
+                append(mode)
+                append("   ·   MPR: ")
+                append(mprs.joinToString(" / ") { "%.2f".format(Locale.US, it.toDoubleOrNull() ?: 0.0) })
             },
             color = Color.White.copy(alpha = 0.7f),
             fontSize = 11.sp
