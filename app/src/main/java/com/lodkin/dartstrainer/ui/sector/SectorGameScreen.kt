@@ -30,8 +30,6 @@ import kotlinx.coroutines.launch
 private val PaleYellow = Color(0xFFFFE082)
 private val PaleYellowText = Color(0xFF3E2723)
 
-// Нормативы для «Сектор 20» (официальная таблица).
-// Порядок — от низшего к высшему.
 private val SECTOR_20_NORMS: List<Pair<String, Int>> = listOf(
     "II юношеский" to 360,
     "I юношеский" to 400,
@@ -117,7 +115,7 @@ fun SectorGameScreen(
             modifier = Modifier
                 .fillMaxWidth()
                 .background(Color(0xFF1A2332))
-                .padding(horizontal = 12.dp, vertical = 10.dp),
+                .padding(horizontal = 12.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box(
@@ -145,12 +143,12 @@ fun SectorGameScreen(
             )
         }
 
-        // ── Счёт ──
+        // ── Счёт (увеличен ×2) ──
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .background(Color(0xFF16202C))
-                .padding(vertical = 14.dp),
+                .padding(vertical = 4.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
@@ -163,13 +161,14 @@ fun SectorGameScreen(
             Text(
                 "$totalScore",
                 color = GoldAccent,
-                fontSize = 56.sp,
-                fontWeight = FontWeight.Bold
+                fontSize = 112.sp,
+                fontWeight = FontWeight.Bold,
+                lineHeight = 118.sp
             )
             Text(
                 "попаданий: $totalHits",
                 color = Color.White.copy(alpha = 0.6f),
-                fontSize = 13.sp
+                fontSize = 12.sp
             )
         }
 
@@ -177,8 +176,8 @@ fun SectorGameScreen(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 10.dp)
-                .height(88.dp)
+                .padding(horizontal = 12.dp, vertical = 6.dp)
+                .height(70.dp)
                 .clip(RoundedCornerShape(12.dp))
                 .background(TileBgDark)
                 .padding(horizontal = 16.dp),
@@ -203,7 +202,7 @@ fun SectorGameScreen(
                         fontSize = 10.sp
                     )
                     if (autoOkActive && isInputValid(inputText)) {
-                        Spacer(Modifier.height(4.dp))
+                        Spacer(Modifier.height(2.dp))
                         Text(
                             "авто-OK через $AUTO_OK_SECONDS сек",
                             color = Accent.copy(alpha = 0.7f),
@@ -215,7 +214,7 @@ fun SectorGameScreen(
                 Text(
                     if (inputText.isEmpty()) "—" else inputText,
                     color = if (inputText.isEmpty()) Color.White.copy(alpha = 0.3f) else GoldAccent,
-                    fontSize = 44.sp,
+                    fontSize = 40.sp,
                     fontWeight = FontWeight.Bold
                 )
             }
@@ -231,29 +230,29 @@ fun SectorGameScreen(
             val keyboardEnabled = !isFinished
             val highDigitsEnabled = keyboardEnabled && !isBull
 
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 DigitKey("1", keyboardEnabled) { inputText = appendDigit(inputText, "1") }
                 DigitKey("2", keyboardEnabled) { inputText = appendDigit(inputText, "2") }
                 DigitKey("3", keyboardEnabled) { inputText = appendDigit(inputText, "3") }
             }
-            Spacer(Modifier.height(8.dp))
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Spacer(Modifier.height(6.dp))
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 DigitKey("4", keyboardEnabled) { inputText = appendDigit(inputText, "4") }
                 DigitKey("5", keyboardEnabled) { inputText = appendDigit(inputText, "5") }
                 DigitKey("6", keyboardEnabled) { inputText = appendDigit(inputText, "6") }
             }
-            Spacer(Modifier.height(8.dp))
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Spacer(Modifier.height(6.dp))
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 DigitKey("7", highDigitsEnabled) { inputText = appendDigit(inputText, "7") }
                 DigitKey("8", highDigitsEnabled) { inputText = appendDigit(inputText, "8") }
                 DigitKey("9", highDigitsEnabled) { inputText = appendDigit(inputText, "9") }
             }
-            Spacer(Modifier.height(8.dp))
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Spacer(Modifier.height(6.dp))
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 Box(
                     modifier = Modifier
                         .weight(1f)
-                        .height(68.dp)
+                        .height(58.dp)
                         .clip(RoundedCornerShape(10.dp))
                         .background(TileBgDark)
                         .clickable(enabled = keyboardEnabled && inputText.isNotEmpty()) {
@@ -264,7 +263,7 @@ fun SectorGameScreen(
                     Text(
                         "⌫",
                         color = if (inputText.isNotEmpty()) Color.White else Color.White.copy(alpha = 0.3f),
-                        fontSize = 24.sp,
+                        fontSize = 22.sp,
                         fontWeight = FontWeight.Bold
                     )
                 }
@@ -275,7 +274,7 @@ fun SectorGameScreen(
                 Box(
                     modifier = Modifier
                         .weight(1f)
-                        .height(68.dp)
+                        .height(58.dp)
                         .clip(RoundedCornerShape(10.dp))
                         .background(if (okEnabled) Accent else Accent.copy(alpha = 0.35f))
                         .clickable(enabled = okEnabled) { submitApproach() },
@@ -290,12 +289,12 @@ fun SectorGameScreen(
                 }
             }
 
-            Spacer(Modifier.height(10.dp))
+            Spacer(Modifier.height(8.dp))
 
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(52.dp)
+                    .height(46.dp)
                     .clip(RoundedCornerShape(10.dp))
                     .background(if (approaches.isNotEmpty()) PaleYellow else PaleYellow.copy(alpha = 0.35f))
                     .clickable(enabled = approaches.isNotEmpty() && !showFinishDialog) { undoApproach() },
@@ -309,12 +308,12 @@ fun SectorGameScreen(
                 )
             }
 
-            Spacer(Modifier.height(10.dp))
+            Spacer(Modifier.height(8.dp))
 
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(46.dp)
+                    .height(42.dp)
                     .clip(RoundedCornerShape(10.dp))
                     .background(TileBgDark)
                     .padding(horizontal = 10.dp),
@@ -335,7 +334,7 @@ fun SectorGameScreen(
                         approaches.forEach { hits ->
                             Box(
                                 modifier = Modifier
-                                    .size(34.dp)
+                                    .size(32.dp)
                                     .clip(RoundedCornerShape(6.dp))
                                     .background(if (hits > 0) TileBg else Color(0xFF2A2A2A)),
                                 contentAlignment = Alignment.Center
@@ -361,7 +360,7 @@ fun SectorGameScreen(
             }
         }
 
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(8.dp))
     }
 
     if (showBackConfirm) {
@@ -531,7 +530,7 @@ private fun RowScope.DigitKey(
     Box(
         modifier = Modifier
             .weight(1f)
-            .height(68.dp)
+            .height(58.dp)
             .clip(RoundedCornerShape(10.dp))
             .background(if (enabled) TileBg else TileBg.copy(alpha = 0.4f))
             .clickable(enabled = enabled) { onClick() },
