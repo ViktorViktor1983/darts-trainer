@@ -16,11 +16,15 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.lodkin.dartstrainer.data.SettingsStorage
+import com.lodkin.dartstrainer.data.aroundclock.AroundClockDatabase
+import com.lodkin.dartstrainer.data.aroundclock.AroundClockRepository
 import com.lodkin.dartstrainer.data.biground.BigRoundDatabase
 import com.lodkin.dartstrainer.data.biground.BigRoundRepository
 import com.lodkin.dartstrainer.data.cricket.CricketRepository
 import com.lodkin.dartstrainer.data.game501.Game501Database
 import com.lodkin.dartstrainer.data.game501.Game501Repository
+import com.lodkin.dartstrainer.data.scoreset.ScoreSetDatabase
+import com.lodkin.dartstrainer.data.scoreset.ScoreSetRepository
 import com.lodkin.dartstrainer.data.sector.SectorDatabase
 import com.lodkin.dartstrainer.data.sector.SectorRepository
 import com.lodkin.dartstrainer.theme.Accent
@@ -32,10 +36,14 @@ import java.util.Locale
 /**
  * Новый экран статистики — меню с 6 карточками игр.
  * Тап по карточке открывает подробную статистику этой игры.
+ *
+ * reloadKey — увеличивается при каждом заходе на экран,
+ * чтобы метрики перечитывались из базы.
  */
 @Composable
 fun StatsMenuScreen(
     cricketRepository: CricketRepository,
+    reloadKey: Int = 0,
     onCricket: () -> Unit,
     on501: () -> Unit,
     onSector: () -> Unit,
@@ -54,14 +62,23 @@ fun StatsMenuScreen(
     val bigRoundRepo = remember {
         BigRoundRepository(BigRoundDatabase.get(context).bigRoundDao())
     }
+    val scoreSetRepo = remember {
+        ScoreSetRepository(ScoreSetDatabase.get(context).scoreSetDao())
+    }
+    val aroundClockRepo = remember {
+        AroundClockRepository(AroundClockDatabase.get(context).aroundClockDao())
+    }
     val ownerName = remember { SettingsStorage.getPlayerName(context).trim() }
 
     var avg501Ppr by remember { mutableStateOf<String?>(null) }
     var avgCricketMpr by remember { mutableStateOf<String?>(null) }
     var bestSectorScore by remember { mutableStateOf<String?>(null) }
     var bestBigRoundScore by remember { mutableStateOf<String?>(null) }
+    var bestScoreSetScore by remember { mutableStateOf<String?>(null) }
+    var bestAroundClock by remember { mutableStateOf<String?>(null) }
 
-    LaunchedEffect(Unit) {
+    // Ключ reloadKey меняется при каждом заходе — метрики перечитываются
+    LaunchedEffect(reloadKey) {
         // ── 501: средний PPR за всё время ──
         val games501 = game501Repo.getAllGames()
         var pprSum = 0.0
@@ -99,15 +116,26 @@ fun StatsMenuScreen(
         }
         avgCricketMpr = if (mprCount > 0) "%.2f".format(Locale.US, mprSum / mprCount) else "—"
 
-        // ── Сектор: лучший результат ──
+        // ── Сектор: лучший результат (макс очков) ──
         val sectorGames = sectorRepo.getAllGames()
         val bestSector = sectorGames.maxOfOrNull { it.totalScore }
         bestSectorScore = if (bestSector != null && bestSector > 0) bestSector.toString() else "—"
 
-        // ── Большой раунд: лучший результат ──
+        // ── Большой раунд: лучший результат (макс очков) ──
         val bigRoundGames = bigRoundRepo.getAllGames()
         val bestBig = bigRoundGames.maxOfOrNull { it.totalScore }
         bestBigRoundScore = if (bestBig != null && bestBig > 0) bestBig.toString() else "—"
+
+        // ── Набор очков: лучший результат (макс очков) ──
+        val scoreSetGames = scoreSetRepo.getAllGames()
+        val bestScoreSet = scoreSetGames.maxOfOrNull { it.totalScore }
+        bestScoreSetScore = if (bestScoreSet != null && bestScoreSet > 0) bestScoreSet.toString() else "—"
+
+        // ── Кругосветка: лучший результат (мин дротиков среди завершённых) ──
+        val aroundGames = aroundClockRepo.getAllGames()
+        val completedGames = aroundGames.filter { it.completed }
+        val best = completedGames.minOfOrNull { it.totalDarts }
+        bestAroundClock = if (best != null && best > 0) best.toString() else "—"
     }
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
@@ -189,14 +217,14 @@ fun StatsMenuScreen(
         ) {
             StatsCard(
                 title = "Набор очков",
-                metric = "—",
+                metric = bestScoreSetScore ?: "...",
                 metricLabel = "Лучший результат",
                 onClick = onScoreSet,
                 modifier = Modifier.weight(1f).fillMaxHeight()
             )
             StatsCard(
                 title = "Кругосветка",
-                metric = "—",
+                metric = bestAroundClock ?: "...",
                 metricLabel = "Лучший результат",
                 onClick = onAroundClock,
                 modifier = Modifier.weight(1f).fillMaxHeight()
