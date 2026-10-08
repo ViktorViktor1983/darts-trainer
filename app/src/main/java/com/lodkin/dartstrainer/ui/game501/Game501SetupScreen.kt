@@ -24,6 +24,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.lodkin.dartstrainer.data.cricket.CRICKET_BOTS
@@ -95,7 +96,6 @@ fun Game501SetupScreen(
     var testResults by remember { mutableStateOf<List<Game501Simulator.SimResult>>(emptyList()) }
     var showTestResult by remember { mutableStateOf(false) }
 
-    // ── Мой средний PPR из статистики ──
     val game501Repo = remember { Game501Repository(Game501Database.get(context).game501Dao()) }
     var myAvgPpr by remember { mutableStateOf<String?>(null) }
 
@@ -119,11 +119,9 @@ fun Game501SetupScreen(
         myAvgPpr = if (count > 0) "%.1f".format(Locale.US, sum / count) else null
     }
 
-    // Плашка: для бота — его PPR-диапазон из метки, для меня — мой средний PPR
     fun plateFor(slot: Slot501): String? {
         return when {
             slot.isBot -> {
-                // pprLabel = "ср. 52–55 · удв. 17–20%" → берём часть до "·"
                 val range = slot.bot.pprLabel.substringBefore("·").trim()
                 if (range.isBlank()) null else range
             }
@@ -285,19 +283,27 @@ fun Game501SetupScreen(
                         uncheckedThumbColor = Color.White, uncheckedTrackColor = TileBg))
             }
 
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(20.dp))
 
-            Text("ИГРА", color = Accent, fontSize = 13.sp, fontWeight = FontWeight.Medium,
-                letterSpacing = 3.sp, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
-            Spacer(Modifier.height(10.dp))
-            GameTypeDropdown(selected = gameType, onSelect = { changeGameType(it) })
-
-            Spacer(Modifier.height(16.dp))
-
-            Text("ЗАКРЫТИЕ", color = Accent, fontSize = 13.sp, fontWeight = FontWeight.Medium,
-                letterSpacing = 3.sp, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
-            Spacer(Modifier.height(10.dp))
-            OutModeDropdown(selected = outMode, onSelect = { changeOutMode(it) })
+            // ── ИГРА и ЗАКРЫТИЕ в одну строку ──
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.Top
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("ИГРА", color = Accent, fontSize = 13.sp, fontWeight = FontWeight.Medium,
+                        letterSpacing = 3.sp, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
+                    Spacer(Modifier.height(8.dp))
+                    GameTypeDropdown(selected = gameType, onSelect = { changeGameType(it) })
+                }
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("ЗАКРЫТИЕ", color = Accent, fontSize = 13.sp, fontWeight = FontWeight.Medium,
+                        letterSpacing = 3.sp, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
+                    Spacer(Modifier.height(8.dp))
+                    OutModeDropdown(selected = outMode, onSelect = { changeOutMode(it) })
+                }
+            }
 
             Spacer(Modifier.height(24.dp))
 
@@ -610,14 +616,16 @@ private fun GameTypeDropdown(selected: GameType, onSelect: (GameType) -> Unit) {
     var expanded by remember { mutableStateOf(false) }
     Box(modifier = Modifier.fillMaxWidth()) {
         Row(
-            modifier = Modifier.fillMaxWidth().height(56.dp).clip(RoundedCornerShape(12.dp))
+            modifier = Modifier.fillMaxWidth().height(48.dp).clip(RoundedCornerShape(12.dp))
                 .background(TileBg)
-                .clickable { expanded = true }.padding(horizontal = 18.dp),
+                .clickable { expanded = true }.padding(horizontal = 10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(selected.label, color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold,
-                modifier = Modifier.weight(1f))
-            Text("▼", color = Accent, fontSize = 12.sp)
+            Text(selected.label, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold,
+                modifier = Modifier.weight(1f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis)
+            Text("▼", color = Accent, fontSize = 10.sp)
         }
         DropdownMenu(
             expanded = expanded,
@@ -629,7 +637,7 @@ private fun GameTypeDropdown(selected: GameType, onSelect: (GameType) -> Unit) {
                     text = {
                         Text(type.label,
                             color = if (type == selected) Accent else Color.White,
-                            fontSize = 16.sp,
+                            fontSize = 15.sp,
                             fontWeight = if (type == selected) FontWeight.Bold else FontWeight.Normal)
                     },
                     onClick = { onSelect(type); expanded = false }
@@ -644,14 +652,16 @@ private fun OutModeDropdown(selected: OutMode, onSelect: (OutMode) -> Unit) {
     var expanded by remember { mutableStateOf(false) }
     Box(modifier = Modifier.fillMaxWidth()) {
         Row(
-            modifier = Modifier.fillMaxWidth().height(56.dp).clip(RoundedCornerShape(12.dp))
+            modifier = Modifier.fillMaxWidth().height(48.dp).clip(RoundedCornerShape(12.dp))
                 .background(TileBg)
-                .clickable { expanded = true }.padding(horizontal = 18.dp),
+                .clickable { expanded = true }.padding(horizontal = 10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(selected.displayName(), color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Medium,
-                modifier = Modifier.weight(1f))
-            Text("▼", color = Accent, fontSize = 12.sp)
+            Text(selected.displayName(), color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Medium,
+                modifier = Modifier.weight(1f),
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis)
+            Text("▼", color = Accent, fontSize = 10.sp)
         }
         DropdownMenu(
             expanded = expanded,
@@ -663,7 +673,7 @@ private fun OutModeDropdown(selected: OutMode, onSelect: (OutMode) -> Unit) {
                     text = {
                         Text(mode.displayName(),
                             color = if (mode == selected) Accent else Color.White,
-                            fontSize = 15.sp,
+                            fontSize = 14.sp,
                             fontWeight = if (mode == selected) FontWeight.Bold else FontWeight.Normal)
                     },
                     onClick = { onSelect(mode); expanded = false }
