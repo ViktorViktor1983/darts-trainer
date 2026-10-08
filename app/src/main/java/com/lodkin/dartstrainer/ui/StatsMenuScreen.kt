@@ -19,6 +19,8 @@ import com.lodkin.dartstrainer.data.SettingsStorage
 import com.lodkin.dartstrainer.data.cricket.CricketRepository
 import com.lodkin.dartstrainer.data.game501.Game501Database
 import com.lodkin.dartstrainer.data.game501.Game501Repository
+import com.lodkin.dartstrainer.data.sector.SectorDatabase
+import com.lodkin.dartstrainer.data.sector.SectorRepository
 import com.lodkin.dartstrainer.theme.Accent
 import com.lodkin.dartstrainer.theme.GoldAccent
 import com.lodkin.dartstrainer.theme.TileBg
@@ -44,10 +46,14 @@ fun StatsMenuScreen(
     val game501Repo = remember {
         Game501Repository(Game501Database.get(context).game501Dao())
     }
+    val sectorRepo = remember {
+        SectorRepository(SectorDatabase.get(context).sectorDao())
+    }
     val ownerName = remember { SettingsStorage.getPlayerName(context).trim() }
 
     var avg501Ppr by remember { mutableStateOf<String?>(null) }
     var avgCricketMpr by remember { mutableStateOf<String?>(null) }
+    var bestSectorScore by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(Unit) {
         // ── 501: средний PPR за всё время ──
@@ -86,6 +92,11 @@ fun StatsMenuScreen(
             }
         }
         avgCricketMpr = if (mprCount > 0) "%.2f".format(Locale.US, mprSum / mprCount) else "—"
+
+        // ── Сектор: лучший результат за всё время ──
+        val sectorGames = sectorRepo.getAllGames()
+        val best = sectorGames.maxOfOrNull { it.totalScore }
+        bestSectorScore = if (best != null && best > 0) best.toString() else "—"
     }
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
@@ -119,7 +130,6 @@ fun StatsMenuScreen(
         Spacer(Modifier.height(16.dp))
 
         // ── СЕТКА 2 x 3 ──
-        // Ряд 1
         Row(
             modifier = Modifier.fillMaxWidth().weight(1f),
             horizontalArrangement = Arrangement.spacedBy(10.dp)
@@ -141,14 +151,13 @@ fun StatsMenuScreen(
         }
         Spacer(Modifier.height(10.dp))
 
-        // Ряд 2
         Row(
             modifier = Modifier.fillMaxWidth().weight(1f),
             horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             StatsCard(
                 title = "Сектор",
-                metric = "—",
+                metric = bestSectorScore ?: "...",
                 metricLabel = "Лучший результат",
                 onClick = onSector,
                 modifier = Modifier.weight(1f).fillMaxHeight()
@@ -163,7 +172,6 @@ fun StatsMenuScreen(
         }
         Spacer(Modifier.height(10.dp))
 
-        // Ряд 3
         Row(
             modifier = Modifier.fillMaxWidth().weight(1f),
             horizontalArrangement = Arrangement.spacedBy(10.dp)
