@@ -1,278 +1,81 @@
-package com.lodkin.dartstrainer.ui
+package com.lodkin.dartstrainer.data.scoreset
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Text
-import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import com.lodkin.dartstrainer.data.SettingsStorage
-import com.lodkin.dartstrainer.data.biground.BigRoundDatabase
-import com.lodkin.dartstrainer.data.biground.BigRoundRepository
-import com.lodkin.dartstrainer.data.cricket.CricketRepository
-import com.lodkin.dartstrainer.data.game501.Game501Database
-import com.lodkin.dartstrainer.data.game501.Game501Repository
-import com.lodkin.dartstrainer.data.scoreset.ScoreSetDatabase
-import com.lodkin.dartstrainer.data.scoreset.ScoreSetRepository
-import com.lodkin.dartstrainer.data.sector.SectorDatabase
-import com.lodkin.dartstrainer.data.sector.SectorRepository
-import com.lodkin.dartstrainer.theme.Accent
-import com.lodkin.dartstrainer.theme.GoldAccent
-import com.lodkin.dartstrainer.theme.TileBg
-import com.lodkin.dartstrainer.theme.TileBgDark
-import java.util.Locale
+import android.content.Context
+import androidx.room.Dao
+import androidx.room.Database
+import androidx.room.Entity
+import androidx.room.Insert
+import androidx.room.PrimaryKey
+import androidx.room.Query
+import androidx.room.Room
+import androidx.room.RoomDatabase
 
-/**
- * Новый экран статистики — меню с 6 карточками игр.
- * Тап по карточке открывает подробную статистику этой игры.
- */
-@Composable
-fun StatsMenuScreen(
-    cricketRepository: CricketRepository,
-    onCricket: () -> Unit,
-    on501: () -> Unit,
-    onSector: () -> Unit,
-    onBigRound: () -> Unit,
-    onScoreSet: () -> Unit,
-    onAroundClock: () -> Unit,
-    onBack: () -> Unit
-) {
-    val context = LocalContext.current
-    val game501Repo = remember {
-        Game501Repository(Game501Database.get(context).game501Dao())
-    }
-    val sectorRepo = remember {
-        SectorRepository(SectorDatabase.get(context).sectorDao())
-    }
-    val bigRoundRepo = remember {
-        BigRoundRepository(BigRoundDatabase.get(context).bigRoundDao())
-    }
-    val scoreSetRepo = remember {
-        ScoreSetRepository(ScoreSetDatabase.get(context).scoreSetDao())
-    }
-    val ownerName = remember { SettingsStorage.getPlayerName(context).trim() }
+// Сохранённая игра «Набор очков»
+@Entity(tableName = "scoreset_games")
+data class ScoreSetGameEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val dateMillis: Long,
+    val totalScore: Int,           // итоговая сумма очков
+    // 10 значений сумм за подходы, через запятую: "85,100,60,140,..."
+    val approaches: String
+)
 
-    var avg501Ppr by remember { mutableStateOf<String?>(null) }
-    var avgCricketMpr by remember { mutableStateOf<String?>(null) }
-    var bestSectorScore by remember { mutableStateOf<String?>(null) }
-    var bestBigRoundScore by remember { mutableStateOf<String?>(null) }
-    var bestScoreSetScore by remember { mutableStateOf<String?>(null) }
+@Dao
+interface ScoreSetDao {
 
-    LaunchedEffect(Unit) {
-        // ── 501: средний PPR за всё время ──
-        val games501 = game501Repo.getAllGames()
-        var pprSum = 0.0
-        var pprCount = 0
-        for (g in games501) {
-            if (g.outModeName == "STRAIGHT_OUT") continue
-            val bots = parseStringList(g.playerIsBot)
-            val names = parseStringList(g.playerNames)
-            val pprList = parseDoubleList(g.ppr)
-            for (i in bots.indices) {
-                val name = names.getOrNull(i) ?: ""
-                if (isOwner(bots[i], name, ownerName)) {
-                    pprList.getOrNull(i)?.let { pprSum += it; pprCount++ }
-                    break
-                }
+    @Insert
+    suspend fun insertGame(game: ScoreSetGameEntity): Long
+
+    @Query("SELECT * FROM scoreset_games ORDER BY dateMillis DESC")
+    suspend fun getAllGames(): List<ScoreSetGameEntity>
+
+    @Query("DELETE FROM scoreset_games")
+    suspend fun clearAll()
+
+    @Query("SELECT COUNT(*) FROM scoreset_games")
+    suspend fun count(): Int
+}
+
+@Database(
+    entities = [ScoreSetGameEntity::class],
+    version = 1,
+    exportSchema = false
+)
+abstract class ScoreSetDatabase : RoomDatabase() {
+    abstract fun scoreSetDao(): ScoreSetDao
+
+    companion object {
+        @Volatile
+        private var INSTANCE: ScoreSetDatabase? = null
+
+        fun get(context: Context): ScoreSetDatabase =
+            INSTANCE ?: synchronized(this) {
+                INSTANCE ?: Room.databaseBuilder(
+                    context.applicationContext,
+                    ScoreSetDatabase::class.java,
+                    "scoreset.db"
+                ).fallbackToDestructiveMigration().build().also { INSTANCE = it }
             }
-        }
-        avg501Ppr = if (pprCount > 0) "%.2f".format(Locale.US, pprSum / pprCount) else "—"
-
-        // ── Крикет: средний MPR за всё время ──
-        val gamesCricket = cricketRepository.getAllGames()
-        var mprSum = 0.0
-        var mprCount = 0
-        for (g in gamesCricket) {
-            val bots = parseStringList(g.playerIsBot)
-            val names = parseStringList(g.playerNames)
-            val mprList = parseDoubleList(g.mpr)
-            for (i in bots.indices) {
-                val name = names.getOrNull(i) ?: ""
-                if (isOwner(bots[i], name, ownerName)) {
-                    mprList.getOrNull(i)?.let { mprSum += it; mprCount++ }
-                    break
-                }
-            }
-        }
-        avgCricketMpr = if (mprCount > 0) "%.2f".format(Locale.US, mprSum / mprCount) else "—"
-
-        // ── Сектор: лучший результат ──
-        val sectorGames = sectorRepo.getAllGames()
-        val bestSector = sectorGames.maxOfOrNull { it.totalScore }
-        bestSectorScore = if (bestSector != null && bestSector > 0) bestSector.toString() else "—"
-
-        // ── Большой раунд: лучший результат ──
-        val bigRoundGames = bigRoundRepo.getAllGames()
-        val bestBig = bigRoundGames.maxOfOrNull { it.totalScore }
-        bestBigRoundScore = if (bestBig != null && bestBig > 0) bestBig.toString() else "—"
-
-        // ── Набор очков: лучший результат ──
-        val scoreSetGames = scoreSetRepo.getAllGames()
-        val bestScoreSet = scoreSetGames.maxOfOrNull { it.totalScore }
-        bestScoreSetScore = if (bestScoreSet != null && bestScoreSet > 0) bestScoreSet.toString() else "—"
-    }
-
-    Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-
-        // ── ШАПКА ──
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(TileBgDark)
-                    .clickable { onBack() }
-                    .padding(horizontal = 10.dp, vertical = 8.dp)
-            ) {
-                Text("←", color = Accent, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-            }
-            Spacer(Modifier.width(12.dp))
-            Column {
-                Text(
-                    "Статистика",
-                    color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold
-                )
-                if (ownerName.isNotBlank()) {
-                    Text("игрок: $ownerName", color = Accent, fontSize = 11.sp)
-                }
-            }
-        }
-
-        Spacer(Modifier.height(16.dp))
-
-        // ── СЕТКА 2 x 3 ──
-        Row(
-            modifier = Modifier.fillMaxWidth().weight(1f),
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            StatsCard(
-                title = "501",
-                metric = avg501Ppr ?: "...",
-                metricLabel = "Средний PPR",
-                onClick = on501,
-                modifier = Modifier.weight(1f).fillMaxHeight()
-            )
-            StatsCard(
-                title = "Крикет",
-                metric = avgCricketMpr ?: "...",
-                metricLabel = "Средний MPR",
-                onClick = onCricket,
-                modifier = Modifier.weight(1f).fillMaxHeight()
-            )
-        }
-        Spacer(Modifier.height(10.dp))
-
-        Row(
-            modifier = Modifier.fillMaxWidth().weight(1f),
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            StatsCard(
-                title = "Сектор",
-                metric = bestSectorScore ?: "...",
-                metricLabel = "Лучший результат",
-                onClick = onSector,
-                modifier = Modifier.weight(1f).fillMaxHeight()
-            )
-            StatsCard(
-                title = "Большой раунд",
-                metric = bestBigRoundScore ?: "...",
-                metricLabel = "Лучший результат",
-                onClick = onBigRound,
-                modifier = Modifier.weight(1f).fillMaxHeight()
-            )
-        }
-        Spacer(Modifier.height(10.dp))
-
-        Row(
-            modifier = Modifier.fillMaxWidth().weight(1f),
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            StatsCard(
-                title = "Набор очков",
-                metric = bestScoreSetScore ?: "...",
-                metricLabel = "Лучший результат",
-                onClick = onScoreSet,
-                modifier = Modifier.weight(1f).fillMaxHeight()
-            )
-            StatsCard(
-                title = "Кругосветка",
-                metric = "—",
-                metricLabel = "Лучший результат",
-                onClick = onAroundClock,
-                modifier = Modifier.weight(1f).fillMaxHeight()
-            )
-        }
     }
 }
 
-// ─────────────────────────────────────────────
-// Карточка одной игры
-// ─────────────────────────────────────────────
-@Composable
-private fun StatsCard(
-    title: String,
-    metric: String,
-    metricLabel: String,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
+// Репозиторий
+class ScoreSetRepository(
+    private val dao: ScoreSetDao
 ) {
-    Column(
-        modifier = modifier
-            .clip(RoundedCornerShape(16.dp))
-            .background(TileBg)
-            .clickable { onClick() }
-            .padding(horizontal = 8.dp, vertical = 14.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
+    suspend fun saveGame(
+        totalScore: Int,
+        approaches: List<Int>
     ) {
-        Text(
-            title,
-            color = GoldAccent,
-            fontSize = 22.sp,
-            fontWeight = FontWeight.Bold,
-            textAlign = TextAlign.Center
+        val entity = ScoreSetGameEntity(
+            dateMillis = System.currentTimeMillis(),
+            totalScore = totalScore,
+            approaches = approaches.joinToString(",")
         )
-        Spacer(Modifier.height(14.dp))
-        Text(
-            metric,
-            color = Color.White,
-            fontSize = 24.sp,
-            fontWeight = FontWeight.Bold,
-            textAlign = TextAlign.Center
-        )
-        Spacer(Modifier.height(8.dp))
-        Text(
-            metricLabel,
-            color = Accent,
-            fontSize = 12.sp,
-            textAlign = TextAlign.Center,
-            lineHeight = 15.sp
-        )
+        dao.insertGame(entity)
     }
-}
 
-// ─────────────────────────────────────────────
-// Хелперы
-// ─────────────────────────────────────────────
-private fun parseStringList(s: String): List<String> =
-    if (s.isBlank()) emptyList() else s.split("|")
+    suspend fun getAllGames(): List<ScoreSetGameEntity> = dao.getAllGames()
 
-private fun parseDoubleList(s: String): List<Double> =
-    if (s.isBlank()) emptyList() else s.split("|").map { it.toDoubleOrNull() ?: 0.0 }
-
-private fun isOwner(isBotFlag: String, name: String, ownerName: String): Boolean {
-    if (isBotFlag != "0") return false
-    if (ownerName.isBlank()) return true
-    return name.equals(ownerName, ignoreCase = true)
+    suspend fun clearAll() = dao.clearAll()
 }
