@@ -3,8 +3,12 @@ package com.lodkin.dartstrainer.ui
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -22,28 +26,34 @@ import com.lodkin.dartstrainer.data.biground.BigRoundDatabase
 import com.lodkin.dartstrainer.data.biground.BigRoundRepository
 import com.lodkin.dartstrainer.data.cricket.CricketRepository
 import com.lodkin.dartstrainer.data.game501.Game501Database
+import com.lodkin.dartstrainer.data.game501.Game501Entity
 import com.lodkin.dartstrainer.data.game501.Game501Repository
 import com.lodkin.dartstrainer.data.scoreset.ScoreSetDatabase
 import com.lodkin.dartstrainer.data.scoreset.ScoreSetRepository
 import com.lodkin.dartstrainer.data.sector.SectorDatabase
 import com.lodkin.dartstrainer.data.sector.SectorRepository
 import com.lodkin.dartstrainer.theme.Accent
+import com.lodkin.dartstrainer.theme.ErrorColor
 import com.lodkin.dartstrainer.theme.GoldAccent
 import com.lodkin.dartstrainer.theme.TileBg
 import com.lodkin.dartstrainer.theme.TileBgDark
+import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
+import java.util.Date
 import java.util.Locale
 
 /**
  * Новый экран статистики — меню с 6 карточками игр.
  * Тап по карточке открывает подробную статистику этой игры.
  *
- * reloadKey — увеличивается при каждом заходе на экран,
- * чтобы метрики перечитывались из базы.
+ * Если у игры есть незавершённая партия, на карточке
+ * в правом верхнем углу появляется красный значок ⏸.
  */
 @Composable
 fun StatsMenuScreen(
     cricketRepository: CricketRepository,
     reloadKey: Int = 0,
+    onResumeGame501: (Game501Entity) -> Unit = {},
     onCricket: () -> Unit,
     on501: () -> Unit,
     onSector: () -> Unit,
@@ -53,6 +63,8 @@ fun StatsMenuScreen(
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+
     val game501Repo = remember {
         Game501Repository(Game501Database.get(context).game501Dao())
     }
@@ -77,13 +89,22 @@ fun StatsMenuScreen(
     var bestScoreSetScore by remember { mutableStateOf<String?>(null) }
     var bestAroundClock by remember { mutableStateOf<String?>(null) }
 
-    // Ключ reloadKey меняется при каждом заходе — метрики перечитываются
-    LaunchedEffect(reloadKey) {
+    // Незавершённые партии 501
+    var unfinished501 by remember { mutableStateOf<List<Game501Entity>>(emptyList()) }
+
+    // Диалог выбора действия с незавершённой партией
+    var showUnfinishedDialog by remember { mutableStateOf(false) }
+
+    // Локальный счётчик — чтобы перечитать данные после удаления
+    var localReloadKey by remember { mutableStateOf(0) }
+
+    LaunchedEffect(reloadKey, localReloadKey) {
         // ── 501: средний PPR за всё время ──
         val games501 = game501Repo.getAllGames()
         var pprSum = 0.0
         var pprCount = 0
         for (g in games501) {
+            if (!g.isFinished) continue
             if (g.outModeName == "STRAIGHT_OUT") continue
             val bots = parseStringList(g.playerIsBot)
             val names = parseStringList(g.playerNames)
@@ -98,7 +119,11 @@ fun StatsMenuScreen(
         }
         avg501Ppr = if (pprCount > 0) "%.2f".format(Locale.US, pprSum / pprCount) else "—"
 
-        // ── Крикет: средний MPR за всё время ──
+        // Незавершённые партии 501
+        unfinished501 = games501.filter { !it.isFinished }
+            .sortedByDescending { it.lastUpdateMillis }
+
+        // ── Крикет: средний MPR ──
         val gamesCricket = cricketRepository.getAllGames()
         var mprSum = 0.0
         var mprCount = 0
@@ -116,22 +141,18 @@ fun StatsMenuScreen(
         }
         avgCricketMpr = if (mprCount > 0) "%.2f".format(Locale.US, mprSum / mprCount) else "—"
 
-        // ── Сектор: лучший результат (макс очков) ──
         val sectorGames = sectorRepo.getAllGames()
         val bestSector = sectorGames.maxOfOrNull { it.totalScore }
         bestSectorScore = if (bestSector != null && bestSector > 0) bestSector.toString() else "—"
 
-        // ── Большой раунд: лучший результат (макс очков) ──
         val bigRoundGames = bigRoundRepo.getAllGames()
         val bestBig = bigRoundGames.maxOfOrNull { it.totalScore }
         bestBigRoundScore = if (bestBig != null && bestBig > 0) bestBig.toString() else "—"
 
-        // ── Набор очков: лучший результат (макс очков) ──
         val scoreSetGames = scoreSetRepo.getAllGames()
         val bestScoreSet = scoreSetGames.maxOfOrNull { it.totalScore }
         bestScoreSetScore = if (bestScoreSet != null && bestScoreSet > 0) bestScoreSet.toString() else "—"
 
-        // ── Кругосветка: лучший результат (мин дротиков среди завершённых) ──
         val aroundGames = aroundClockRepo.getAllGames()
         val completedGames = aroundGames.filter { it.completed }
         val best = completedGames.minOfOrNull { it.totalDarts }
@@ -177,14 +198,18 @@ fun StatsMenuScreen(
                 title = "501",
                 metric = avg501Ppr ?: "...",
                 metricLabel = "Средний PPR",
+                badge = unfinished501.size,
                 onClick = on501,
+                onBadgeClick = { showUnfinishedDialog = true },
                 modifier = Modifier.weight(1f).fillMaxHeight()
             )
             StatsCard(
                 title = "Крикет",
                 metric = avgCricketMpr ?: "...",
                 metricLabel = "Средний MPR",
+                badge = 0,
                 onClick = onCricket,
+                onBadgeClick = {},
                 modifier = Modifier.weight(1f).fillMaxHeight()
             )
         }
@@ -198,14 +223,18 @@ fun StatsMenuScreen(
                 title = "Сектор",
                 metric = bestSectorScore ?: "...",
                 metricLabel = "Лучший результат",
+                badge = 0,
                 onClick = onSector,
+                onBadgeClick = {},
                 modifier = Modifier.weight(1f).fillMaxHeight()
             )
             StatsCard(
                 title = "Большой раунд",
                 metric = bestBigRoundScore ?: "...",
                 metricLabel = "Лучший результат",
+                badge = 0,
                 onClick = onBigRound,
+                onBadgeClick = {},
                 modifier = Modifier.weight(1f).fillMaxHeight()
             )
         }
@@ -219,63 +248,267 @@ fun StatsMenuScreen(
                 title = "Набор очков",
                 metric = bestScoreSetScore ?: "...",
                 metricLabel = "Лучший результат",
+                badge = 0,
                 onClick = onScoreSet,
+                onBadgeClick = {},
                 modifier = Modifier.weight(1f).fillMaxHeight()
             )
             StatsCard(
                 title = "Кругосветка",
                 metric = bestAroundClock ?: "...",
                 metricLabel = "Лучший результат",
+                badge = 0,
                 onClick = onAroundClock,
+                onBadgeClick = {},
                 modifier = Modifier.weight(1f).fillMaxHeight()
             )
         }
     }
+
+    // ── Диалог незавершённых партий 501 ──
+    if (showUnfinishedDialog) {
+        UnfinishedDialog501(
+            games = unfinished501,
+            onResume = { entity ->
+                showUnfinishedDialog = false
+                onResumeGame501(entity)
+            },
+            onDelete = { entity ->
+                scope.launch {
+                    game501Repo.deleteGame(entity.id)
+                    localReloadKey++
+                }
+            },
+            onDismiss = { showUnfinishedDialog = false }
+        )
+    }
 }
 
 // ─────────────────────────────────────────────
-// Карточка одной игры
+// Карточка одной игры (со значком в правом верхнем углу)
 // ─────────────────────────────────────────────
 @Composable
 private fun StatsCard(
     title: String,
     metric: String,
     metricLabel: String,
+    badge: Int,
     onClick: () -> Unit,
+    onBadgeClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    Box(modifier = modifier) {
+        // Сама карточка
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .clip(RoundedCornerShape(16.dp))
+                .background(TileBg)
+                .clickable { onClick() }
+                .padding(horizontal = 8.dp, vertical = 14.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Text(
+                title,
+                color = GoldAccent,
+                fontSize = 22.sp,
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center
+            )
+            Spacer(Modifier.height(14.dp))
+            Text(
+                metric,
+                color = Color.White,
+                fontSize = 24.sp,
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center
+            )
+            Spacer(Modifier.height(8.dp))
+            Text(
+                metricLabel,
+                color = Accent,
+                fontSize = 12.sp,
+                textAlign = TextAlign.Center,
+                lineHeight = 15.sp
+            )
+        }
+
+        // Значок в правом верхнем углу
+        if (badge > 0) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(6.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(ErrorColor)
+                    .clickable { onBadgeClick() }
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    "⏸ $badge",
+                    color = Color.White,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        }
+    }
+}
+
+// ─────────────────────────────────────────────
+// Диалог незавершённых партий 501
+// ─────────────────────────────────────────────
+@Composable
+private fun UnfinishedDialog501(
+    games: List<Game501Entity>,
+    onResume: (Game501Entity) -> Unit,
+    onDelete: (Game501Entity) -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("Отложить", color = Accent) }
+        },
+        title = {
+            Column {
+                Text(
+                    "Незавершённая партия",
+                    color = Color.White,
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    if (games.size == 1) "Можно продолжить или удалить."
+                    else "Найдено ${games.size} партий.",
+                    color = Color.White.copy(alpha = 0.6f),
+                    fontSize = 12.sp
+                )
+            }
+        },
+        text = {
+            if (games.isEmpty()) {
+                Text(
+                    "Пока нет незавершённых партий.",
+                    color = Color.White.copy(alpha = 0.7f),
+                    fontSize = 14.sp
+                )
+            } else {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 420.dp)
+                        .verticalScroll(rememberScrollState())
+                ) {
+                    games.forEach { entity ->
+                        UnfinishedCard501(
+                            entity = entity,
+                            onResume = { onResume(entity) },
+                            onDelete = { onDelete(entity) }
+                        )
+                        Spacer(Modifier.height(8.dp))
+                    }
+                }
+            }
+        }
+    )
+}
+
+@Composable
+private fun UnfinishedCard501(
+    entity: Game501Entity,
+    onResume: () -> Unit,
+    onDelete: () -> Unit
+) {
+    val names = entity.playerNames.split("|")
+    val scores = entity.matchScore.split("|")
+    val dateStr = formatDate(entity.lastUpdateMillis.takeIf { it > 0 } ?: entity.dateMillis)
+
     Column(
-        modifier = modifier
-            .clip(RoundedCornerShape(16.dp))
-            .background(TileBg)
-            .clickable { onClick() }
-            .padding(horizontal = 8.dp, vertical = 14.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(Color(0xFF3A1A1A))
+            .padding(12.dp)
     ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                "⏸ НЕЗАВЕРШЕНА",
+                color = ErrorColor,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 2.sp,
+                modifier = Modifier.weight(1f)
+            )
+            Text(
+                dateStr,
+                color = Color.White.copy(alpha = 0.6f),
+                fontSize = 11.sp
+            )
+        }
+        Spacer(Modifier.height(6.dp))
         Text(
-            title,
-            color = GoldAccent,
-            fontSize = 22.sp,
-            fontWeight = FontWeight.Bold,
-            textAlign = TextAlign.Center
-        )
-        Spacer(Modifier.height(14.dp))
-        Text(
-            metric,
+            names.joinToString("  ·  "),
             color = Color.White,
-            fontSize = 24.sp,
-            fontWeight = FontWeight.Bold,
-            textAlign = TextAlign.Center
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Medium
         )
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(2.dp))
         Text(
-            metricLabel,
-            color = Accent,
-            fontSize = 12.sp,
-            textAlign = TextAlign.Center,
-            lineHeight = 15.sp
+            buildString {
+                append("Легов: ${entity.legsPlayed}")
+                if (scores.size == names.size && scores.isNotEmpty()) {
+                    append("   ·   очков: ")
+                    append(scores.joinToString(" / "))
+                }
+            },
+            color = Color.White.copy(alpha = 0.7f),
+            fontSize = 11.sp
         )
+        Spacer(Modifier.height(10.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Accent)
+                    .clickable { onResume() }
+                    .padding(vertical = 10.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    "Продолжить",
+                    color = Color(0xFF121212),
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(TileBgDark)
+                    .clickable { onDelete() }
+                    .padding(vertical = 10.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    "Удалить",
+                    color = ErrorColor,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        }
     }
 }
 
@@ -292,4 +525,9 @@ private fun isOwner(isBotFlag: String, name: String, ownerName: String): Boolean
     if (isBotFlag != "0") return false
     if (ownerName.isBlank()) return true
     return name.equals(ownerName, ignoreCase = true)
+}
+
+private fun formatDate(millis: Long): String {
+    val fmt = SimpleDateFormat("dd.MM HH:mm", Locale.US)
+    return fmt.format(Date(millis))
 }
