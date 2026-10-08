@@ -56,7 +56,6 @@ data class Slot501(
     val bot: CricketBot
 )
 
-// Человекочитаемое имя режима закрытия
 private fun OutMode.displayName(): String = when (this) {
     OutMode.DOUBLE_IN_OUT -> "Double In / Double Out"
     OutMode.DOUBLE_OUT -> "Double Out"
@@ -89,7 +88,6 @@ fun Game501SetupScreen(
 
     var slots by remember { mutableStateOf(loadSlots(context, playerName)) }
 
-    // Тестовый режим (мультивыбор ботов)
     var showTestDialog by remember { mutableStateOf(false) }
     var testBotLevels by remember { mutableStateOf(setOf(7)) }
     var testLegs by remember { mutableStateOf(200) }
@@ -126,7 +124,6 @@ fun Game501SetupScreen(
     val allHumans = activeSlots.all { !it.isBot }
     val hasHuman = activeSlots.any { !it.isBot }
 
-    // Показывать ли PPR в слоте 1 (только если там я — человек)
     val showMyPprInSlot1 = !slots[0].isBot && slots[0].name.equals(playerName, ignoreCase = true)
 
     fun changeGameType(newType: GameType) {
@@ -707,7 +704,6 @@ private fun loadSlots(context: android.content.Context, playerName: String): Lis
     }
 }
 
-// Бросок в Bull для розыгрыша первого хода.
 private fun generateBotBullResult(bot: CricketBot): Int {
     val lvl = bot.id.coerceIn(1, 16)
     val pRed = (0.05 + (lvl - 1) * 0.027) * 0.9
@@ -781,16 +777,26 @@ private fun PlayerInnerSlot501(
     var showAddDialog by remember { mutableStateOf(false) }
     var newNameInput by remember { mutableStateOf("") }
     Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Row(
+        // Плашка с номером
+        Box(
             modifier = Modifier
+                .size(22.dp)
                 .clip(RoundedCornerShape(11.dp))
-                .background(TileBg)
-                .padding(horizontal = 6.dp, vertical = 3.dp),
-            verticalAlignment = Alignment.CenterVertically
+                .background(TileBg),
+            contentAlignment = Alignment.Center
         ) {
             Text(numberLabel, color = Accent, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-            if (myAvgPpr != null) {
-                Text(" · $myAvgPpr", color = GoldAccent, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+        }
+        // Отдельная плашка с PPR (если есть)
+        if (myAvgPpr != null) {
+            Spacer(Modifier.width(4.dp))
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(11.dp))
+                    .background(TileBg)
+                    .padding(horizontal = 6.dp, vertical = 3.dp)
+            ) {
+                Text("ср. $myAvgPpr", color = GoldAccent, fontSize = 10.sp, fontWeight = FontWeight.Bold)
             }
         }
         Spacer(Modifier.width(6.dp))
@@ -858,16 +864,26 @@ private fun PlayerCell501(
     var newNameInput by remember { mutableStateOf("") }
     Column(modifier = modifier.clip(RoundedCornerShape(12.dp)).background(TileBgDark).padding(8.dp)) {
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Row(
+            // Плашка с номером
+            Box(
                 modifier = Modifier
+                    .size(24.dp)
                     .clip(RoundedCornerShape(12.dp))
-                    .background(TileBg)
-                    .padding(horizontal = 8.dp, vertical = 4.dp),
-                verticalAlignment = Alignment.CenterVertically
+                    .background(TileBg),
+                contentAlignment = Alignment.Center
             ) {
                 Text("$number", color = Accent, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                if (myAvgPpr != null) {
-                    Text(" · $myAvgPpr", color = GoldAccent, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+            }
+            // Отдельная плашка с PPR (если есть)
+            if (myAvgPpr != null) {
+                Spacer(Modifier.width(4.dp))
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(TileBg)
+                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                ) {
+                    Text("ср. $myAvgPpr", color = GoldAccent, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                 }
             }
         }
