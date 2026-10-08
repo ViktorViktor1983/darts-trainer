@@ -80,7 +80,6 @@ fun CricketSetupScreen(
         mutableStateOf(loadSlots(context, playerName))
     }
 
-    // ── Мой средний MPR из статистики ──
     val cricketRepo = remember { CricketRepository(CricketDatabase.get(context).cricketDao()) }
     var myAvgMpr by remember { mutableStateOf<String?>(null) }
 
@@ -103,7 +102,6 @@ fun CricketSetupScreen(
         myAvgMpr = if (count > 0) "%.2f".format(Locale.US, sum / count) else null
     }
 
-    // Плашка: для бота — его MPR-диапазон, для меня — мой средний MPR
     fun plateFor(slot: PlayerSlot): String? {
         return when {
             slot.isBot -> "ср. ${slot.bot.averageMin}–${slot.bot.averageMax}"
@@ -522,10 +520,12 @@ private fun loadSlots(context: android.content.Context, playerName: String): Lis
     }
 }
 
+// Бросок в Bull для розыгрыша первого хода.
+// Множитель 0.8 — унифицировано с 501 (по просьбе автора, чтобы реже попадали).
 private fun generateBotBullResult(bot: CricketBot): Int {
     val lvl = bot.id.coerceIn(1, 16)
-    val pRed = 0.05 + (lvl - 1) * 0.027
-    val pGreen = 0.25 + (lvl - 1) * 0.013
+    val pRed = (0.05 + (lvl - 1) * 0.027) * 0.8
+    val pGreen = (0.25 + (lvl - 1) * 0.013) * 0.8
     val r = Random.nextDouble()
     return when {
         r < pRed -> 2
