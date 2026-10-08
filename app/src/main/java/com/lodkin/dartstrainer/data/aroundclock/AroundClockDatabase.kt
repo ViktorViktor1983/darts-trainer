@@ -1,110 +1,290 @@
-package com.lodkin.dartstrainer.data.aroundclock
+package com.lodkin.dartstrainer.ui
 
-import android.content.Context
-import androidx.room.Dao
-import androidx.room.Database
-import androidx.room.Entity
-import androidx.room.Insert
-import androidx.room.PrimaryKey
-import androidx.room.Query
-import androidx.room.Room
-import androidx.room.RoomDatabase
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Text
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.lodkin.dartstrainer.data.SettingsStorage
+import com.lodkin.dartstrainer.data.aroundclock.AroundClockDatabase
+import com.lodkin.dartstrainer.data.aroundclock.AroundClockRepository
+import com.lodkin.dartstrainer.data.biground.BigRoundDatabase
+import com.lodkin.dartstrainer.data.biground.BigRoundRepository
+import com.lodkin.dartstrainer.data.cricket.CricketRepository
+import com.lodkin.dartstrainer.data.game501.Game501Database
+import com.lodkin.dartstrainer.data.game501.Game501Repository
+import com.lodkin.dartstrainer.data.scoreset.ScoreSetDatabase
+import com.lodkin.dartstrainer.data.scoreset.ScoreSetRepository
+import com.lodkin.dartstrainer.data.sector.SectorDatabase
+import com.lodkin.dartstrainer.data.sector.SectorRepository
+import com.lodkin.dartstrainer.theme.Accent
+import com.lodkin.dartstrainer.theme.GoldAccent
+import com.lodkin.dartstrainer.theme.TileBg
+import com.lodkin.dartstrainer.theme.TileBgDark
+import java.util.Locale
 
-// Целевой режим игры
-enum class AroundClockTarget {
-    SINGLE,   // одинарные сектора
-    DOUBLE,   // удвоения
-    TRIPLE    // утроения
-}
-
-// Порядок секторов
-enum class AroundClockOrder {
-    ORDERED,  // 1, 2, 3, ..., 20, Bull
-    RANDOM    // случайный порядок, каждый сектор один раз
-}
-
-// Сохранённая игра «Кругосветка»
-@Entity(tableName = "aroundclock_games")
-data class AroundClockGameEntity(
-    @PrimaryKey(autoGenerate = true) val id: Long = 0,
-    val dateMillis: Long,
-    val targetName: String,       // "SINGLE" / "DOUBLE" / "TRIPLE"
-    val orderName: String,        // "ORDERED" / "RANDOM"
-    val hitsRequired: Int,        // 1, 2 или 3 попадания на сектор
-    val totalDarts: Int,          // всего потрачено дротиков на весь круг
-    // Успел ли игрок пройти до конца (все 21 цель: 1..20 + Bull)
-    val completed: Boolean,
-    // Результаты по каждому сектору: "1:2,2:3,3:1,25:5"
-    // 1:2 — сектор 1 (одинарный), потрачено 2 дротика
-    // 25:5 — Bull, потрачено 5 дротиков
-    val sectorResults: String
-)
-
-@Dao
-interface AroundClockDao {
-
-    @Insert
-    suspend fun insertGame(game: AroundClockGameEntity): Long
-
-    @Query("SELECT * FROM aroundclock_games ORDER BY dateMillis DESC")
-    suspend fun getAllGames(): List<AroundClockGameEntity>
-
-    @Query("DELETE FROM aroundclock_games")
-    suspend fun clearAll()
-
-    @Query("SELECT COUNT(*) FROM aroundclock_games")
-    suspend fun count(): Int
-}
-
-@Database(
-    entities = [AroundClockGameEntity::class],
-    version = 1,
-    exportSchema = false
-)
-abstract class AroundClockDatabase : RoomDatabase() {
-    abstract fun aroundClockDao(): AroundClockDao
-
-    companion object {
-        @Volatile
-        private var INSTANCE: AroundClockDatabase? = null
-
-        fun get(context: Context): AroundClockDatabase =
-            INSTANCE ?: synchronized(this) {
-                INSTANCE ?: Room.databaseBuilder(
-                    context.applicationContext,
-                    AroundClockDatabase::class.java,
-                    "aroundclock.db"
-                ).fallbackToDestructiveMigration().build().also { INSTANCE = it }
-            }
-    }
-}
-
-// Репозиторий — единая точка доступа
-class AroundClockRepository(
-    private val dao: AroundClockDao
+/**
+ * Новый экран статистики — меню с 6 карточками игр.
+ * Тап по карточке открывает подробную статистику этой игры.
+ */
+@Composable
+fun StatsMenuScreen(
+    cricketRepository: CricketRepository,
+    onCricket: () -> Unit,
+    on501: () -> Unit,
+    onSector: () -> Unit,
+    onBigRound: () -> Unit,
+    onScoreSet: () -> Unit,
+    onAroundClock: () -> Unit,
+    onBack: () -> Unit
 ) {
-    suspend fun saveGame(
-        target: AroundClockTarget,
-        order: AroundClockOrder,
-        hitsRequired: Int,
-        totalDarts: Int,
-        completed: Boolean,
-        sectorResults: Map<Int, Int>   // сектор → потрачено дротиков
-    ) {
-        val entity = AroundClockGameEntity(
-            dateMillis = System.currentTimeMillis(),
-            targetName = target.name,
-            orderName = order.name,
-            hitsRequired = hitsRequired,
-            totalDarts = totalDarts,
-            completed = completed,
-            sectorResults = sectorResults.entries
-                .joinToString(",") { "${it.key}:${it.value}" }
-        )
-        dao.insertGame(entity)
+    val context = LocalContext.current
+    val game501Repo = remember {
+        Game501Repository(Game501Database.get(context).game501Dao())
+    }
+    val sectorRepo = remember {
+        SectorRepository(SectorDatabase.get(context).sectorDao())
+    }
+    val bigRoundRepo = remember {
+        BigRoundRepository(BigRoundDatabase.get(context).bigRoundDao())
+    }
+    val scoreSetRepo = remember {
+        ScoreSetRepository(ScoreSetDatabase.get(context).scoreSetDao())
+    }
+    val aroundClockRepo = remember {
+        AroundClockRepository(AroundClockDatabase.get(context).aroundClockDao())
+    }
+    val ownerName = remember { SettingsStorage.getPlayerName(context).trim() }
+
+    var avg501Ppr by remember { mutableStateOf<String?>(null) }
+    var avgCricketMpr by remember { mutableStateOf<String?>(null) }
+    var bestSectorScore by remember { mutableStateOf<String?>(null) }
+    var bestBigRoundScore by remember { mutableStateOf<String?>(null) }
+    var bestScoreSetScore by remember { mutableStateOf<String?>(null) }
+    var bestAroundClock by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(Unit) {
+        // ── 501: средний PPR за всё время ──
+        val games501 = game501Repo.getAllGames()
+        var pprSum = 0.0
+        var pprCount = 0
+        for (g in games501) {
+            if (g.outModeName == "STRAIGHT_OUT") continue
+            val bots = parseStringList(g.playerIsBot)
+            val names = parseStringList(g.playerNames)
+            val pprList = parseDoubleList(g.ppr)
+            for (i in bots.indices) {
+                val name = names.getOrNull(i) ?: ""
+                if (isOwner(bots[i], name, ownerName)) {
+                    pprList.getOrNull(i)?.let { pprSum += it; pprCount++ }
+                    break
+                }
+            }
+        }
+        avg501Ppr = if (pprCount > 0) "%.2f".format(Locale.US, pprSum / pprCount) else "—"
+
+        // ── Крикет: средний MPR за всё время ──
+        val gamesCricket = cricketRepository.getAllGames()
+        var mprSum = 0.0
+        var mprCount = 0
+        for (g in gamesCricket) {
+            val bots = parseStringList(g.playerIsBot)
+            val names = parseStringList(g.playerNames)
+            val mprList = parseDoubleList(g.mpr)
+            for (i in bots.indices) {
+                val name = names.getOrNull(i) ?: ""
+                if (isOwner(bots[i], name, ownerName)) {
+                    mprList.getOrNull(i)?.let { mprSum += it; mprCount++ }
+                    break
+                }
+            }
+        }
+        avgCricketMpr = if (mprCount > 0) "%.2f".format(Locale.US, mprSum / mprCount) else "—"
+
+        // ── Сектор: лучший результат (макс очков) ──
+        val sectorGames = sectorRepo.getAllGames()
+        val bestSector = sectorGames.maxOfOrNull { it.totalScore }
+        bestSectorScore = if (bestSector != null && bestSector > 0) bestSector.toString() else "—"
+
+        // ── Большой раунд: лучший результат (макс очков) ──
+        val bigRoundGames = bigRoundRepo.getAllGames()
+        val bestBig = bigRoundGames.maxOfOrNull { it.totalScore }
+        bestBigRoundScore = if (bestBig != null && bestBig > 0) bestBig.toString() else "—"
+
+        // ── Набор очков: лучший результат (макс очков) ──
+        val scoreSetGames = scoreSetRepo.getAllGames()
+        val bestScoreSet = scoreSetGames.maxOfOrNull { it.totalScore }
+        bestScoreSetScore = if (bestScoreSet != null && bestScoreSet > 0) bestScoreSet.toString() else "—"
+
+        // ── Кругосветка: лучший результат (мин дротиков среди завершённых) ──
+        val aroundGames = aroundClockRepo.getAllGames()
+        val completedGames = aroundGames.filter { it.completed }
+        val best = completedGames.minOfOrNull { it.totalDarts }
+        bestAroundClock = if (best != null && best > 0) best.toString() else "—"
     }
 
-    suspend fun getAllGames(): List<AroundClockGameEntity> = dao.getAllGames()
+    Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
 
-    suspend fun clearAll() = dao.clearAll()
+        // ── ШАПКА ──
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(TileBgDark)
+                    .clickable { onBack() }
+                    .padding(horizontal = 10.dp, vertical = 8.dp)
+            ) {
+                Text("←", color = Accent, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            }
+            Spacer(Modifier.width(12.dp))
+            Column {
+                Text(
+                    "Статистика",
+                    color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold
+                )
+                if (ownerName.isNotBlank()) {
+                    Text("игрок: $ownerName", color = Accent, fontSize = 11.sp)
+                }
+            }
+        }
+
+        Spacer(Modifier.height(16.dp))
+
+        // ── СЕТКА 2 x 3 ──
+        Row(
+            modifier = Modifier.fillMaxWidth().weight(1f),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            StatsCard(
+                title = "501",
+                metric = avg501Ppr ?: "...",
+                metricLabel = "Средний PPR",
+                onClick = on501,
+                modifier = Modifier.weight(1f).fillMaxHeight()
+            )
+            StatsCard(
+                title = "Крикет",
+                metric = avgCricketMpr ?: "...",
+                metricLabel = "Средний MPR",
+                onClick = onCricket,
+                modifier = Modifier.weight(1f).fillMaxHeight()
+            )
+        }
+        Spacer(Modifier.height(10.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth().weight(1f),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            StatsCard(
+                title = "Сектор",
+                metric = bestSectorScore ?: "...",
+                metricLabel = "Лучший результат",
+                onClick = onSector,
+                modifier = Modifier.weight(1f).fillMaxHeight()
+            )
+            StatsCard(
+                title = "Большой раунд",
+                metric = bestBigRoundScore ?: "...",
+                metricLabel = "Лучший результат",
+                onClick = onBigRound,
+                modifier = Modifier.weight(1f).fillMaxHeight()
+            )
+        }
+        Spacer(Modifier.height(10.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth().weight(1f),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            StatsCard(
+                title = "Набор очков",
+                metric = bestScoreSetScore ?: "...",
+                metricLabel = "Лучший результат",
+                onClick = onScoreSet,
+                modifier = Modifier.weight(1f).fillMaxHeight()
+            )
+            StatsCard(
+                title = "Кругосветка",
+                metric = bestAroundClock ?: "...",
+                metricLabel = "Лучший результат",
+                onClick = onAroundClock,
+                modifier = Modifier.weight(1f).fillMaxHeight()
+            )
+        }
+    }
+}
+
+// ─────────────────────────────────────────────
+// Карточка одной игры
+// ─────────────────────────────────────────────
+@Composable
+private fun StatsCard(
+    title: String,
+    metric: String,
+    metricLabel: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(16.dp))
+            .background(TileBg)
+            .clickable { onClick() }
+            .padding(horizontal = 8.dp, vertical = 14.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Text(
+            title,
+            color = GoldAccent,
+            fontSize = 22.sp,
+            fontWeight = FontWeight.Bold,
+            textAlign = TextAlign.Center
+        )
+        Spacer(Modifier.height(14.dp))
+        Text(
+            metric,
+            color = Color.White,
+            fontSize = 24.sp,
+            fontWeight = FontWeight.Bold,
+            textAlign = TextAlign.Center
+        )
+        Spacer(Modifier.height(8.dp))
+        Text(
+            metricLabel,
+            color = Accent,
+            fontSize = 12.sp,
+            textAlign = TextAlign.Center,
+            lineHeight = 15.sp
+        )
+    }
+}
+
+// ─────────────────────────────────────────────
+// Хелперы
+// ─────────────────────────────────────────────
+private fun parseStringList(s: String): List<String> =
+    if (s.isBlank()) emptyList() else s.split("|")
+
+private fun parseDoubleList(s: String): List<Double> =
+    if (s.isBlank()) emptyList() else s.split("|").map { it.toDoubleOrNull() ?: 0.0 }
+
+private fun isOwner(isBotFlag: String, name: String, ownerName: String): Boolean {
+    if (isBotFlag != "0") return false
+    if (ownerName.isBlank()) return true
+    return name.equals(ownerName, ignoreCase = true)
 }
