@@ -467,7 +467,15 @@ fun DartsTrainerApp() {
 
             "scoreset_game" -> ScoreSetGameScreen(
                 repository = scoreSetRepository,
-                onFinish = { _score ->
+                onFinish = { totalScore: Int, approaches: List<Int> ->
+                    // Сохраняем на уровне MainActivity — scope живёт долго,
+                    // saveGame успевает записать в базу.
+                    scope.launch {
+                        scoreSetRepository.saveGame(
+                            totalScore = totalScore,
+                            approaches = approaches
+                        )
+                    }
                     screen = "game_select"
                 },
                 onBack = { screen = "game_select" }
