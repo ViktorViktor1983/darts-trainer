@@ -103,12 +103,19 @@ fun CricketSetupScreen(
         myAvgMpr = if (count > 0) "%.2f".format(Locale.US, sum / count) else null
     }
 
+    // Плашка: для бота — его MPR-диапазон, для меня — мой средний MPR
+    fun plateFor(slot: PlayerSlot): String? {
+        return when {
+            slot.isBot -> "ср. ${slot.bot.averageMin}–${slot.bot.averageMax}"
+            slot.name.equals(playerName, ignoreCase = true) && myAvgMpr != null -> "ср. $myAvgMpr"
+            else -> null
+        }
+    }
+
     val activeSlots = if (isPairGame) slots else slots.take(2)
     val allBots = activeSlots.all { it.isBot }
     val allHumans = activeSlots.all { !it.isBot }
     val hasHuman = activeSlots.any { !it.isBot }
-
-    val showMyMprInSlot1 = !slots[0].isBot && slots[0].name.equals(playerName, ignoreCase = true)
 
     LaunchedEffect(isPairGame, cricketType, autoOkSeconds, legsPerSet, setsPerMatch) {
         CricketSettingsStorage.setPairGame(context, isPairGame)
@@ -211,7 +218,8 @@ fun CricketSetupScreen(
                         context = context,
                         onSlot1Change = { newSlot -> slots = slots.toMutableList().also { it[0] = newSlot } },
                         onSlot2Change = { newSlot -> slots = slots.toMutableList().also { it[2] = newSlot } },
-                        myAvgMprForSlot1 = if (showMyMprInSlot1) myAvgMpr else null,
+                        plate1 = plateFor(slots[0]),
+                        plate2 = plateFor(slots[2]),
                         modifier = Modifier.weight(1f)
                     )
                     TeamColumn(
@@ -224,7 +232,8 @@ fun CricketSetupScreen(
                         context = context,
                         onSlot1Change = { newSlot -> slots = slots.toMutableList().also { it[1] = newSlot } },
                         onSlot2Change = { newSlot -> slots = slots.toMutableList().also { it[3] = newSlot } },
-                        myAvgMprForSlot1 = null,
+                        plate1 = plateFor(slots[1]),
+                        plate2 = plateFor(slots[3]),
                         modifier = Modifier.weight(1f)
                     )
                 }
@@ -240,7 +249,7 @@ fun CricketSetupScreen(
                         savedNames = savedNames,
                         context = context,
                         onSlotChange = { newSlot -> slots = slots.toMutableList().also { it[0] = newSlot } },
-                        myAvgMpr = if (showMyMprInSlot1) myAvgMpr else null,
+                        plateText = plateFor(slots[0]),
                         modifier = Modifier.weight(1f)
                     )
                     PlayerCell(
@@ -249,7 +258,7 @@ fun CricketSetupScreen(
                         savedNames = savedNames,
                         context = context,
                         onSlotChange = { newSlot -> slots = slots.toMutableList().also { it[1] = newSlot } },
-                        myAvgMpr = null,
+                        plateText = plateFor(slots[1]),
                         modifier = Modifier.weight(1f)
                     )
                 }
@@ -572,15 +581,15 @@ private fun TeamColumn(
     teamLabel: String, slot1: PlayerSlot, slot2: PlayerSlot, slot1Label: String, slot2Label: String,
     savedNames: List<String>, context: android.content.Context,
     onSlot1Change: (PlayerSlot) -> Unit, onSlot2Change: (PlayerSlot) -> Unit,
-    myAvgMprForSlot1: String? = null,
+    plate1: String? = null, plate2: String? = null,
     modifier: Modifier
 ) {
     Column(modifier = modifier.clip(RoundedCornerShape(12.dp)).background(TileBgDark).padding(8.dp)) {
         Text(teamLabel, color = Accent, fontSize = 11.sp, fontWeight = FontWeight.Bold,
             letterSpacing = 2.sp, modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp), textAlign = TextAlign.Center)
-        PlayerInnerSlot(slot1Label, slot1, savedNames, context, onSlot1Change, myAvgMprForSlot1)
+        PlayerInnerSlot(slot1Label, slot1, savedNames, context, onSlot1Change, plate1)
         Spacer(Modifier.height(6.dp))
-        PlayerInnerSlot(slot2Label, slot2, savedNames, context, onSlot2Change, null)
+        PlayerInnerSlot(slot2Label, slot2, savedNames, context, onSlot2Change, plate2)
     }
 }
 
@@ -588,7 +597,7 @@ private fun TeamColumn(
 private fun PlayerInnerSlot(
     numberLabel: String, slot: PlayerSlot, savedNames: List<String>,
     context: android.content.Context, onSlotChange: (PlayerSlot) -> Unit,
-    myAvgMpr: String? = null
+    plateText: String? = null
 ) {
     var expanded by remember { mutableStateOf(false) }
     var showAddDialog by remember { mutableStateOf(false) }
@@ -596,13 +605,11 @@ private fun PlayerInnerSlot(
     val menuScrollState = rememberScrollState()
 
     Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        // Плашка с номером
         Box(modifier = Modifier.size(22.dp).clip(RoundedCornerShape(11.dp)).background(TileBg),
             contentAlignment = Alignment.Center) {
             Text(numberLabel, color = Accent, fontSize = 11.sp, fontWeight = FontWeight.Bold)
         }
-        // Отдельная плашка со средним MPR (если есть)
-        if (myAvgMpr != null) {
+        if (plateText != null) {
             Spacer(Modifier.width(4.dp))
             Box(
                 modifier = Modifier
@@ -610,7 +617,7 @@ private fun PlayerInnerSlot(
                     .background(TileBg)
                     .padding(horizontal = 6.dp, vertical = 3.dp)
             ) {
-                Text("ср. $myAvgMpr", color = GoldAccent, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                Text(plateText, color = GoldAccent, fontSize = 10.sp, fontWeight = FontWeight.Bold)
             }
         }
         Spacer(Modifier.width(6.dp))
@@ -702,7 +709,7 @@ private fun PlayerDropdown(
 private fun PlayerCell(
     number: Int, slot: PlayerSlot, savedNames: List<String>,
     context: android.content.Context, onSlotChange: (PlayerSlot) -> Unit,
-    myAvgMpr: String? = null,
+    plateText: String? = null,
     modifier: Modifier
 ) {
     var expanded by remember { mutableStateOf(false) }
@@ -712,13 +719,11 @@ private fun PlayerCell(
 
     Column(modifier = modifier.clip(RoundedCornerShape(12.dp)).background(TileBgDark).padding(8.dp)) {
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            // Плашка с номером
             Box(modifier = Modifier.size(24.dp).clip(RoundedCornerShape(12.dp)).background(TileBg),
                 contentAlignment = Alignment.Center) {
                 Text("$number", color = Accent, fontSize = 12.sp, fontWeight = FontWeight.Bold)
             }
-            // Отдельная плашка со средним MPR (если есть)
-            if (myAvgMpr != null) {
+            if (plateText != null) {
                 Spacer(Modifier.width(4.dp))
                 Box(
                     modifier = Modifier
@@ -726,7 +731,7 @@ private fun PlayerCell(
                         .background(TileBg)
                         .padding(horizontal = 8.dp, vertical = 4.dp)
                 ) {
-                    Text("ср. $myAvgMpr", color = GoldAccent, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    Text(plateText, color = GoldAccent, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                 }
             }
         }
