@@ -175,25 +175,24 @@ fun StatsScreen(
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
 
         // ── ШАПКА ──
+        // Слева — только «Назад» (длиннее, стрелка крупнее).
+        // По центру — «Статистика» и «игрок: …» ×2.
+        // Справа — только активные кнопки:
+        //   Крикет: 📈 (график MPR)
+        //   501:    📈 (график PPR/D%) + 🏆 (чекауты)
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box(
                 modifier = Modifier
-                    .clip(RoundedCornerShape(10.dp))
+                    .clip(RoundedCornerShape(12.dp))
                     .background(TileBgDark)
                     .clickable { onBack() }
-                    .padding(horizontal = 10.dp, vertical = 8.dp)
+                    .padding(horizontal = 24.dp, vertical = 14.dp)
             ) {
-                Text("←", color = Accent, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                Text("←", color = Accent, fontSize = 32.sp, fontWeight = FontWeight.Bold)
             }
-            Spacer(Modifier.width(4.dp))
-            HeaderIconButton(
-                icon = "📈",
-                active = selectedTab == 0,
-                onClick = { if (selectedTab == 0) showCricketChart = true }
-            )
 
             Column(
                 modifier = Modifier.weight(1f),
@@ -201,26 +200,36 @@ fun StatsScreen(
             ) {
                 Text(
                     "Статистика",
-                    fontSize = 20.sp,
+                    fontSize = 40.sp,
                     fontWeight = FontWeight.Bold,
                     color = Color.White
                 )
                 if (ownerName.isNotBlank()) {
-                    Text("игрок: $ownerName", color = Accent, fontSize = 11.sp)
+                    Text("игрок: $ownerName", color = Accent, fontSize = 22.sp)
                 }
             }
 
-            HeaderIconButton(
-                icon = "📈",
-                active = selectedTab == 1,
-                onClick = { if (selectedTab == 1) show501Chart = true }
-            )
-            Spacer(Modifier.width(4.dp))
-            HeaderIconButton(
-                icon = "🏆",
-                active = selectedTab == 1,
-                onClick = { if (selectedTab == 1) showCheckoutsDialog = true }
-            )
+            if (selectedTab == 0) {
+                // Крикет: одна кнопка 📈
+                HeaderIconButton(
+                    icon = "📈",
+                    active = true,
+                    onClick = { showCricketChart = true }
+                )
+            } else {
+                // 501: 📈 + 🏆
+                HeaderIconButton(
+                    icon = "📈",
+                    active = true,
+                    onClick = { show501Chart = true }
+                )
+                Spacer(Modifier.width(6.dp))
+                HeaderIconButton(
+                    icon = "🏆",
+                    active = true,
+                    onClick = { showCheckoutsDialog = true }
+                )
+            }
         }
 
         Spacer(Modifier.height(16.dp))
@@ -528,13 +537,13 @@ private fun HeaderIconButton(
     val alpha = if (active) 1.0f else 0.4f
     Box(
         modifier = Modifier
-            .size(38.dp)
-            .clip(RoundedCornerShape(10.dp))
+            .size(48.dp)
+            .clip(RoundedCornerShape(12.dp))
             .background(TileBgDark)
             .clickable(enabled = active) { onClick() },
         contentAlignment = Alignment.Center
     ) {
-        Text(icon, fontSize = 18.sp, color = Color.White.copy(alpha = alpha))
+        Text(icon, fontSize = 22.sp, color = Color.White.copy(alpha = alpha))
     }
 }
 
