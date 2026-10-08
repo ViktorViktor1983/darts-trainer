@@ -32,6 +32,7 @@ import com.lodkin.dartstrainer.data.game501.Game501
 import com.lodkin.dartstrainer.data.game501.Game501Database
 import com.lodkin.dartstrainer.data.game501.Game501Logic
 import com.lodkin.dartstrainer.data.game501.Game501Repository
+import com.lodkin.dartstrainer.data.game501.Game501Serializer
 import com.lodkin.dartstrainer.data.game501.GameType
 import com.lodkin.dartstrainer.data.game501.OutMode
 import com.lodkin.dartstrainer.data.game501.Player501
@@ -151,6 +152,10 @@ fun DartsTrainerApp() {
 
     var cricketGame by remember { mutableStateOf<CricketGame?>(null) }
     var game501 by remember { mutableStateOf<Game501?>(null) }
+
+    // id незавершённой партии 501, которую продолжаем (0 = новая).
+    var game501ExistingId by remember { mutableStateOf(0L) }
+
     var sectorToPlay by remember { mutableStateOf<Int?>(null) }
 
     var aroundClockTarget by remember { mutableStateOf<AroundClockTarget?>(null) }
@@ -227,6 +232,15 @@ fun DartsTrainerApp() {
                 repository = cricketRepository,
                 initialTab = 1,
                 showTabs = false,
+                onResumeGame501 = { entity ->
+                    // Возобновляем партию из статистики.
+                    val restored = Game501Serializer.fromJson(entity.stateBlob)
+                    if (restored != null) {
+                        game501 = restored
+                        game501ExistingId = entity.id
+                        screen = "game501_game"
+                    }
+                },
                 onBack = {
                     statsMenuKey++
                     screen = "stats_menu"
@@ -238,6 +252,7 @@ fun DartsTrainerApp() {
                 onFactoryReset = {
                     cricketGame = null
                     game501 = null
+                    game501ExistingId = 0L
                     sectorToPlay = null
                     aroundClockTarget = null
                     aroundClockOrder = null
@@ -334,6 +349,7 @@ fun DartsTrainerApp() {
                         sessionStartTime = sessionStartTime,
                         sessionForm = sessionForm
                     )
+                    game501ExistingId = 0L
                     screen = "game501_game"
                 },
                 onBack = { screen = "game_select" }
@@ -343,13 +359,22 @@ fun DartsTrainerApp() {
                 val game = game501
                 if (game != null) {
                     Game501Screen(
+                        repository = game501Repository,
                         initialGame = game,
-                        onGameFinish = { finished: Game501 ->
-                            scope.launch { game501Repository.saveGame(finished) }
+                        existingId = game501ExistingId,
+                        onGameFinish = { finished: Game501, id: Long ->
+                            scope.launch {
+                                game501Repository.saveGame(finished, existingId = id)
+                            }
                             game501 = finished
+                            game501ExistingId = 0L
                             screen = "game501_stats"
                         },
-                        onBack = { screen = "game_select" }
+                        onBack = {
+                            game501 = null
+                            game501ExistingId = 0L
+                            screen = "game_select"
+                        }
                     )
                 } else screen = "game501_setup"
             }
