@@ -33,7 +33,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.lodkin.dartstrainer.data.cricket.CRICKET_BOTS
 import com.lodkin.dartstrainer.data.cricket.CricketBot
+import com.lodkin.dartstrainer.data.cricket.CricketDatabase
 import com.lodkin.dartstrainer.data.cricket.CricketPlayer
+import com.lodkin.dartstrainer.data.cricket.CricketRepository
 import com.lodkin.dartstrainer.data.cricket.CricketSettingsStorage
 import com.lodkin.dartstrainer.data.cricket.CricketType
 import com.lodkin.dartstrainer.data.cricket.PlayerNamesStorage
@@ -43,6 +45,7 @@ import com.lodkin.dartstrainer.theme.GoldAccent
 import com.lodkin.dartstrainer.theme.TileBg
 import com.lodkin.dartstrainer.theme.TileBgDark
 import kotlin.random.Random
+import java.util.Locale
 
 private val PaleRed = Color(0xFFE57373)
 private val PaleRedText = Color(0xFF3E1010)
@@ -62,7 +65,6 @@ fun CricketSetupScreen(
     val context = LocalContext.current
     val savedNames = remember { PlayerNamesStorage.getSavedNames(context).toMutableList() }
 
-    // ── Загрузка сохранённых настроек ──
     var isPairGame by remember { mutableStateOf(CricketSettingsStorage.isPairGame(context)) }
     var cricketType by remember { mutableStateOf(CricketSettingsStorage.getCricketType(context)) }
     var autoOkSeconds by remember { mutableStateOf(CricketSettingsStorage.getAutoOk(context)) }
@@ -74,9 +76,31 @@ fun CricketSetupScreen(
     var humanBullResult by remember { mutableStateOf(-1) }
     var botBullResult by remember { mutableStateOf(-1) }
 
-    // ── Слоты игроков с восстановлением ──
     var slots by remember {
         mutableStateOf(loadSlots(context, playerName))
+    }
+
+    // ── Мой средний MPR из статистики ──
+    val cricketRepo = remember { CricketRepository(CricketDatabase.get(context).cricketDao()) }
+    var myAvgMpr by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(playerName) {
+        val games = cricketRepo.getAllGames()
+        var sum = 0.0
+        var count = 0
+        for (g in games) {
+            val bots = parseStringListC(g.playerIsBot)
+            val names = parseStringListC(g.playerNames)
+            val mprList = parseDoubleListC(g.mpr)
+            for (i in bots.indices) {
+                val name = names.getOrNull(i) ?: ""
+                if (isOwnerC(bots[i], name, playerName)) {
+                    mprList.getOrNull(i)?.let { sum += it; count++ }
+                    break
+                }
+            }
+        }
+        myAvgMpr = if (count > 0) "%.2f".format(Locale.US, sum / count) else null
     }
 
     val activeSlots = if (isPairGame) slots else slots.take(2)
@@ -84,7 +108,8 @@ fun CricketSetupScreen(
     val allHumans = activeSlots.all { !it.isBot }
     val hasHuman = activeSlots.any { !it.isBot }
 
-    // Сохраняем настройки при каждом изменении
+    val showMyMprInSlot1 = !slots[0].isBot && slots[0].name.equals(playerName, ignoreCase = true)
+
     LaunchedEffect(isPairGame, cricketType, autoOkSeconds, legsPerSet, setsPerMatch) {
         CricketSettingsStorage.setPairGame(context, isPairGame)
         CricketSettingsStorage.setCricketType(context, cricketType)
@@ -93,7 +118,6 @@ fun CricketSetupScreen(
         CricketSettingsStorage.setSetsPerMatch(context, setsPerMatch)
     }
 
-    // Сохраняем слоты при изменении
     LaunchedEffect(slots) {
         CricketSettingsStorage.setSlotIsBot(context, slots.map { it.isBot })
         CricketSettingsStorage.setSlotNames(context, slots.map { it.name })
@@ -187,6 +211,7 @@ fun CricketSetupScreen(
                         context = context,
                         onSlot1Change = { newSlot -> slots = slots.toMutableList().also { it[0] = newSlot } },
                         onSlot2Change = { newSlot -> slots = slots.toMutableList().also { it[2] = newSlot } },
+                        myAvgMprForSlot1 = if (showMyMprInSlot1) myAvgMpr else null,
                         modifier = Modifier.weight(1f)
                     )
                     TeamColumn(
@@ -199,6 +224,7 @@ fun CricketSetupScreen(
                         context = context,
                         onSlot1Change = { newSlot -> slots = slots.toMutableList().also { it[1] = newSlot } },
                         onSlot2Change = { newSlot -> slots = slots.toMutableList().also { it[3] = newSlot } },
+                        myAvgMprForSlot1 = null,
                         modifier = Modifier.weight(1f)
                     )
                 }
@@ -214,6 +240,7 @@ fun CricketSetupScreen(
                         savedNames = savedNames,
                         context = context,
                         onSlotChange = { newSlot -> slots = slots.toMutableList().also { it[0] = newSlot } },
+                        myAvgMpr = if (showMyMprInSlot1) myAvgMpr else null,
                         modifier = Modifier.weight(1f)
                     )
                     PlayerCell(
@@ -222,6 +249,7 @@ fun CricketSetupScreen(
                         savedNames = savedNames,
                         context = context,
                         onSlotChange = { newSlot -> slots = slots.toMutableList().also { it[1] = newSlot } },
+                        myAvgMpr = null,
                         modifier = Modifier.weight(1f)
                     )
                 }
@@ -288,7 +316,6 @@ fun CricketSetupScreen(
                 }
             }
 
-            // ─── КТО НАЧИНАЕТ ───
             if (hasHuman && !allHumans) {
                 Spacer(Modifier.height(24.dp))
                 Text("КТО НАЧИНАЕТ", color = Accent, fontSize = 13.sp, fontWeight = FontWeight.Medium,
@@ -451,19 +478,13 @@ fun CricketSetupScreen(
 }
 
 // ─────────────────────────────────────────────
-// Загрузка слотов из сохранённых настроек
-//
-// Приоритет для первого слота (слот 1):
-//   1. Имя владельца (из онбординга)
-//   2. Последнее сохранённое имя
-//   3. "Игрок 1"
+// Загрузка слотов
 // ─────────────────────────────────────────────
 private fun loadSlots(context: android.content.Context, playerName: String): List<PlayerSlot> {
     val bots = CricketSettingsStorage.getSlotIsBot(context)
     val names = CricketSettingsStorage.getSlotNames(context)
     val botIds = CricketSettingsStorage.getSlotBotIds(context)
 
-    // Имя владельца — главный приоритет для первого слота.
     val ownerName = when {
         playerName.isNotBlank() -> playerName
         PlayerNamesStorage.getLastPlayer1(context).isNotBlank() -> PlayerNamesStorage.getLastPlayer1(context)
@@ -484,11 +505,8 @@ private fun loadSlots(context: android.content.Context, playerName: String): Lis
         val bot = CRICKET_BOTS[botIdx]
         val isBot = bots[i]
         val name = when {
-            // Если слот — бот, берём его имя.
             isBot -> bot.name
-            // Если это первый слот и имя владельца известно — используем его.
             i == 0 && playerName.isNotBlank() -> playerName
-            // Иначе — сохранённое имя, а если пусто — дефолт.
             else -> names[i].ifBlank { if (i == 0) "Игрок 1" else "Игрок ${i + 1}" }
         }
         PlayerSlot(isBot, name, bot)
@@ -553,29 +571,47 @@ private fun CompactNumberPicker(label: String, value: Int, onValueChange: (Int) 
 private fun TeamColumn(
     teamLabel: String, slot1: PlayerSlot, slot2: PlayerSlot, slot1Label: String, slot2Label: String,
     savedNames: List<String>, context: android.content.Context,
-    onSlot1Change: (PlayerSlot) -> Unit, onSlot2Change: (PlayerSlot) -> Unit, modifier: Modifier
+    onSlot1Change: (PlayerSlot) -> Unit, onSlot2Change: (PlayerSlot) -> Unit,
+    myAvgMprForSlot1: String? = null,
+    modifier: Modifier
 ) {
     Column(modifier = modifier.clip(RoundedCornerShape(12.dp)).background(TileBgDark).padding(8.dp)) {
         Text(teamLabel, color = Accent, fontSize = 11.sp, fontWeight = FontWeight.Bold,
             letterSpacing = 2.sp, modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp), textAlign = TextAlign.Center)
-        PlayerInnerSlot(slot1Label, slot1, savedNames, context, onSlot1Change)
+        PlayerInnerSlot(slot1Label, slot1, savedNames, context, onSlot1Change, myAvgMprForSlot1)
         Spacer(Modifier.height(6.dp))
-        PlayerInnerSlot(slot2Label, slot2, savedNames, context, onSlot2Change)
+        PlayerInnerSlot(slot2Label, slot2, savedNames, context, onSlot2Change, null)
     }
 }
 
 @Composable
-private fun PlayerInnerSlot(numberLabel: String, slot: PlayerSlot, savedNames: List<String>,
-                            context: android.content.Context, onSlotChange: (PlayerSlot) -> Unit) {
+private fun PlayerInnerSlot(
+    numberLabel: String, slot: PlayerSlot, savedNames: List<String>,
+    context: android.content.Context, onSlotChange: (PlayerSlot) -> Unit,
+    myAvgMpr: String? = null
+) {
     var expanded by remember { mutableStateOf(false) }
     var showAddDialog by remember { mutableStateOf(false) }
     var newNameInput by remember { mutableStateOf("") }
     val menuScrollState = rememberScrollState()
 
     Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        // Плашка с номером
         Box(modifier = Modifier.size(22.dp).clip(RoundedCornerShape(11.dp)).background(TileBg),
             contentAlignment = Alignment.Center) {
             Text(numberLabel, color = Accent, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+        }
+        // Отдельная плашка со средним MPR (если есть)
+        if (myAvgMpr != null) {
+            Spacer(Modifier.width(4.dp))
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(11.dp))
+                    .background(TileBg)
+                    .padding(horizontal = 6.dp, vertical = 3.dp)
+            ) {
+                Text("ср. $myAvgMpr", color = GoldAccent, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+            }
         }
         Spacer(Modifier.width(6.dp))
         Box(modifier = Modifier.weight(1f)) {
@@ -663,8 +699,12 @@ private fun PlayerDropdown(
 }
 
 @Composable
-private fun PlayerCell(number: Int, slot: PlayerSlot, savedNames: List<String>,
-                       context: android.content.Context, onSlotChange: (PlayerSlot) -> Unit, modifier: Modifier) {
+private fun PlayerCell(
+    number: Int, slot: PlayerSlot, savedNames: List<String>,
+    context: android.content.Context, onSlotChange: (PlayerSlot) -> Unit,
+    myAvgMpr: String? = null,
+    modifier: Modifier
+) {
     var expanded by remember { mutableStateOf(false) }
     var showAddDialog by remember { mutableStateOf(false) }
     var newNameInput by remember { mutableStateOf("") }
@@ -672,9 +712,22 @@ private fun PlayerCell(number: Int, slot: PlayerSlot, savedNames: List<String>,
 
     Column(modifier = modifier.clip(RoundedCornerShape(12.dp)).background(TileBgDark).padding(8.dp)) {
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            // Плашка с номером
             Box(modifier = Modifier.size(24.dp).clip(RoundedCornerShape(12.dp)).background(TileBg),
                 contentAlignment = Alignment.Center) {
                 Text("$number", color = Accent, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+            }
+            // Отдельная плашка со средним MPR (если есть)
+            if (myAvgMpr != null) {
+                Spacer(Modifier.width(4.dp))
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(TileBg)
+                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                ) {
+                    Text("ср. $myAvgMpr", color = GoldAccent, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                }
             }
         }
         Spacer(Modifier.height(6.dp))
@@ -733,4 +786,19 @@ private fun CricketTypeHalf(label: String, selected: Boolean, onClick: () -> Uni
         Text(label, color = fg, fontSize = 14.sp,
             fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium, textAlign = TextAlign.Center)
     }
+}
+
+// ─────────────────────────────────────────────
+// Хелперы для чтения статистики
+// ─────────────────────────────────────────────
+private fun parseStringListC(s: String): List<String> =
+    if (s.isBlank()) emptyList() else s.split("|")
+
+private fun parseDoubleListC(s: String): List<Double> =
+    if (s.isBlank()) emptyList() else s.split("|").map { it.toDoubleOrNull() ?: 0.0 }
+
+private fun isOwnerC(isBotFlag: String, name: String, ownerName: String): Boolean {
+    if (isBotFlag != "0") return false
+    if (ownerName.isBlank()) return true
+    return name.equals(ownerName, ignoreCase = true)
 }
