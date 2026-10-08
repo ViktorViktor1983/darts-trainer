@@ -191,7 +191,6 @@ fun DartsTrainerApp() {
                 onSettingsClick = { screen = "settings" }
             )
 
-            // ── Меню статистики (сетка 2x3) ──
             "stats_menu" -> StatsMenuScreen(
                 cricketRepository = cricketRepository,
                 onCricket = { screen = "stats_cricket" },
@@ -203,7 +202,6 @@ fun DartsTrainerApp() {
                 onBack = { screen = "main" }
             )
 
-            // ── Статистика Крикета (только крикет, без вкладок) ──
             "stats_cricket" -> StatsScreen(
                 repository = cricketRepository,
                 initialTab = 0,
@@ -211,7 +209,6 @@ fun DartsTrainerApp() {
                 onBack = { screen = "stats_menu" }
             )
 
-            // ── Статистика 501 (только 501, без вкладок) ──
             "stats_501" -> StatsScreen(
                 repository = cricketRepository,
                 initialTab = 1,
@@ -247,7 +244,6 @@ fun DartsTrainerApp() {
                 onBack = { screen = "main" }
             )
 
-            // ── Крикет ──
             "cricket_setup" -> CricketSetupScreen(
                 playerName = SettingsStorage.getPlayerName(context),
                 onStartGame = { type: CricketType,
@@ -299,7 +295,6 @@ fun DartsTrainerApp() {
                 } else screen = "main"
             }
 
-            // ── x01 ──
             "game501_setup" -> Game501SetupScreen(
                 playerName = SettingsStorage.getPlayerName(context),
                 onStartGame = { gameType: GameType,
@@ -353,7 +348,6 @@ fun DartsTrainerApp() {
                 } else screen = "main"
             }
 
-            // ── Сектор ──
             "sector_setup" -> SectorSetupScreen(
                 sectorRepository = sectorRepository,
                 onStartGame = { sector ->
@@ -384,7 +378,6 @@ fun DartsTrainerApp() {
                 onBack = { screen = "stats_menu" }
             )
 
-            // ── Кругосветка ──
             "aroundclock_setup" -> AroundClockSetupScreen(
                 playerName = SettingsStorage.getPlayerName(context),
                 repository = aroundClockRepository,
@@ -433,7 +426,6 @@ fun DartsTrainerApp() {
                 onBack = { screen = "stats_menu" }
             )
 
-            // ── Большой раунд ──
             "biground_setup" -> BigRoundSetupScreen(
                 playerName = SettingsStorage.getPlayerName(context),
                 repository = bigRoundRepository,
@@ -465,7 +457,6 @@ fun DartsTrainerApp() {
                 onBack = { screen = "stats_menu" }
             )
 
-            // ── Набор очков ──
             "scoreset_setup" -> ScoreSetSetupScreen(
                 playerName = SettingsStorage.getPlayerName(context),
                 repository = scoreSetRepository,
