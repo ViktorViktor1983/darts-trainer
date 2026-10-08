@@ -27,6 +27,7 @@ import com.lodkin.dartstrainer.data.cricket.CricketGame
 import com.lodkin.dartstrainer.data.cricket.CricketLogic
 import com.lodkin.dartstrainer.data.cricket.CricketPlayer
 import com.lodkin.dartstrainer.data.cricket.CricketRepository
+import com.lodkin.dartstrainer.data.cricket.CricketSerializer
 import com.lodkin.dartstrainer.data.cricket.CricketType
 import com.lodkin.dartstrainer.data.game501.Game501
 import com.lodkin.dartstrainer.data.game501.Game501Database
@@ -151,6 +152,8 @@ fun DartsTrainerApp() {
     var screen by remember { mutableStateOf("main") }
 
     var cricketGame by remember { mutableStateOf<CricketGame?>(null) }
+    var cricketExistingId by remember { mutableStateOf(0L) }
+
     var game501 by remember { mutableStateOf<Game501?>(null) }
     var game501ExistingId by remember { mutableStateOf(0L) }
 
@@ -254,6 +257,7 @@ fun DartsTrainerApp() {
                 onBack = { screen = "main" },
                 onFactoryReset = {
                     cricketGame = null
+                    cricketExistingId = 0L
                     game501 = null
                     game501ExistingId = 0L
                     sectorToPlay = null
@@ -299,6 +303,7 @@ fun DartsTrainerApp() {
                         sessionStartTime = sessionStartTime,
                         sessionForm = sessionForm
                     )
+                    cricketExistingId = 0L
                     screen = "cricket_game"
                 },
                 onBack = { screen = "game_select" }
@@ -308,13 +313,22 @@ fun DartsTrainerApp() {
                 val game = cricketGame
                 if (game != null) {
                     CricketGameScreen(
+                        repository = cricketRepository,
                         initialGame = game,
-                        onGameFinish = { finished: CricketGame ->
-                            scope.launch { cricketRepository.saveGame(finished) }
+                        existingId = cricketExistingId,
+                        onGameFinish = { finished: CricketGame, id: Long ->
+                            scope.launch {
+                                cricketRepository.saveGame(finished, existingId = id)
+                            }
                             cricketGame = finished
+                            cricketExistingId = 0L
                             screen = "cricket_stats"
                         },
-                        onBack = { screen = "game_select" }
+                        onBack = {
+                            cricketGame = null
+                            cricketExistingId = 0L
+                            screen = "game_select"
+                        }
                     )
                 } else screen = "cricket_setup"
             }
