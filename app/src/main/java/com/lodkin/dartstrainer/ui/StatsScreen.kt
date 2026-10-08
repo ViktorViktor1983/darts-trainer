@@ -171,6 +171,7 @@ fun StatsScreen(
     repository: CricketRepository,
     initialTab: Int = 0,
     showTabs: Boolean = true,
+    onResumeGame501: (Game501Entity) -> Unit = {},
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
@@ -187,11 +188,9 @@ fun StatsScreen(
     var showResetDialog by remember { mutableStateOf(false) }
     var reloadKey by remember { mutableStateOf(0) }
 
-    // Фильтр модификации x01
     var selectedVariant by remember { mutableStateOf(GameVariant.ALL) }
     var showVariantDialog by remember { mutableStateOf(false) }
 
-    // Диалоги графиков и чек-аутов
     var showCricketChart by remember { mutableStateOf(false) }
     var show501Chart by remember { mutableStateOf(false) }
     var showCheckoutsDialog by remember { mutableStateOf(false) }
@@ -207,7 +206,6 @@ fun StatsScreen(
         games501 = if (cutoff == null) all501 else all501.filter { it.dateMillis >= cutoff }
     }
 
-    // Считаем данные для графиков один раз
     val cricketChartData = remember(games, ownerName) {
         computeCricketChartData(games, ownerName)
     }
@@ -215,9 +213,12 @@ fun StatsScreen(
         compute501ChartData(games501, ownerName, selectedVariant)
     }
 
-    // Считаем чекауты (общие, по всем играм с даблами)
+    // Чекауты считаем только по завершённым играм
     val allCheckouts = remember(games501, ownerName) {
-        computeClosedCheckouts(games501.filter { it.outModeName != "STRAIGHT_OUT" }, ownerName)
+        computeClosedCheckouts(
+            games501.filter { it.isFinished && it.outModeName != "STRAIGHT_OUT" },
+            ownerName
+        )
     }
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
@@ -273,7 +274,7 @@ fun StatsScreen(
 
         Spacer(Modifier.height(16.dp))
 
-        // ── ТАБЫ (только если showTabs = true) ──
+        // ── ТАБЫ ──
         if (showTabs) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -314,7 +315,6 @@ fun StatsScreen(
                 }
             }
         } else {
-            // Когда вкладки скрыты — показываем просто заголовок игры
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
@@ -330,7 +330,7 @@ fun StatsScreen(
             }
         }
 
-        // ── Строка активного фильтра (только для 501) ──
+        // ── Строка активного фильтра ──
         if (selectedTab == 1 && selectedVariant != GameVariant.ALL) {
             Spacer(Modifier.height(8.dp))
             Row(
@@ -377,12 +377,12 @@ fun StatsScreen(
                 variant = selectedVariant,
                 period = period,
                 onPeriodChange = { period = it },
-                onResetClick = { showResetDialog = true }
+                onResetClick = { showResetDialog = true },
+                onResumeGame501 = onResumeGame501
             )
         }
     }
 
-    // Диалог выбора модификации
     if (showVariantDialog) {
         VariantDialog(
             selected = selectedVariant,
@@ -391,7 +391,6 @@ fun StatsScreen(
         )
     }
 
-    // Диалог с графиком крикета
     if (showCricketChart) {
         ChartDialog(
             title = "График MPR (крикет)",
@@ -408,7 +407,6 @@ fun StatsScreen(
         )
     }
 
-    // Диалог с двумя графиками 501
     if (show501Chart) {
         ChartDialog(
             title = "Графики x01",
@@ -417,7 +415,6 @@ fun StatsScreen(
         )
     }
 
-    // Диалог с чекаутами
     if (showCheckoutsDialog) {
         CheckoutsDialog(
             closedCheckouts = allCheckouts,
@@ -673,6 +670,7 @@ private fun compute501ChartData(
     variant: GameVariant
 ): List<ChartSpec> {
     val filtered = games.filter { g ->
+        if (!g.isFinished) return@filter false
         if (g.outModeName == "STRAIGHT_OUT") return@filter false
         if (variant == GameVariant.ALL) return@filter true
         g.gameTypeName == variant.gameTypeName && g.outModeName == variant.outModeName
@@ -868,10 +866,16 @@ private fun Game501TabContent(
     variant: GameVariant,
     period: StatPeriod,
     onPeriodChange: (StatPeriod) -> Unit,
-    onResetClick: () -> Unit
+    onResetClick: () -> Unit,
+    onResumeGame501: (Game501Entity) -> Unit
 ) {
+    // Незавершённые партии — показываем отдельно, красным.
+    val unfinished = remember(games) { games.filter { !it.isFinished } }
+
+    // Для агрегатов — только завершённые.
     val filteredGames = remember(games, variant) {
         games.filter { g ->
+            if (!g.isFinished) return@filter false
             if (g.outModeName == "STRAIGHT_OUT") return@filter false
             if (variant == GameVariant.ALL) return@filter true
             g.gameTypeName == variant.gameTypeName && g.outModeName == variant.outModeName
@@ -881,11 +885,23 @@ private fun Game501TabContent(
     val agg = remember(filteredGames, ownerName) { computeAggregate501(filteredGames, ownerName) }
 
     Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+
+        // ── НЕЗАВЕРШЁННЫЕ ПАРТИИ ──
+        if (unfinished.isNotEmpty()) {
+            SectionTitle("НЕЗАВЕРШЁННЫЕ (${unfinished.size})")
+            Spacer(Modifier.height(8.dp))
+            unfinished.forEach { entity ->
+                Unfinished501Card(entity, onClick = { onResumeGame501(entity) })
+                Spacer(Modifier.height(6.dp))
+            }
+            Spacer(Modifier.height(16.dp))
+        }
+
         PeriodSelector(period = period, onPeriodChange = onPeriodChange)
         Spacer(Modifier.height(16.dp))
 
         if (agg.totalMatches == 0) {
-            EmptyStats()
+            if (unfinished.isEmpty()) EmptyStats()
             return@Column
         }
 
@@ -1005,6 +1021,69 @@ private fun Game501TabContent(
         Spacer(Modifier.height(24.dp))
         ResetButton(onResetClick)
         Spacer(Modifier.height(24.dp))
+    }
+}
+
+// ─────────────────────────────────────────────
+// Карточка незавершённой партии 501
+// ─────────────────────────────────────────────
+@Composable
+private fun Unfinished501Card(entity: Game501Entity, onClick: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(Color(0xFF3A1A1A))
+            .clickable { onClick() }
+            .padding(horizontal = 14.dp, vertical = 12.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                "⏸  НЕЗАВЕРШЕНА",
+                color = ErrorColor,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 2.sp,
+                modifier = Modifier.weight(1f)
+            )
+            Text(
+                formatDate(entity.lastUpdateMillis.takeIf { it > 0 } ?: entity.dateMillis),
+                color = Color.White.copy(alpha = 0.6f),
+                fontSize = 11.sp
+            )
+        }
+        Spacer(Modifier.height(6.dp))
+        val names = entity.playerNames.split("|")
+        val scores = entity.matchScore.split("|")
+        val legsPlayed = entity.legsPlayed
+        Text(
+            names.joinToString("  ·  "),
+            color = Color.White,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Bold
+        )
+        Spacer(Modifier.height(4.dp))
+        Text(
+            buildString {
+                append("Легов сыграно: $legsPlayed")
+                if (scores.size == names.size && scores.isNotEmpty()) {
+                    append("   ·   набрано очков: ")
+                    append(scores.joinToString(" / "))
+                }
+            },
+            color = Color.White.copy(alpha = 0.7f),
+            fontSize = 12.sp
+        )
+        Spacer(Modifier.height(6.dp))
+        Text(
+            "Нажми, чтобы продолжить",
+            color = GoldAccent,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Medium
+        )
     }
 }
 
