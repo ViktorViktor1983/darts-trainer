@@ -16,6 +16,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.lodkin.dartstrainer.data.SettingsStorage
+import com.lodkin.dartstrainer.data.biground.BigRoundDatabase
+import com.lodkin.dartstrainer.data.biground.BigRoundRepository
 import com.lodkin.dartstrainer.data.cricket.CricketRepository
 import com.lodkin.dartstrainer.data.game501.Game501Database
 import com.lodkin.dartstrainer.data.game501.Game501Repository
@@ -49,11 +51,15 @@ fun StatsMenuScreen(
     val sectorRepo = remember {
         SectorRepository(SectorDatabase.get(context).sectorDao())
     }
+    val bigRoundRepo = remember {
+        BigRoundRepository(BigRoundDatabase.get(context).bigRoundDao())
+    }
     val ownerName = remember { SettingsStorage.getPlayerName(context).trim() }
 
     var avg501Ppr by remember { mutableStateOf<String?>(null) }
     var avgCricketMpr by remember { mutableStateOf<String?>(null) }
     var bestSectorScore by remember { mutableStateOf<String?>(null) }
+    var bestBigRoundScore by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(Unit) {
         // ── 501: средний PPR за всё время ──
@@ -93,10 +99,15 @@ fun StatsMenuScreen(
         }
         avgCricketMpr = if (mprCount > 0) "%.2f".format(Locale.US, mprSum / mprCount) else "—"
 
-        // ── Сектор: лучший результат за всё время ──
+        // ── Сектор: лучший результат ──
         val sectorGames = sectorRepo.getAllGames()
-        val best = sectorGames.maxOfOrNull { it.totalScore }
-        bestSectorScore = if (best != null && best > 0) best.toString() else "—"
+        val bestSector = sectorGames.maxOfOrNull { it.totalScore }
+        bestSectorScore = if (bestSector != null && bestSector > 0) bestSector.toString() else "—"
+
+        // ── Большой раунд: лучший результат ──
+        val bigRoundGames = bigRoundRepo.getAllGames()
+        val bestBig = bigRoundGames.maxOfOrNull { it.totalScore }
+        bestBigRoundScore = if (bestBig != null && bestBig > 0) bestBig.toString() else "—"
     }
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
@@ -164,7 +175,7 @@ fun StatsMenuScreen(
             )
             StatsCard(
                 title = "Большой раунд",
-                metric = "—",
+                metric = bestBigRoundScore ?: "...",
                 metricLabel = "Лучший результат",
                 onClick = onBigRound,
                 modifier = Modifier.weight(1f).fillMaxHeight()
