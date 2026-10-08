@@ -159,8 +159,15 @@ fun DartsTrainerApp() {
 
     var bigRoundCategory by remember { mutableStateOf<BigRoundCategory?>(null) }
 
+    // Счётчик заходов в меню статистики — увеличивается при каждом заходе,
+    // чтобы StatsMenuScreen перечитывал метрики из базы.
+    var statsMenuKey by remember { mutableStateOf(0) }
+
     BackHandler(enabled = stage == "main" && screen != "main") {
-        PARENT_SCREEN[screen]?.let { parent -> screen = parent }
+        PARENT_SCREEN[screen]?.let { parent ->
+            if (parent == "stats_menu") statsMenuKey++
+            screen = parent
+        }
     }
 
     if (stage == "loading") {
@@ -187,12 +194,16 @@ fun DartsTrainerApp() {
             "main" -> MainMenuScreen(
                 onTraining = { screen = "training" },
                 onFreePlay = { screen = "game_select" },
-                onStatsClick = { screen = "stats_menu" },
+                onStatsClick = {
+                    statsMenuKey++
+                    screen = "stats_menu"
+                },
                 onSettingsClick = { screen = "settings" }
             )
 
             "stats_menu" -> StatsMenuScreen(
                 cricketRepository = cricketRepository,
+                reloadKey = statsMenuKey,
                 onCricket = { screen = "stats_cricket" },
                 on501 = { screen = "stats_501" },
                 onSector = { screen = "sector_stats" },
@@ -206,14 +217,20 @@ fun DartsTrainerApp() {
                 repository = cricketRepository,
                 initialTab = 0,
                 showTabs = false,
-                onBack = { screen = "stats_menu" }
+                onBack = {
+                    statsMenuKey++
+                    screen = "stats_menu"
+                }
             )
 
             "stats_501" -> StatsScreen(
                 repository = cricketRepository,
                 initialTab = 1,
                 showTabs = false,
-                onBack = { screen = "stats_menu" }
+                onBack = {
+                    statsMenuKey++
+                    screen = "stats_menu"
+                }
             )
 
             "settings" -> SettingsScreen(
@@ -375,7 +392,10 @@ fun DartsTrainerApp() {
 
             "sector_stats" -> SectorStatsScreen(
                 repository = sectorRepository,
-                onBack = { screen = "stats_menu" }
+                onBack = {
+                    statsMenuKey++
+                    screen = "stats_menu"
+                }
             )
 
             "aroundclock_setup" -> AroundClockSetupScreen(
@@ -423,7 +443,10 @@ fun DartsTrainerApp() {
 
             "aroundclock_stats" -> AroundClockStatsScreen(
                 repository = aroundClockRepository,
-                onBack = { screen = "stats_menu" }
+                onBack = {
+                    statsMenuKey++
+                    screen = "stats_menu"
+                }
             )
 
             "biground_setup" -> BigRoundSetupScreen(
@@ -454,7 +477,10 @@ fun DartsTrainerApp() {
 
             "biground_stats" -> BigRoundStatsScreen(
                 repository = bigRoundRepository,
-                onBack = { screen = "stats_menu" }
+                onBack = {
+                    statsMenuKey++
+                    screen = "stats_menu"
+                }
             )
 
             "scoreset_setup" -> ScoreSetSetupScreen(
@@ -468,8 +494,6 @@ fun DartsTrainerApp() {
             "scoreset_game" -> ScoreSetGameScreen(
                 repository = scoreSetRepository,
                 onFinish = { totalScore: Int, approaches: List<Int> ->
-                    // Сохраняем на уровне MainActivity — scope живёт долго,
-                    // saveGame успевает записать в базу.
                     scope.launch {
                         scoreSetRepository.saveGame(
                             totalScore = totalScore,
@@ -483,7 +507,10 @@ fun DartsTrainerApp() {
 
             "scoreset_stats" -> ScoreSetStatsScreen(
                 repository = scoreSetRepository,
-                onBack = { screen = "stats_menu" }
+                onBack = {
+                    statsMenuKey++
+                    screen = "stats_menu"
+                }
             )
         }
     }
