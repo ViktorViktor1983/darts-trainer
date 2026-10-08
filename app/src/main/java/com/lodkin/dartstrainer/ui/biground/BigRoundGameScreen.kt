@@ -39,9 +39,6 @@ private const val AUTO_OK_SECONDS = 3
 private const val MAX_HITS_SECTOR = 9
 private const val MAX_HITS_BULL = 6
 
-// ─────────────────────────────────────────────
-// Нормативы «Большой раунд» (от низшего к высшему).
-// ─────────────────────────────────────────────
 private data class BigRoundNorm(val name: String, val points: Int)
 
 private val NORMS_MALE: List<BigRoundNorm> = listOf(
@@ -129,12 +126,12 @@ fun BigRoundGameScreen(
             .fillMaxSize()
             .background(DarkBg)
     ) {
-        // ── Шапка ──
+        // ── Шапка (без категории) ──
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .background(Color(0xFF1A2332))
-                .padding(horizontal = 12.dp, vertical = 10.dp),
+                .padding(horizontal = 12.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box(
@@ -147,19 +144,13 @@ fun BigRoundGameScreen(
                 Text("← Назад", color = Accent, fontSize = 14.sp, fontWeight = FontWeight.Bold)
             }
             Spacer(Modifier.width(12.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    "Большой раунд",
-                    color = Color.White,
-                    fontSize = 17.sp,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    categoryLabel(category),
-                    color = Accent,
-                    fontSize = 11.sp
-                )
-            }
+            Text(
+                "Большой раунд",
+                color = Color.White,
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.weight(1f)
+            )
             Text(
                 "${approaches.size} / $TOTAL_APPROACHES",
                 color = Accent,
@@ -168,12 +159,12 @@ fun BigRoundGameScreen(
             )
         }
 
-        // ── Счёт ──
+        // ── Счёт (увеличен ×2) ──
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .background(Color(0xFF16202C))
-                .padding(vertical = 14.dp),
+                .padding(vertical = 4.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
@@ -186,22 +177,23 @@ fun BigRoundGameScreen(
             Text(
                 "$totalScore",
                 color = GoldAccent,
-                fontSize = 56.sp,
-                fontWeight = FontWeight.Bold
+                fontSize = 112.sp,
+                fontWeight = FontWeight.Bold,
+                lineHeight = 118.sp
             )
             Text(
                 "попаданий: $totalHits",
                 color = Color.White.copy(alpha = 0.6f),
-                fontSize = 13.sp
+                fontSize = 12.sp
             )
         }
 
-        // ── Поле ввода ──
+        // ── Поле ввода (строка «ПОДХОД 3 · S3» ×3) ──
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 10.dp)
-                .height(88.dp)
+                .padding(horizontal = 12.dp, vertical = 6.dp)
+                .height(78.dp)
                 .clip(RoundedCornerShape(12.dp))
                 .background(TileBgDark)
                 .padding(horizontal = 16.dp),
@@ -212,12 +204,13 @@ fun BigRoundGameScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Column(modifier = Modifier.weight(1f)) {
+                    // Верхняя строка ×3
                     Text(
                         "ПОДХОД ${approaches.size + 1} · $sectorLabel",
                         color = Accent,
-                        fontSize = 11.sp,
+                        fontSize = 33.sp,
                         fontWeight = FontWeight.Bold,
-                        letterSpacing = 2.sp
+                        letterSpacing = 1.sp
                     )
                     Spacer(Modifier.height(2.dp))
                     Text(
@@ -227,7 +220,7 @@ fun BigRoundGameScreen(
                         fontSize = 10.sp
                     )
                     if (autoOkActive && isInputValid(inputText)) {
-                        Spacer(Modifier.height(4.dp))
+                        Spacer(Modifier.height(2.dp))
                         Text(
                             "авто-OK через $AUTO_OK_SECONDS сек",
                             color = Accent.copy(alpha = 0.7f),
@@ -239,7 +232,7 @@ fun BigRoundGameScreen(
                 Text(
                     if (inputText.isEmpty()) "—" else inputText,
                     color = if (inputText.isEmpty()) Color.White.copy(alpha = 0.3f) else GoldAccent,
-                    fontSize = 44.sp,
+                    fontSize = 40.sp,
                     fontWeight = FontWeight.Bold
                 )
             }
@@ -255,29 +248,29 @@ fun BigRoundGameScreen(
             val keyboardEnabled = !isFinished
             val highDigitsEnabled = keyboardEnabled && !isBull
 
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 DigitKey("1", keyboardEnabled) { inputText = appendDigit(inputText, "1") }
                 DigitKey("2", keyboardEnabled) { inputText = appendDigit(inputText, "2") }
                 DigitKey("3", keyboardEnabled) { inputText = appendDigit(inputText, "3") }
             }
-            Spacer(Modifier.height(8.dp))
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Spacer(Modifier.height(6.dp))
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 DigitKey("4", keyboardEnabled) { inputText = appendDigit(inputText, "4") }
                 DigitKey("5", keyboardEnabled) { inputText = appendDigit(inputText, "5") }
                 DigitKey("6", keyboardEnabled) { inputText = appendDigit(inputText, "6") }
             }
-            Spacer(Modifier.height(8.dp))
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Spacer(Modifier.height(6.dp))
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 DigitKey("7", highDigitsEnabled) { inputText = appendDigit(inputText, "7") }
                 DigitKey("8", highDigitsEnabled) { inputText = appendDigit(inputText, "8") }
                 DigitKey("9", highDigitsEnabled) { inputText = appendDigit(inputText, "9") }
             }
-            Spacer(Modifier.height(8.dp))
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Spacer(Modifier.height(6.dp))
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 Box(
                     modifier = Modifier
                         .weight(1f)
-                        .height(68.dp)
+                        .height(58.dp)
                         .clip(RoundedCornerShape(10.dp))
                         .background(TileBgDark)
                         .clickable(enabled = keyboardEnabled && inputText.isNotEmpty()) {
@@ -288,7 +281,7 @@ fun BigRoundGameScreen(
                     Text(
                         "⌫",
                         color = if (inputText.isNotEmpty()) Color.White else Color.White.copy(alpha = 0.3f),
-                        fontSize = 24.sp,
+                        fontSize = 22.sp,
                         fontWeight = FontWeight.Bold
                     )
                 }
@@ -299,7 +292,7 @@ fun BigRoundGameScreen(
                 Box(
                     modifier = Modifier
                         .weight(1f)
-                        .height(68.dp)
+                        .height(58.dp)
                         .clip(RoundedCornerShape(10.dp))
                         .background(if (okEnabled) Accent else Accent.copy(alpha = 0.35f))
                         .clickable(enabled = okEnabled) { submitApproach() },
@@ -314,12 +307,12 @@ fun BigRoundGameScreen(
                 }
             }
 
-            Spacer(Modifier.height(10.dp))
+            Spacer(Modifier.height(8.dp))
 
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(52.dp)
+                    .height(46.dp)
                     .clip(RoundedCornerShape(10.dp))
                     .background(if (approaches.isNotEmpty()) PaleYellow else PaleYellow.copy(alpha = 0.35f))
                     .clickable(enabled = approaches.isNotEmpty() && !showFinishDialog) { undoApproach() },
@@ -333,12 +326,12 @@ fun BigRoundGameScreen(
                 )
             }
 
-            Spacer(Modifier.height(10.dp))
+            Spacer(Modifier.height(8.dp))
 
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(46.dp)
+                    .height(42.dp)
                     .clip(RoundedCornerShape(10.dp))
                     .background(TileBgDark)
                     .padding(horizontal = 10.dp),
@@ -387,7 +380,7 @@ fun BigRoundGameScreen(
             }
         }
 
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(8.dp))
     }
 
     if (showBackConfirm) {
@@ -413,11 +406,9 @@ fun BigRoundGameScreen(
         val score = totalScore
         val norms = if (category == BigRoundCategory.MALE) NORMS_MALE else NORMS_YOUTH
 
-        // Лучший подходящий: первый с конца (самый высокий), чьи очки <= score
         val achievedIdx = norms.indices.reversed()
             .firstOrNull { score >= norms[it].points }
         val achieved = if (achievedIdx != null) norms[achievedIdx] else null
-        // Следующий (более высокий) — на индекс больше
         val next = if (achievedIdx != null && achievedIdx < norms.size - 1)
             norms[achievedIdx + 1] else null
 
@@ -448,11 +439,6 @@ fun BigRoundGameScreen(
             },
             text = {
                 Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
-                    Text(
-                        categoryLabel(category),
-                        color = Color.White.copy(alpha = 0.7f),
-                        fontSize = 13.sp
-                    )
                     Spacer(Modifier.height(8.dp))
 
                     Row(
@@ -544,11 +530,6 @@ fun BigRoundGameScreen(
     }
 }
 
-private fun categoryLabel(c: BigRoundCategory): String = when (c) {
-    BigRoundCategory.MALE -> "Мужской"
-    BigRoundCategory.YOUTH -> "Юношеский"
-}
-
 private fun appendDigit(current: String, digit: String): String {
     if (current.length >= 2) return current
     if (current == "0") return digit
@@ -564,7 +545,7 @@ private fun RowScope.DigitKey(
     Box(
         modifier = Modifier
             .weight(1f)
-            .height(68.dp)
+            .height(58.dp)
             .clip(RoundedCornerShape(10.dp))
             .background(if (enabled) TileBg else TileBg.copy(alpha = 0.4f))
             .clickable(enabled = enabled) { onClick() },
