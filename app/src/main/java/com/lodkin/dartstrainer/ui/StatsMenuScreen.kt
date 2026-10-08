@@ -93,7 +93,6 @@ fun StatsMenuScreen(
     var localReloadKey by remember { mutableStateOf(0) }
 
     LaunchedEffect(reloadKey, localReloadKey) {
-        // ── 501: средний PPR ──
         val games501 = game501Repo.getAllGames()
         var pprSum = 0.0
         var pprCount = 0
@@ -116,7 +115,6 @@ fun StatsMenuScreen(
         unfinished501 = games501.filter { !it.isFinished }
             .sortedByDescending { it.lastUpdateMillis }
 
-        // ── Крикет: средний MPR ──
         val gamesCricket = cricketRepository.getAllGamesIncludingUnfinished()
         var mprSum = 0.0
         var mprCount = 0
@@ -158,19 +156,19 @@ fun StatsMenuScreen(
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
 
-        // ── ШАПКА (заголовок и подпись ×2, кнопка Назад длиннее) ──
+        // ── ШАПКА (кнопка «Назад» как в статистике Сектора) ──
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box(
                 modifier = Modifier
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(TileBgDark)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(TileBg)
                     .clickable { onBack() }
-                    .padding(horizontal = 22.dp, vertical = 12.dp)
+                    .padding(horizontal = 14.dp, vertical = 8.dp)
             ) {
-                Text("←", color = Accent, fontSize = 30.sp, fontWeight = FontWeight.Bold)
+                Text("← Назад", color = Accent, fontSize = 14.sp, fontWeight = FontWeight.Bold)
             }
             Spacer(Modifier.width(14.dp))
             Column {
