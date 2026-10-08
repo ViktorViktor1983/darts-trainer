@@ -42,7 +42,6 @@ fun BigRoundSetupScreen(
     onOpenStats: () -> Unit,
     onBack: () -> Unit
 ) {
-    var category by remember { mutableStateOf(BigRoundCategory.MALE) }
     var showChartDialog by remember { mutableStateOf(false) }
 
     Column(
@@ -111,34 +110,6 @@ fun BigRoundSetupScreen(
                 )
             }
 
-            Spacer(Modifier.height(20.dp))
-
-            Text(
-                "КАТЕГОРИЯ",
-                color = Accent,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 3.sp
-            )
-            Spacer(Modifier.height(6.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                CategoryButton(
-                    label = "Мужской",
-                    selected = category == BigRoundCategory.MALE,
-                    onClick = { category = BigRoundCategory.MALE },
-                    modifier = Modifier.weight(1f)
-                )
-                CategoryButton(
-                    label = "Юношеский",
-                    selected = category == BigRoundCategory.YOUTH,
-                    onClick = { category = BigRoundCategory.YOUTH },
-                    modifier = Modifier.weight(1f)
-                )
-            }
-
             Spacer(Modifier.height(24.dp))
 
             // ── Описание ──
@@ -177,7 +148,7 @@ fun BigRoundSetupScreen(
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(16.dp))
                 .background(Accent)
-                .clickable { onStartGame(category) }
+                .clickable { onStartGame(BigRoundCategory.MALE) }
                 .padding(vertical = 18.dp),
             contentAlignment = Alignment.Center
         ) {
@@ -212,46 +183,21 @@ private fun HeaderIconButton(icon: String, onClick: () -> Unit) {
     }
 }
 
-@Composable
-private fun CategoryButton(
-    label: String,
-    selected: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier
-) {
-    Box(
-        modifier = modifier
-            .height(64.dp)
-            .clip(RoundedCornerShape(10.dp))
-            .background(if (selected) Accent else TileBg)
-            .clickable { onClick() },
-        contentAlignment = Alignment.Center
-    ) {
-        Text(
-            label,
-            color = if (selected) Color(0xFF121212) else Color.White,
-            fontSize = 15.sp,
-            fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium
-        )
-    }
-}
-
 // ─────────────────────────────────────────────
-// Диалог с графиком
+// Диалог с графиком (без категорий)
 // ─────────────────────────────────────────────
 @Composable
 private fun BigRoundChartDialog(
     repository: BigRoundRepository,
     onDismiss: () -> Unit
 ) {
-    var chartCategory by remember { mutableStateOf(BigRoundCategory.MALE) }
     var games by remember { mutableStateOf<List<BigRoundGameEntity>>(emptyList()) }
     var loading by remember { mutableStateOf(true) }
 
-    LaunchedEffect(chartCategory) {
+    LaunchedEffect(Unit) {
         loading = true
         games = withContext(Dispatchers.IO) {
-            repository.getAllGames().filter { it.categoryName == chartCategory.name }
+            repository.getAllGames()
         }.reversed()
         loading = false
     }
@@ -268,34 +214,6 @@ private fun BigRoundChartDialog(
         },
         text = {
             Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
-                // Переключатель категории
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    listOf(BigRoundCategory.MALE, BigRoundCategory.YOUTH).forEach { c ->
-                        val isSelected = c == chartCategory
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(if (isSelected) Accent else TileBg)
-                                .clickable { chartCategory = c }
-                                .padding(vertical = 10.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                if (c == BigRoundCategory.MALE) "Мужской" else "Юношеский",
-                                color = if (isSelected) Color(0xFF121212) else Color.White,
-                                fontSize = 13.sp,
-                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
-                            )
-                        }
-                    }
-                }
-
-                Spacer(Modifier.height(16.dp))
-
                 if (loading) {
                     Box(
                         modifier = Modifier.fillMaxWidth().height(180.dp),
