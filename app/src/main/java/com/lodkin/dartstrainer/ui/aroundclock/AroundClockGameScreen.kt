@@ -16,6 +16,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.lodkin.dartstrainer.data.aroundclock.AroundClockOrder
@@ -116,12 +117,12 @@ fun AroundClockGameScreen(
             .fillMaxSize()
             .background(DarkBg)
     ) {
-        // ── Шапка ──
+        // ── Шапка (Кругосветка ×1.5 и по центру) ──
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .background(Color(0xFF1A2332))
-                .padding(horizontal = 12.dp, vertical = 12.dp),
+                .padding(horizontal = 12.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box(
@@ -133,22 +134,28 @@ fun AroundClockGameScreen(
             ) {
                 Text("← Назад", color = Accent, fontSize = 14.sp, fontWeight = FontWeight.Bold)
             }
-            Spacer(Modifier.width(10.dp))
-            Column(modifier = Modifier.weight(1f)) {
+            Spacer(Modifier.width(8.dp))
+            Column(
+                modifier = Modifier.weight(1f),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
                 Text(
                     "Кругосветка",
                     color = Color.White,
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold
+                    fontSize = 27.sp,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center
                 )
                 Text(
                     "${targetLabel(target)} · ${
                         if (order == AroundClockOrder.ORDERED) "по порядку" else "случайно"
                     } · попаданий: $hitsRequired",
                     color = Accent,
-                    fontSize = 12.sp
+                    fontSize = 12.sp,
+                    textAlign = TextAlign.Center
                 )
             }
+            Spacer(Modifier.width(8.dp))
             Column(horizontalAlignment = Alignment.End) {
                 Text("ДРОТИКОВ", color = Color(0xFF99AABB), fontSize = 10.sp, letterSpacing = 1.sp)
                 Text("${allThrows.size}", color = GoldAccent, fontSize = 26.sp, fontWeight = FontWeight.Bold)
@@ -174,35 +181,36 @@ fun AroundClockGameScreen(
             isFinished = isFinished
         )
 
-        // ── Текущая цель ──
+        // ── Текущая цель (S1 ×2) ──
         if (!isFinished && currentSectorOrNull != null) {
             val cs = currentSectorOrNull
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(Color(0xFF16202C))
-                    .padding(vertical = 16.dp),
+                    .padding(vertical = 6.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text(
                     "ЦЕЛЬ",
                     color = Color(0xFF99AABB),
-                    fontSize = 11.sp,
+                    fontSize = 12.sp,
                     fontWeight = FontWeight.Bold,
-                    letterSpacing = 2.sp
+                    letterSpacing = 3.sp
                 )
                 Text(
                     sectorLabel(cs, target),
                     color = GoldAccent,
-                    fontSize = 58.sp,
-                    fontWeight = FontWeight.Bold
+                    fontSize = 116.sp,
+                    fontWeight = FontWeight.Bold,
+                    lineHeight = 122.sp
                 )
                 Text(
                     "попаданий: ${state.hitsInCurrent} / $hitsRequired",
                     color = Color.White.copy(alpha = 0.6f),
                     fontSize = 14.sp
                 )
-                Spacer(Modifier.height(6.dp))
+                Spacer(Modifier.height(4.dp))
                 if (bestRecord != null) {
                     Text(
                         "🏆 лучший результат: $bestRecord дротиков",
@@ -223,7 +231,7 @@ fun AroundClockGameScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(Color(0xFF16202C))
-                    .padding(vertical = 26.dp),
+                    .padding(vertical = 18.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text(
@@ -242,14 +250,14 @@ fun AroundClockGameScreen(
             }
         }
 
-        Spacer(Modifier.height(10.dp))
+        Spacer(Modifier.height(6.dp))
 
         // ── Три строки подхода ──
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             for (i in 0..2) {
                 val globalIndex = (allThrows.size - throwsInCurrentApproach) + i
@@ -269,26 +277,26 @@ fun AroundClockGameScreen(
             }
         }
 
-        Spacer(Modifier.height(10.dp))
+        Spacer(Modifier.height(8.dp))
 
-        // ── Кнопки ──
+        // ── Кнопки (крупнее) ──
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 12.dp)
-                .weight(1f)
+                .weight(1f),
+            verticalArrangement = Arrangement.Bottom
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                // Все мимо — активна всегда, пока игра не завершена
                 val canMissAll = !isFinished
                 Box(
                     modifier = Modifier
                         .weight(1f)
-                        .height(64.dp)
-                        .clip(RoundedCornerShape(10.dp))
+                        .height(78.dp)
+                        .clip(RoundedCornerShape(12.dp))
                         .background(if (canMissAll) TileBgDark else TileBgDark.copy(alpha = 0.4f))
                         .clickable(enabled = canMissAll) { missAllRemaining() },
                     contentAlignment = Alignment.Center
@@ -296,18 +304,17 @@ fun AroundClockGameScreen(
                     Text(
                         "Все мимо",
                         color = if (canMissAll) Color.White else Color.White.copy(alpha = 0.4f),
-                        fontSize = 16.sp,
+                        fontSize = 20.sp,
                         fontWeight = FontWeight.Bold
                     )
                 }
 
-                // Ход назад
                 val canUndo = allThrows.isNotEmpty() && !showFinishDialog
                 Box(
                     modifier = Modifier
                         .weight(1f)
-                        .height(64.dp)
-                        .clip(RoundedCornerShape(10.dp))
+                        .height(78.dp)
+                        .clip(RoundedCornerShape(12.dp))
                         .background(if (canUndo) PaleYellow else PaleYellow.copy(alpha = 0.35f))
                         .clickable(enabled = canUndo) { undo() },
                     contentAlignment = Alignment.Center
@@ -315,14 +322,13 @@ fun AroundClockGameScreen(
                     Text(
                         "↶ Ход назад",
                         color = PaleYellowText,
-                        fontSize = 16.sp,
+                        fontSize = 20.sp,
                         fontWeight = FontWeight.Bold
                     )
                 }
             }
+            Spacer(Modifier.height(12.dp))
         }
-
-        Spacer(Modifier.height(14.dp))
     }
 
     if (showBackConfirm) {
@@ -459,7 +465,7 @@ private fun SectorProgressMap(
         modifier = Modifier
             .fillMaxWidth()
             .background(Color(0xFF0D1117))
-            .padding(horizontal = 8.dp, vertical = 8.dp)
+            .padding(horizontal = 8.dp, vertical = 6.dp)
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -487,7 +493,7 @@ private fun SectorProgressMap(
                 Box(
                     modifier = Modifier
                         .weight(1f)
-                        .height(28.dp)
+                        .height(26.dp)
                         .clip(RoundedCornerShape(4.dp))
                         .background(bg),
                     contentAlignment = Alignment.Center
@@ -539,7 +545,7 @@ private fun ApproachRow(
         Box(
             modifier = Modifier
                 .weight(1f)
-                .height(72.dp)
+                .height(66.dp)
                 .clip(RoundedCornerShape(10.dp))
                 .background(if (missEnabled) missBg else missBg.copy(alpha = 0.6f))
                 .clickable(enabled = missEnabled) { onMiss() },
@@ -549,7 +555,7 @@ private fun ApproachRow(
                 "ПРОМАХ",
                 color = if (currentResult == RowResult.MISS) Color.White
                 else Color.White.copy(alpha = if (missEnabled) 0.9f else 0.4f),
-                fontSize = 18.sp,
+                fontSize = 20.sp,
                 fontWeight = FontWeight.Bold
             )
         }
@@ -558,7 +564,7 @@ private fun ApproachRow(
         Box(
             modifier = Modifier
                 .weight(1f)
-                .height(72.dp)
+                .height(66.dp)
                 .clip(RoundedCornerShape(10.dp))
                 .background(if (hitEnabled) hitBg else hitBg.copy(alpha = 0.6f))
                 .clickable(enabled = hitEnabled) { onHit() },
@@ -568,7 +574,7 @@ private fun ApproachRow(
                 label,
                 color = if (currentResult == RowResult.HIT) Color.White
                 else Color.White.copy(alpha = if (hitEnabled) 0.9f else 0.4f),
-                fontSize = 18.sp,
+                fontSize = 20.sp,
                 fontWeight = FontWeight.Bold
             )
         }
