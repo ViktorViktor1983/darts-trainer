@@ -152,8 +152,6 @@ fun DartsTrainerApp() {
 
     var cricketGame by remember { mutableStateOf<CricketGame?>(null) }
     var game501 by remember { mutableStateOf<Game501?>(null) }
-
-    // id незавершённой партии 501, которую продолжаем (0 = новая).
     var game501ExistingId by remember { mutableStateOf(0L) }
 
     var sectorToPlay by remember { mutableStateOf<Int?>(null) }
@@ -164,8 +162,6 @@ fun DartsTrainerApp() {
 
     var bigRoundCategory by remember { mutableStateOf<BigRoundCategory?>(null) }
 
-    // Счётчик заходов в меню статистики — увеличивается при каждом заходе,
-    // чтобы StatsMenuScreen перечитывал метрики из базы.
     var statsMenuKey by remember { mutableStateOf(0) }
 
     BackHandler(enabled = stage == "main" && screen != "main") {
@@ -209,6 +205,14 @@ fun DartsTrainerApp() {
             "stats_menu" -> StatsMenuScreen(
                 cricketRepository = cricketRepository,
                 reloadKey = statsMenuKey,
+                onResumeGame501 = { entity ->
+                    val restored = Game501Serializer.fromJson(entity.stateBlob)
+                    if (restored != null) {
+                        game501 = restored
+                        game501ExistingId = entity.id
+                        screen = "game501_game"
+                    }
+                },
                 onCricket = { screen = "stats_cricket" },
                 on501 = { screen = "stats_501" },
                 onSector = { screen = "sector_stats" },
@@ -233,7 +237,6 @@ fun DartsTrainerApp() {
                 initialTab = 1,
                 showTabs = false,
                 onResumeGame501 = { entity ->
-                    // Возобновляем партию из статистики.
                     val restored = Game501Serializer.fromJson(entity.stateBlob)
                     if (restored != null) {
                         game501 = restored
