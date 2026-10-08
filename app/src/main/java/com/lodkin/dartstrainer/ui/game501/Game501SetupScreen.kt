@@ -29,6 +29,8 @@ import androidx.compose.ui.unit.sp
 import com.lodkin.dartstrainer.data.cricket.CRICKET_BOTS
 import com.lodkin.dartstrainer.data.cricket.CricketBot
 import com.lodkin.dartstrainer.data.cricket.PlayerNamesStorage
+import com.lodkin.dartstrainer.data.game501.Game501Database
+import com.lodkin.dartstrainer.data.game501.Game501Repository
 import com.lodkin.dartstrainer.data.game501.Game501SettingsStorage
 import com.lodkin.dartstrainer.data.game501.Game501Simulator
 import com.lodkin.dartstrainer.data.game501.GameType
@@ -95,10 +97,37 @@ fun Game501SetupScreen(
     var testResults by remember { mutableStateOf<List<Game501Simulator.SimResult>>(emptyList()) }
     var showTestResult by remember { mutableStateOf(false) }
 
+    // ── Мой средний PPR из статистики ──
+    val game501Repo = remember { Game501Repository(Game501Database.get(context).game501Dao()) }
+    var myAvgPpr by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(playerName) {
+        val games = game501Repo.getAllGames()
+        var sum = 0.0
+        var count = 0
+        for (g in games) {
+            if (g.outModeName == "STRAIGHT_OUT") continue
+            val bots = parseStringList501(g.playerIsBot)
+            val names = parseStringList501(g.playerNames)
+            val pprList = parseDoubleList501(g.ppr)
+            for (i in bots.indices) {
+                val name = names.getOrNull(i) ?: ""
+                if (isOwner501(bots[i], name, playerName)) {
+                    pprList.getOrNull(i)?.let { sum += it; count++ }
+                    break
+                }
+            }
+        }
+        myAvgPpr = if (count > 0) "%.1f".format(Locale.US, sum / count) else null
+    }
+
     val activeSlots = if (isPairGame) slots else slots.take(2)
     val allBots = activeSlots.all { it.isBot }
     val allHumans = activeSlots.all { !it.isBot }
     val hasHuman = activeSlots.any { !it.isBot }
+
+    // Показывать ли PPR в слоте 1 (только если там я — человек)
+    val showMyPprInSlot1 = !slots[0].isBot && slots[0].name.equals(playerName, ignoreCase = true)
 
     fun changeGameType(newType: GameType) {
         Game501SettingsStorage.setOutMode(context, gameType, outMode)
@@ -210,18 +239,24 @@ fun Game501SetupScreen(
                     TeamColumn501("КОМАНДА A", slots[0], slots[2], "1", "3", savedNames, context,
                         { newSlot -> slots = slots.toMutableList().also { it[0] = newSlot } },
                         { newSlot -> slots = slots.toMutableList().also { it[2] = newSlot } },
-                        Modifier.weight(1f))
+                        myAvgPprForSlot1 = if (showMyPprInSlot1) myAvgPpr else null,
+                        modifier = Modifier.weight(1f))
                     TeamColumn501("КОМАНДА B", slots[1], slots[3], "2", "4", savedNames, context,
                         { newSlot -> slots = slots.toMutableList().also { it[1] = newSlot } },
                         { newSlot -> slots = slots.toMutableList().also { it[3] = newSlot } },
-                        Modifier.weight(1f))
+                        myAvgPprForSlot1 = null,
+                        modifier = Modifier.weight(1f))
                 }
             } else {
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Top) {
                     PlayerCell501(1, slots[0], savedNames, context,
-                        { newSlot -> slots = slots.toMutableList().also { it[0] = newSlot } }, Modifier.weight(1f))
+                        { newSlot -> slots = slots.toMutableList().also { it[0] = newSlot } },
+                        myAvgPpr = if (showMyPprInSlot1) myAvgPpr else null,
+                        modifier = Modifier.weight(1f))
                     PlayerCell501(2, slots[1], savedNames, context,
-                        { newSlot -> slots = slots.toMutableList().also { it[1] = newSlot } }, Modifier.weight(1f))
+                        { newSlot -> slots = slots.toMutableList().also { it[1] = newSlot } },
+                        myAvgPpr = null,
+                        modifier = Modifier.weight(1f))
                 }
             }
 
@@ -638,11 +673,6 @@ private fun SimResultRow(label: String, value: String) {
 
 // ─────────────────────────────────────────────
 // Загрузка слотов из сохранённых настроек.
-//
-// Приоритет для первого слота (слот 1):
-//   1. Имя владельца (из онбординга)
-//   2. Последнее сохранённое имя
-//   3. "Игрок 1"
 // ─────────────────────────────────────────────
 private fun loadSlots(context: android.content.Context, playerName: String): List<Slot501> {
     val bots = Game501SettingsStorage.getSlotIsBot(context)
@@ -678,7 +708,6 @@ private fun loadSlots(context: android.content.Context, playerName: String): Lis
 }
 
 // Бросок в Bull для розыгрыша первого хода.
-// Вероятности снижены на 10% от прежних (умножены на 0.9).
 private fun generateBotBullResult(bot: CricketBot): Int {
     val lvl = bot.id.coerceIn(1, 16)
     val pRed = (0.05 + (lvl - 1) * 0.027) * 0.9
@@ -729,27 +758,40 @@ private fun CompactNumberPicker(label: String, value: Int, onValueChange: (Int) 
 private fun TeamColumn501(
     teamLabel: String, slot1: Slot501, slot2: Slot501, slot1Label: String, slot2Label: String,
     savedNames: List<String>, context: android.content.Context,
-    onSlot1Change: (Slot501) -> Unit, onSlot2Change: (Slot501) -> Unit, modifier: Modifier
+    onSlot1Change: (Slot501) -> Unit, onSlot2Change: (Slot501) -> Unit,
+    myAvgPprForSlot1: String? = null,
+    modifier: Modifier
 ) {
     Column(modifier = modifier.clip(RoundedCornerShape(12.dp)).background(TileBgDark).padding(8.dp)) {
         Text(teamLabel, color = Accent, fontSize = 11.sp, fontWeight = FontWeight.Bold,
             letterSpacing = 2.sp, modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp), textAlign = TextAlign.Center)
-        PlayerInnerSlot501(slot1Label, slot1, savedNames, context, onSlot1Change)
+        PlayerInnerSlot501(slot1Label, slot1, savedNames, context, onSlot1Change, myAvgPprForSlot1)
         Spacer(Modifier.height(6.dp))
-        PlayerInnerSlot501(slot2Label, slot2, savedNames, context, onSlot2Change)
+        PlayerInnerSlot501(slot2Label, slot2, savedNames, context, onSlot2Change, null)
     }
 }
 
 @Composable
-private fun PlayerInnerSlot501(numberLabel: String, slot: Slot501, savedNames: List<String>,
-                               context: android.content.Context, onSlotChange: (Slot501) -> Unit) {
+private fun PlayerInnerSlot501(
+    numberLabel: String, slot: Slot501, savedNames: List<String>,
+    context: android.content.Context, onSlotChange: (Slot501) -> Unit,
+    myAvgPpr: String? = null
+) {
     var expanded by remember { mutableStateOf(false) }
     var showAddDialog by remember { mutableStateOf(false) }
     var newNameInput by remember { mutableStateOf("") }
     Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Box(modifier = Modifier.size(22.dp).clip(RoundedCornerShape(11.dp)).background(TileBg),
-            contentAlignment = Alignment.Center) {
+        Row(
+            modifier = Modifier
+                .clip(RoundedCornerShape(11.dp))
+                .background(TileBg)
+                .padding(horizontal = 6.dp, vertical = 3.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             Text(numberLabel, color = Accent, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+            if (myAvgPpr != null) {
+                Text(" · $myAvgPpr", color = GoldAccent, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+            }
         }
         Spacer(Modifier.width(6.dp))
         Box(modifier = Modifier.weight(1f)) {
@@ -805,16 +847,28 @@ private fun SlotDropdown(
 }
 
 @Composable
-private fun PlayerCell501(number: Int, slot: Slot501, savedNames: List<String>,
-                          context: android.content.Context, onSlotChange: (Slot501) -> Unit, modifier: Modifier) {
+private fun PlayerCell501(
+    number: Int, slot: Slot501, savedNames: List<String>,
+    context: android.content.Context, onSlotChange: (Slot501) -> Unit,
+    myAvgPpr: String? = null,
+    modifier: Modifier
+) {
     var expanded by remember { mutableStateOf(false) }
     var showAddDialog by remember { mutableStateOf(false) }
     var newNameInput by remember { mutableStateOf("") }
     Column(modifier = modifier.clip(RoundedCornerShape(12.dp)).background(TileBgDark).padding(8.dp)) {
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Box(modifier = Modifier.size(24.dp).clip(RoundedCornerShape(12.dp)).background(TileBg),
-                contentAlignment = Alignment.Center) {
+            Row(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(TileBg)
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 Text("$number", color = Accent, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                if (myAvgPpr != null) {
+                    Text(" · $myAvgPpr", color = GoldAccent, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                }
             }
         }
         Spacer(Modifier.height(6.dp))
@@ -855,4 +909,19 @@ private fun AddNameDialog501(value: String, onValueChange: (String) -> Unit,
                     focusedBorderColor = Accent, unfocusedBorderColor = TileBg, cursorColor = Accent))
         }
     )
+}
+
+// ─────────────────────────────────────────────
+// Хелперы для чтения статистики
+// ─────────────────────────────────────────────
+private fun parseStringList501(s: String): List<String> =
+    if (s.isBlank()) emptyList() else s.split("|")
+
+private fun parseDoubleList501(s: String): List<Double> =
+    if (s.isBlank()) emptyList() else s.split("|").map { it.toDoubleOrNull() ?: 0.0 }
+
+private fun isOwner501(isBotFlag: String, name: String, ownerName: String): Boolean {
+    if (isBotFlag != "0") return false
+    if (ownerName.isBlank()) return true
+    return name.equals(ownerName, ignoreCase = true)
 }
