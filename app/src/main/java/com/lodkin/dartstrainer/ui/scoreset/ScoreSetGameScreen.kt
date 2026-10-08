@@ -25,7 +25,6 @@ import com.lodkin.dartstrainer.theme.GoldAccent
 import com.lodkin.dartstrainer.theme.TileBg
 import com.lodkin.dartstrainer.theme.TileBgDark
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 
 private val PaleYellow = Color(0xFFFFE082)
 private val PaleYellowText = Color(0xFF3E2723)
@@ -48,11 +47,9 @@ private val SCORESET_NORMS: List<Pair<String, Int>> = listOf(
 @Composable
 fun ScoreSetGameScreen(
     repository: ScoreSetRepository,
-    onFinish: (totalScore: Int) -> Unit,
+    onFinish: (totalScore: Int, approaches: List<Int>) -> Unit,
     onBack: () -> Unit
 ) {
-    val scope = rememberCoroutineScope()
-
     val approaches = remember { mutableStateListOf<Int>() }
     var inputText by remember { mutableStateOf("") }
     var autoOkActive by remember { mutableStateOf(false) }
@@ -364,11 +361,9 @@ fun ScoreSetGameScreen(
 
     if (showFinishDialog) {
         val score = totalScore
-        // Ищем лучший подходящий норматив
         val achievedIdx = SCORESET_NORMS.indices.reversed()
             .firstOrNull { score >= SCORESET_NORMS[it].second }
         val achieved = if (achievedIdx != null) SCORESET_NORMS[achievedIdx] else null
-        // Следующий (более высокий) — это индекс + 1 в этом списке
         val next = if (achievedIdx != null && achievedIdx < SCORESET_NORMS.size - 1)
             SCORESET_NORMS[achievedIdx + 1] else null
 
@@ -377,13 +372,8 @@ fun ScoreSetGameScreen(
             confirmButton = {
                 TextButton(onClick = {
                     showFinishDialog = false
-                    scope.launch {
-                        repository.saveGame(
-                            totalScore = totalScore,
-                            approaches = approaches.toList()
-                        )
-                    }
-                    onFinish(score)
+                    // Сохраняем наверх — в MainActivity, где scope не отменяется
+                    onFinish(totalScore, approaches.toList())
                 }) { Text("Продолжить", color = Accent) }
             },
             dismissButton = {
