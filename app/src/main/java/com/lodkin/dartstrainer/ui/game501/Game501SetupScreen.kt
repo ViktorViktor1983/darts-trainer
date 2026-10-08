@@ -119,10 +119,14 @@ fun Game501SetupScreen(
         myAvgPpr = if (count > 0) "%.1f".format(Locale.US, sum / count) else null
     }
 
-    // Универсальная функция: какую плашку показывать для слота
+    // Плашка: для бота — его PPR-диапазон из метки, для меня — мой средний PPR
     fun plateFor(slot: Slot501): String? {
         return when {
-            slot.isBot -> "ср. ${slot.bot.averageMin}–${slot.bot.averageMax}"
+            slot.isBot -> {
+                // pprLabel = "ср. 52–55 · удв. 17–20%" → берём часть до "·"
+                val range = slot.bot.pprLabel.substringBefore("·").trim()
+                if (range.isBlank()) null else range
+            }
             slot.name.equals(playerName, ignoreCase = true) && myAvgPpr != null -> "ср. $myAvgPpr"
             else -> null
         }
