@@ -25,6 +25,7 @@ import com.lodkin.dartstrainer.theme.GoldAccent
 import com.lodkin.dartstrainer.theme.TileBg
 import com.lodkin.dartstrainer.theme.TileBgDark
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import java.util.Locale
 import kotlin.random.Random
 
@@ -33,13 +34,20 @@ private val PaleYellowText = Color(0xFF3E2723)
 
 @Composable
 fun Game501Screen(
+    repository: Game501Repository,
     initialGame: Game501,
-    onGameFinish: (Game501) -> Unit,
+    existingId: Long = 0L,
+    onGameFinish: (Game501, Long) -> Unit,
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     var game by remember { mutableStateOf(initialGame) }
     var inputText by remember { mutableStateOf("") }
+
+    // id сохранённой незавершённой партии.
+    // 0 = партия ещё не сохранена (только началась или уже была завершена).
+    var currentId by remember { mutableStateOf(existingId) }
 
     var lastScoreA by remember { mutableStateOf<Int?>(null) }
     var lastScoreB by remember { mutableStateOf<Int?>(null) }
@@ -86,6 +94,17 @@ fun Game501Screen(
         val s = recordSum
         if (s != null && s > 0) Game501SettingsStorage.recordHumanSum(context, s)
         recordSum = null
+    }
+
+    // ─────────────────────────────────────────
+    // АВТОСОХРАНЕНИЕ.
+    // Срабатывает при каждом изменении game, если партия ещё не завершена.
+    // currentId обновляется — последующие сохранения будут обновлять ту же запись.
+    // ─────────────────────────────────────────
+    LaunchedEffect(game) {
+        if (!game.isFinished) {
+            currentId = repository.saveUnfinishedGame(game, currentId)
+        }
     }
 
     fun setLastScore(value: Int) {
@@ -182,13 +201,6 @@ fun Game501Screen(
         showLegQuestionDialog = true
     }
 
-    // ─────────────────────────────────────────────
-    // Автоход бота.
-    // showLegWonDialog и showSetWonDialog в ключах — иначе после
-    // закрытия диалога «ЛЕГ ЗАВЕРШЁН» LaunchedEffect не перезапускается.
-    // После хода бота обновляем lastScoreA/lastScoreB по разнице
-    // matchScoreGained — так «Пред.» показывается и для ботов.
-    // ─────────────────────────────────────────────
     LaunchedEffect(
         game.currentPlayerIndex,
         game.currentLegNumber,
@@ -256,7 +268,7 @@ fun Game501Screen(
         if (!game.isFinished) return@LaunchedEffect
         if (allBots) {
             Game501SettingsStorage.updateQuickSumsIfNeeded(context)
-            onGameFinish(game)
+            onGameFinish(game, currentId)
         } else if (!showLegWonDialog && !showSetWonDialog && !showWinDialog) {
             showWinDialog = true
         }
@@ -488,7 +500,7 @@ fun Game501Screen(
             onContinue = {
                 showWinDialog = false
                 Game501SettingsStorage.updateQuickSumsIfNeeded(context)
-                onGameFinish(game)
+                onGameFinish(game, currentId)
             }
         )
     }
@@ -497,13 +509,31 @@ fun Game501Screen(
         AlertDialog(
             onDismissRequest = { showBackConfirm = false },
             confirmButton = {
-                TextButton(onClick = { showBackConfirm = false; onBack() }) { Text("ДА", color = ErrorColor) }
+                TextButton(onClick = {
+                    showBackConfirm = false
+                    onBack()
+                }) { Text("Продолжить позже", color = Accent) }
             },
             dismissButton = {
-                TextButton(onClick = { showBackConfirm = false }) { Text("НЕТ", color = Accent) }
+                TextButton(onClick = {
+                    showBackConfirm = false
+                    // Удаляем сохранённую незавершённую партию и выходим
+                    scope.launch {
+                        if (currentId > 0L) repository.deleteGame(currentId)
+                        onBack()
+                    }
+                }) { Text("Удалить партию", color = ErrorColor) }
             },
-            title = { Text("Выйти из игры?", color = Color.White) },
-            text = { Text("Прогресс не сохранится.", color = Color.White) }
+            title = { Text("Прервать игру?", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold) },
+            text = {
+                Text(
+                    "Партия автоматически сохраняется. Ты можешь вернуться к ней позже " +
+                    "из статистики — она будет отмечена красным.\n\n" +
+                    "Либо удалить её навсегда.",
+                    color = Color.White,
+                    fontSize = 14.sp
+                )
+            }
         )
     }
 }
