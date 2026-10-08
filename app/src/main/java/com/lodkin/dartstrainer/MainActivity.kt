@@ -229,6 +229,14 @@ fun DartsTrainerApp() {
                 repository = cricketRepository,
                 initialTab = 0,
                 showTabs = false,
+                onResumeCricket = { entity ->
+                    val restored = CricketSerializer.fromJson(entity.stateBlob)
+                    if (restored != null) {
+                        cricketGame = restored
+                        cricketExistingId = entity.id
+                        screen = "cricket_game"
+                    }
+                },
                 onBack = {
                     statsMenuKey++
                     screen = "stats_menu"
