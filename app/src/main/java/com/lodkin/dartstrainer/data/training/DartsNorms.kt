@@ -11,9 +11,13 @@ package com.lodkin.dartstrainer.data.training
  *
  * Остальные уровни — промежуточные ступени для мотивации игрока.
  * Числа между известными точками распределены пропорционально.
- * При необходимости корректируются в процессе.
  *
  * Пол и возраст не спрашиваем — используем мужские нормативы.
+ *
+ * ЧЕТЫРЕ ПАРАМЕТРА:
+ *   • sector20 / scoreSet / bigRound — основные нормативные упражнения
+ *   • doublesPercent — процент попадания в удвоения
+ *   • treblePercent  — процент попадания в утроения
  */
 
 data class LevelNorm(
@@ -22,7 +26,8 @@ data class LevelNorm(
     val sector20: Int,          // очки за 30 дротиков в 20-й сектор
     val scoreSet: Int,          // очки за 30 дротиков (упражнение «Набор очков»)
     val bigRound: Int,          // очки за 63 дротика (21 сектор × 3)
-    val doublesPercent: Float   // процент попадания в удвоения
+    val doublesPercent: Float,  // процент попадания в удвоения
+    val treblePercent: Float    // процент попадания в утроения
 )
 
 object DartsNorms {
@@ -31,86 +36,86 @@ object DartsNorms {
         LevelNorm(
             level = 1, name = "Новичок",
             sector20 = 300, scoreSet = 390, bigRound = 250,
-            doublesPercent = 6f
+            doublesPercent = 6f, treblePercent = 5f
         ),
         LevelNorm(
             level = 2, name = "Ученик",
             sector20 = 350, scoreSet = 435, bigRound = 320,
-            doublesPercent = 9f
+            doublesPercent = 9f, treblePercent = 8f
         ),
         LevelNorm(
             level = 3, name = "Любитель",
             sector20 = 400, scoreSet = 480, bigRound = 390,
-            doublesPercent = 10f
+            doublesPercent = 10f, treblePercent = 9f
         ),
         LevelNorm(
             level = 4, name = "Уверенный",
             sector20 = 450, scoreSet = 525, bigRound = 460,
-            doublesPercent = 12f
+            doublesPercent = 12f, treblePercent = 11f
         ),
         LevelNorm(
             level = 5, name = "Опытный",
             sector20 = 500, scoreSet = 570, bigRound = 525,
-            doublesPercent = 15f
+            doublesPercent = 15f, treblePercent = 14f
         ),
         LevelNorm(
             level = 6, name = "Практик",
             sector20 = 550, scoreSet = 615, bigRound = 590,
-            doublesPercent = 17f
+            doublesPercent = 17f, treblePercent = 16f
         ),
         // ── Известная точка: I взрослый разряд ──
         LevelNorm(
             level = 7, name = "Разрядник",
             sector20 = 600, scoreSet = 660, bigRound = 660,
-            doublesPercent = 18f
+            doublesPercent = 18f, treblePercent = 17f
         ),
         LevelNorm(
             level = 8, name = "Турнирный",
             sector20 = 630, scoreSet = 685, bigRound = 680,
-            doublesPercent = 19f
+            doublesPercent = 19f, treblePercent = 18f
         ),
         LevelNorm(
             level = 9, name = "Сильный",
             sector20 = 660, scoreSet = 710, bigRound = 705,
-            doublesPercent = 22f
+            doublesPercent = 22f, treblePercent = 21f
         ),
         LevelNorm(
             level = 10, name = "Крепкий",
             sector20 = 690, scoreSet = 735, bigRound = 730,
-            doublesPercent = 25f
+            doublesPercent = 25f, treblePercent = 24f
         ),
         // ── Известная точка: КМС ──
         LevelNorm(
             level = 11, name = "КМС",
             sector20 = 720, scoreSet = 760, bigRound = 750,
-            doublesPercent = 27f
+            doublesPercent = 27f, treblePercent = 26f
         ),
         LevelNorm(
             level = 12, name = "Почти мастер",
             sector20 = 750, scoreSet = 790, bigRound = 780,
-            doublesPercent = 31f
+            doublesPercent = 31f, treblePercent = 29f
         ),
         // ── Известная точка: МС ──
         LevelNorm(
             level = 13, name = "Мастер",
             sector20 = 780, scoreSet = 820, bigRound = 810,
-            doublesPercent = 33f
+            doublesPercent = 33f, treblePercent = 32f
         ),
         LevelNorm(
             level = 14, name = "Чемпион",
             sector20 = 820, scoreSet = 860, bigRound = 850,
-            doublesPercent = 38f
+            doublesPercent = 38f, treblePercent = 36f
         ),
         LevelNorm(
             level = 15, name = "Профи",
             sector20 = 860, scoreSet = 900, bigRound = 890,
-            doublesPercent = 42f
+            doublesPercent = 42f, treblePercent = 40f
         ),
         // ── Известная точка: уровень Люка Литтлера ──
         LevelNorm(
             level = 16, name = "Легенда",
             sector20 = 900, scoreSet = 940, bigRound = 930,
-            doublesPercent = 46f
+            doublesPercent = 46f, treblePercent = 44f
         )
     )
 
@@ -156,11 +161,18 @@ object DartsNorms {
         levels.lastOrNull { percent >= it.doublesPercent }?.level ?: 1
 
     /**
+     * Определить уровень по проценту попадания в утроения.
+     */
+    fun levelByTrebles(percent: Float): Int =
+        levels.lastOrNull { percent >= it.treblePercent }?.level ?: 1
+
+    /**
      * Русское название параметра — для UI.
      */
     fun weaknessName(type: WeaknessType): String = when (type) {
         WeaknessType.SCORE    -> "Набор очков"
         WeaknessType.DOUBLES  -> "Удвоения"
         WeaknessType.ACCURACY -> "Точность в сектор"
+        WeaknessType.TREBLES  -> "Утроения"
     }
 }
