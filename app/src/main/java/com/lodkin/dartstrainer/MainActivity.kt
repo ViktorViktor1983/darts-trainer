@@ -69,6 +69,7 @@ import com.lodkin.dartstrainer.ui.sector.SectorGameScreen
 import com.lodkin.dartstrainer.ui.sector.SectorSetupScreen
 import com.lodkin.dartstrainer.ui.sector.SectorStatsScreen
 import com.lodkin.dartstrainer.ui.training.TrainingMenuScreen
+import com.lodkin.dartstrainer.ui.training.TrainingPlanScreen
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.random.Random
@@ -79,6 +80,7 @@ private val PARENT_SCREEN: Map<String, String> = mapOf(
     "stats_501" to "stats_menu",
     "settings" to "main",
     "training" to "main",
+    "training_plan" to "training",
     "game_select" to "main",
 
     "cricket_setup" to "game_select",
@@ -168,6 +170,14 @@ fun DartsTrainerApp() {
     var bigRoundCategory by remember { mutableStateOf<BigRoundCategory?>(null) }
 
     var statsMenuKey by remember { mutableStateOf(0) }
+
+    // Время тренировки, выбранное в диалоге (сохраняется в SharedPreferences)
+    var trainingMinutes by remember {
+        mutableStateOf(
+            context.getSharedPreferences("training_prefs", android.content.Context.MODE_PRIVATE)
+                .getInt("session_minutes", SettingsStorage.getTrainingMinutes(context))
+        )
+    }
 
     BackHandler(enabled = stage == "main" && screen != "main") {
         PARENT_SCREEN[screen]?.let { parent ->
@@ -292,11 +302,31 @@ fun DartsTrainerApp() {
             "training" -> TrainingMenuScreen(
                 playerName = SettingsStorage.getPlayerName(context),
                 repository = trainingRepository,
-                // TODO: следующие шаги — экраны плана, тренировки, советов.
-                onStartTraining = { /* пока не реализовано */ },
-                onPlan = { /* пока не реализовано */ },
+                onStartTraining = {
+                    // Обновляем выбранное время из SharedPreferences
+                    trainingMinutes = context
+                        .getSharedPreferences("training_prefs", android.content.Context.MODE_PRIVATE)
+                        .getInt("session_minutes", SettingsStorage.getTrainingMinutes(context))
+                    // TODO: следующий шаг — экран самой тренировки
+                },
+                onPlan = {
+                    trainingMinutes = context
+                        .getSharedPreferences("training_prefs", android.content.Context.MODE_PRIVATE)
+                        .getInt("session_minutes", SettingsStorage.getTrainingMinutes(context))
+                    screen = "training_plan"
+                },
                 onTips = { /* пока не реализовано */ },
                 onBack = { screen = "main" }
+            )
+
+            "training_plan" -> TrainingPlanScreen(
+                playerName = SettingsStorage.getPlayerName(context),
+                minutes = trainingMinutes,
+                repository = trainingRepository,
+                onStartTraining = {
+                    // TODO: следующий шаг — экран самой тренировки
+                },
+                onBack = { screen = "training" }
             )
 
             "game_select" -> GameSelectScreen(
