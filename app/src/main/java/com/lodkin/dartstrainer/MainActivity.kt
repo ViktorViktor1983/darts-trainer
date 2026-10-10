@@ -38,8 +38,12 @@ import com.lodkin.dartstrainer.data.scoreset.ScoreSetDatabase
 import com.lodkin.dartstrainer.data.scoreset.ScoreSetRepository
 import com.lodkin.dartstrainer.data.sector.SectorDatabase
 import com.lodkin.dartstrainer.data.sector.SectorRepository
+import com.lodkin.dartstrainer.data.training.BlockType
+import com.lodkin.dartstrainer.data.training.ExerciseResult
 import com.lodkin.dartstrainer.data.training.TrainingDatabase
+import com.lodkin.dartstrainer.data.training.TrainingMode
 import com.lodkin.dartstrainer.data.training.TrainingRepository
+import com.lodkin.dartstrainer.data.training.TrainingSession
 import com.lodkin.dartstrainer.theme.DarkBg
 import com.lodkin.dartstrainer.ui.GameSelectScreen
 import com.lodkin.dartstrainer.ui.LoadingScreen
@@ -83,6 +87,7 @@ private val PARENT_SCREEN: Map<String, String> = mapOf(
     "training" to "main",
     "training_plan" to "training",
     "training_warmup" to "training_plan",
+    "training_block" to "training_plan",
     "game_select" to "main",
 
     "cricket_setup" to "game_select",
@@ -180,6 +185,9 @@ fun DartsTrainerApp() {
                 .getInt("session_minutes", SettingsStorage.getTrainingMinutes(context))
         )
     }
+
+    // ID текущей тренировочной сессии (0 = нет активной)
+    var trainingSessionId by remember { mutableStateOf(0L) }
 
     BackHandler(enabled = stage == "main" && screen != "main") {
         PARENT_SCREEN[screen]?.let { parent ->
@@ -295,6 +303,7 @@ fun DartsTrainerApp() {
                     aroundClockOrder = null
                     aroundClockHits = 1
                     bigRoundCategory = null
+                    trainingSessionId = 0L
                     onboardingDone = false
                     screen = "main"
                     stage = "welcome"
@@ -324,19 +333,62 @@ fun DartsTrainerApp() {
                 playerName = SettingsStorage.getPlayerName(context),
                 minutes = trainingMinutes,
                 repository = trainingRepository,
-                onStartTraining = { screen = "training_warmup" },
+                onStartTraining = {
+                    // Создаём новую тренировочную сессию и идём на разминку
+                    scope.launch {
+                        val session = TrainingSession(
+                            dateMillis = System.currentTimeMillis(),
+                            plannedMinutes = trainingMinutes,
+                            actualMinutes = 0,
+                            levelAtStart = 1,
+                            mode = TrainingMode.FLEXIBLE,
+                            focus = null,
+                            isControl = false,
+                            isCompleted = false
+                        )
+                        trainingSessionId = trainingRepository.insertSession(session)
+                        screen = "training_warmup"
+                    }
+                },
                 onBack = { screen = "training" }
             )
 
             "training_warmup" -> TrainingWarmupScreen(
                 longWarmup = trainingMinutes >= 100,
                 onFinish = {
-                    // TODO: следующий шаг — переход к первому блоку тренировки.
-                    // Пока возвращаемся на план.
-                    screen = "training_plan"
+                    // После разминки — идём на первый блок
+                    screen = "training_block"
                 },
                 onBack = { screen = "training_plan" }
             )
+
+            "training_block" -> {
+                // Первый блок — Раунды на удвоения (переиспользуем Кругосветку в режиме Удвоения).
+                AroundClockGameScreen(
+                    target = AroundClockTarget.DOUBLE,
+                    order = AroundClockOrder.ORDERED,
+                    hitsRequired = 1,
+                    repository = aroundClockRepository,
+                    onFinish = { totalDarts, completed, sectorResults ->
+                        // Сохраняем результат в тренировочную БД (не в игровую!)
+                        scope.launch {
+                            val result = ExerciseResult(
+                                sessionId = trainingSessionId,
+                                blockType = BlockType.DOUBLES,
+                                exerciseId = "aroundclock_doubles",
+                                score = totalDarts,
+                                dartsThrown = totalDarts,
+                                timestamp = System.currentTimeMillis(),
+                                detailsJson = ""
+                            )
+                            trainingRepository.insertExerciseResult(result)
+                        }
+                        // Возврат на план
+                        screen = "training_plan"
+                    },
+                    onBack = { screen = "training_plan" }
+                )
+            }
 
             "game_select" -> GameSelectScreen(
                 onCricket = { screen = "cricket_setup" },
