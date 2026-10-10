@@ -81,94 +81,408 @@ Darts Checkout — справочник чекаутов.
 
 ---
 
-## 4. СТРУКТУРА ПРОЕКТА
+## 4. ПОЛНАЯ СТРУКТУРА ПРОЕКТА
 
 ### Корень репозитория
-- .github/workflows — GitHub Actions
-- app — модуль приложения
-- docs — документация (21 файл + AI_CONTEXT.md)
-- keystore — ключи подписи
+- .github/workflows/ — GitHub Actions
+- app/ — модуль приложения
+- docs/ — документация (AI_CONTEXT.md + 20 файлов)
+- keystore/ — ключи подписи
 - README.md, build.gradle.kts, settings.gradle.kts, gradle.properties
 
 ### Внутри app/
-- app/build.gradle.kts
+- app/build.gradle.kts — зависимости
 - app/src/main/AndroidManifest.xml
-- app/src/main/java/com/lodkin/dartstrainer/
+- app/src/main/java/com/lodkin/dartstrainer/ — весь код
 
-### Пакет com.lodkin.dartstrainer/
-- **MainActivity.kt** — точка входа, вся навигация
-- **theme/** — цвета, стили
-- **data/** — данные (Room + репозитории)
-- **ui/** — экраны (Compose)
+### Корень пакета com.lodkin.dartstrainer/
+- **MainActivity.kt** — точка входа, вся навигация приложения
+- **theme/** — цвета (Accent, GoldAccent, DarkBg, TileBg, TileBgDark), стили
 
-### data/game501/
-- BotPreferences.kt
-- CheckoutTable.kt — таблица чекаутов 2–170
-- Game501BotAI.kt — ИИ ботов
-- **Game501Database.kt** — Room БД (Entity/Dao/DB/Repository), версия 5
-- **Game501EntityConverter.kt** — Game501Entity → Game501 (для отчёта)
-- Game501Logic.kt — логика игры
-- Game501Models.kt — модели (Game501, Player501 и др.)
-- **Game501Serializer.kt** — JSON-сериализация состояния партии
-- Game501SettingsStorage.kt
-- Game501Simulator.kt — прогон бот-бот (для калибровки)
+### data/ — данные
 
-### data/cricket/
-- **CricketDatabase.kt** — Room БД, версия 4
-- **CricketEntityConverter.kt** — CricketGameEntity → CricketGame
-- CricketLogic.kt — логика игры
-- CricketModels.kt — модели (CricketGame, CricketPlayer, CricketSector,
-  CricketType, LegSnapshot, LegPlayerSnapshot)
-- **CricketSerializer.kt** — JSON-сериализация состояния партии
-- CricketBotAI.kt
-- CricketSettingsStorage.kt
-- PlayerNamesStorage.kt
+**data/SettingsStorage.kt** — SharedPreferences с настройками игрока:
+имя, время тренировки, тренировок в неделю, режим тренировок, стартовый режим.
 
-### data/sector/, data/aroundclock/, data/biground/, data/scoreset/
-- Каждый — своя БД (Entity + Dao + DB + Repository в одном файле).
+#### data/game501/ — игра 501
+- **Game501Models.kt** — модели: Game501, Player501, LegSnapshot501, GameType (X501/X301/X701/X1001), OutMode (DOUBLE_OUT, STRAIGHT_OUT, DOUBLE_IN_OUT)
+- **Game501Logic.kt** — логика: подсчёт очков, проверка закрытия, ход лега, ход сета, newGame(...)
+- **Game501BotAI.kt** — ИИ ботов (16 уровней)
+- **Game501Database.kt** — Room БД версии 5: Game501Entity, Game501Dao, Game501Repository, миграция MIGRATION_4_5
+- **Game501EntityConverter.kt** — конвертер Game501Entity → Game501
+- **Game501Serializer.kt** — JSON-сериализация партии
+- **Game501SettingsStorage.kt** — настройки 501
+- **CheckoutTable.kt** — таблица чекаутов 2–170
+- **Game501Simulator.kt** — прогон бот-бот
+- **BotPreferences.kt** — настройки ботов
 
-### data/training/ (НОВОЕ — тренировочный раздел, в разработке)
-- **TrainingModels.kt** — модели данных (TrainingSession, ExerciseResult,
-  PostponedDouble, WeaknessSnapshot, PotentialSnapshot, ControlMatch,
-  enum WeaknessType, BlockType, TrainingMode, ControlGameType)
-- **TrainingDatabase.kt** — Room БД, версия 1
-- **DartsNorms.kt** — таблица 16 уровней с нормативами
-- **LevelCalculator.kt** — расчёт уровня, потенциала, трендов
-- (дальше) WeaknessDetector.kt, TrainingPlanner.kt, TrainingSerializer.kt
+#### data/cricket/ — игра Крикет
+- **CricketModels.kt** — модели: CricketGame, CricketPlayer, CricketSector (S15–S20, BULL), CricketType (AMERICAN / NO_SCORE), LegSnapshot, LegPlayerSnapshot
+- **CricketLogic.kt** — логика: applyThrow, checkLegWinner, awardLegWin, nextPlayer, newGame, finishTurn, adjustLastLegDarts. **checkLegWinner исправлена 10.10.2026** (победа только если у закрывшего всё больше очков, чем у любой другой команды)
+- **CricketBotAI.kt** — ИИ ботов. **Исправлен 10.10.2026** (цель пересчитывается перед каждым броском). Работает с CRICKET_BOTS из CricketPlayers.kt
+- **CricketPlayers.kt** — **здесь лежит класс CricketBot и массив CRICKET_BOTS** (16 ботов с полями: id, name, description, averageMin/Max, pprMin/Max, dblMin/Max). Плюс PlayerNamesStorage
+- **CricketDatabase.kt** — Room БД версии 4: CricketGameEntity, CricketDao, CricketRepository, миграция MIGRATION_3_4
+- **CricketEntityConverter.kt** — конвертер Entity → Model
+- **CricketSerializer.kt** — JSON-сериализация партии
+- **CricketSettingsStorage.kt** — настройки Крикета
 
-### ui/
-- WelcomeScreen, OnboardingScreen, LoadingScreen, MainMenuScreen,
-  GameSelectScreen, SettingsScreen
-- **StatsAggregates.kt** — «математика» статистики: enums StatPeriod и
-  GameVariant, data-классы (CricketAggregate, Game501Aggregate, BotStat,
-  MatchInfo, ChartSpec), объекты StatsParse (парсинг строк) и StatsCompute
-  (агрегаты, графики, чекауты).
-- **StatsScreen.kt** — экран статистики с вкладками Крикет / 501.
-- **StatsMenuScreen.kt** — меню статистики (сетка 2×3 с карточками 6 игр).
+#### data/sector/ — игра Сектор
+- **SectorDatabase.kt** — Entity + Dao + DB + Repository. 30 дротиков в один сектор.
 
-### ui/game501/
-- Game501SetupScreen.kt — настройка
-- Game501Screen.kt — игровой экран (автосохранение)
-- Game501StatsScreen.kt — отчёт о матче
-- MatchesListDialog501.kt — диалог списка всех матчей 501
+#### data/aroundclock/ — игра Кругосветка
+- **AroundClockDatabase.kt** — БД. Цели: AroundClockTarget (Сектора / Удвоения / Утроения). Порядок: AroundClockOrder (по порядку / случайно).
 
-### ui/cricket/
-- CricketSetupScreen.kt — настройка
-- CricketGameScreen.kt — игровой экран
-- CricketStatsScreen.kt — отчёт о матче
-- MatchesListDialogCricket.kt — диалог списка матчей
+#### data/biground/ — игра Большой раунд
+- **BigRoundDatabase.kt** — БД. Категории BigRoundCategory. 21 сектор × 3 дротика, S=1/D=2/T=3.
 
-### ui/sector/, ui/aroundclock/, ui/biground/, ui/scoreset/
-- По 3 экрана (Setup/Game/Stats) в каждой.
+#### data/scoreset/ — игра Набор очков
+- **ScoreSetDatabase.kt** — БД. 10 подходов × 3 дротика, максимум очков.
+
+#### data/training/ — тренировочный раздел (НОВОЕ, в разработке)
+- **TrainingModels.kt** — модели: TrainingSession, ExerciseResult, PostponedDouble, WeaknessSnapshot, PotentialSnapshot, ControlMatch. Enums: WeaknessType (SCORE, DOUBLES, ACCURACY, TREBLES), BlockType, TrainingMode, ControlGameType.
+- **TrainingDatabase.kt** — Room БД версии 1. 6 таблиц, 6 DAO, Repository, конвертеры Entity ↔ Model.
+- **DartsNorms.kt** — таблица 16 уровней (LevelNorm) с 5 значениями: sector20, scoreSet, bigRound, doublesPercent, treblePercent. Объект DartsNorms с хелперами.
+- **LevelCalculator.kt** — расчёт уровня, потенциала, трендов, сообщений. Методы: calculateExerciseLevel, calculateFinalLevel, detectDiscrepancy, detectTrend, buildDeclineHint, buildGrowthHint, buildPraise, buildExamMessage, buildDiscrepancyMessage.
+- **WeaknessDetector.kt** — определение слабых мест: detect(...) → WeaknessResult. Сортировка: сначала падающие, потом по величине отставания. describe(type) — русское название.
+- **TrainingPlanner.kt** — генератор программы: buildPlan, buildWarmup, buildControlPlan, isControlSession, sessionsUntilControl. Enums ExerciseKind. Data TrainingBlock, TrainingPlan.
+
+### ui/ — экраны
+
+**Общие экраны:**
+- **WelcomeScreen.kt** — приветствие
+- **OnboardingScreen.kt** — анкета
+- **LoadingScreen.kt** — 3-сек загрузка
+- **MainMenuScreen.kt** — главное меню
+- **GameSelectScreen.kt** — сетка 6 игр
+- **SettingsScreen.kt** — настройки
+
+**Статистика:**
+- **StatsAggregates.kt** — математика статистики: enums StatPeriod, GameVariant; data CricketAggregate, Game501Aggregate, BotStat, MatchInfo, ChartSpec; StatsParse; StatsCompute
+- **StatsScreen.kt** — экран статистики (вкладки Крикет / 501)
+- **StatsMenuScreen.kt** — сетка 2×3 с метриками
+
+**ui/game501/:**
+- **Game501SetupScreen.kt** — настройка (карточки с PPR, розыгрыш Bull)
+- **Game501Screen.kt** — игровой экран (автосохранение)
+- **Game501StatsScreen.kt** — отчёт
+- **MatchesListDialog501.kt** — список матчей
+
+**ui/cricket/:**
+- **CricketSetupScreen.kt** — настройка (слоты, выбор бота из CRICKET_BOTS, розыгрыш Bull)
+- **CricketGameScreen.kt** — игровой экран
+- **CricketStatsScreen.kt** — отчёт
+- **MatchesListDialogCricket.kt** — список матчей
+
+**ui/sector/, ui/aroundclock/, ui/biground/, ui/scoreset/:**
+По 3 экрана в каждой: Setup, Game, Stats.
+
+**ui/training/ — тренировочный раздел (НОВОЕ):**
+- **TrainingMenuScreen.kt** — главный экран: диалог выбора времени (30/45/60/80/100/120), подсветка из анкеты, второй диалог при контрольной и <60 мин, сохраняет в SharedPreferences training_prefs (session_minutes, skip_control_exam). Показывает: уровень, потенциал, слабое место, фокус. Кнопки: Начать, Изменить время, План дня, Советы.
+- **TrainingPlanScreen.kt** — план дня: шапка (имя, время, фокус), список блоков с номерами, главный блок подсвечен ★, кнопка Начать (заглушка).
 
 ---
 
 ## 5. АРХИТЕКТУРА
 
-### Навигация
-Ручная, без Navigation Compose:
-```kotlin
-var stage by remember { mutableStateOf("loading") }
-// welcome / onboarding / loading / main
-var screen by remember { mutableStateOf("main") }
-// экран внутри stage=main
+### Навигация (MainActivity.kt)
+Ручная, без Navigation Compose.
+Переменные:
+- var stage by remember { mutableStateOf("loading") } — welcome / onboarding / loading / main
+- var screen by remember { mutableStateOf("main") } — экран внутри stage=main
+
+PARENT_SCREEN — карта, куда возвращает системная «Назад»:
+- "training" → "main"
+- "training_plan" → "training"
+- "stats_menu" → "main"
+- "game_select" → "main"
+- и т.д.
+
+### Данные
+Room. Для каждой игры — отдельная база (файлы вида XxxDatabase.kt, внутри Entity + Dao + Database + Repository).
+Тренировочный раздел — одна общая база TrainingDatabase (6 таблиц внутри).
+
+### Хранение сложных структур
+Строки через | (по игрокам) и , (внутри игрока).
+Пример: ppr = "62.14|48.30".
+
+### Незавершённые партии (только 501 и Крикет)
+- В Game501Entity и CricketGameEntity поля: isFinished, stateBlob, lastUpdateMillis
+- Миграции: MIGRATION_4_5 (501), MIGRATION_3_4 (крикет)
+- Автосохранение через LaunchedEffect(game)
+- Восстановление: Game501Serializer.fromJson(entity.stateBlob)
+
+### Сохранение в БД — ТОЛЬКО через scope MainActivity
+Сохранение делается на уровне MainActivity (scope), а НЕ внутри экранов. Причина: rememberCoroutineScope() внутри экрана отменяется при закрытии.
+Применено в: Game501Screen, CricketGameScreen, ScoreSetGameScreen.
+
+### Бросок в Bull при розыгрыше первого хода
+Формула:
+- pRed = (0.05 + (lvl - 1) * 0.027) * 0.8
+- pGreen = (0.25 + (lvl - 1) * 0.013) * 0.8
+Есть в Game501SetupScreen.kt и CricketSetupScreen.kt.
+
+### Стиль
+Compose, тёмная тема. Карточки — TileBg и TileBgDark. Акценты — Accent, GoldAccent.
+
+**Размеры шрифтов:**
+- 501 игровой: очки 78.sp, «Пред.» 28.sp
+- Крикет: плашка +0/-0 — 26.sp
+- Сектор / Большой раунд / Набор очков: счёт 112.sp
+- Кругосветка: заголовок 27.sp, ЦЕЛЬ 116.sp
+- StatsMenu: «Статистика» 40.sp, «игрок:» 22.sp
+- Кнопка «Назад» — прямоугольная плашка «← Назад», 14.sp
+
+---
+
+## 6. ТАБЛИЦА БОТОВ 501 (PPR и удвоения)
+
+№ | Имя | PPR | Удвоения
+1 | Новичок | 22–26 | 5–8%
+2 | Ученик | 28–32 | 8–10%
+3 | Любитель | 33–37 | 9–12%
+4 | Уверенный | 38–42 | 11–14%
+5 | Опытный | 43–47 | 14–17%
+6 | Практик | 49–53 | 16–19%
+7 | Разрядник | 52–55 | 17–20%
+8 | Турнирный | 55–59 | 18–21%
+9 | Сильный | 61–66 | 21–24%
+10 | Крепкий | 66–71 | 24–27%
+11 | КМС | 71–77 | 26–29%
+12 | Почти мастер | 80–86 | 29–33%
+13 | Мастер | 87–93 | 32–35%
+14 | Чемпион | 93–98 | 36–40%
+15 | Профи | 99–103 | 40–44%
+16 | Легенда | 104–110 | 44–48%
+
+Привязки к разрядам:
+- 7 (Разрядник) = I взрослый разряд
+- 11 (КМС) = КМС
+- 13 (Мастер) = МС
+- 16 (Легенда) = уровень Люка Литтлера
+
+Хранится в data/game501/Game501BotAI.kt (или BotPreferences.kt).
+
+---
+
+## 7. ТАБЛИЦА БОТОВ КРИКЕТА (MPR — метки за подход)
+
+**ВАЖНО:** MPR хранится в десятых долях (22 = 2.2). В UI — с точкой (2.2).
+
+№ | Имя | MPR (десятые) | MPR (реальный)
+1 | Новичок | 5–8 | 0.5–0.8
+2 | Ученик | 8–11 | 0.8–1.1
+3 | Любитель | 11–14 | 1.1–1.4
+4 | Уверенный | 14–17 | 1.4–1.7
+5 | Опытный | 17–20 | 1.7–2.0
+6 | Практик | 20–22 | 2.0–2.2
+7 | Разрядник | 22–25 | 2.2–2.5
+8 | Турнирный | 25–28 | 2.5–2.8
+9 | Сильный | 28–31 | 2.8–3.1
+10 | Крепкий | 31–34 | 3.1–3.4
+11 | КМС | 34–37 | 3.4–3.7
+12 | Почти мастер | 37–40 | 3.7–4.0
+13 | Мастер | 40–43 | 4.0–4.3
+14 | Чемпион | 43–47 | 4.3–4.7
+15 | Профи | 47–52 | 4.7–5.2
+16 | Легенда | 52–60 | 5.2–6.0
+
+Хранится в data/cricket/CricketPlayers.kt (объект CRICKET_BOTS).
+Обновлено 10.10.2026 — снижены значения.
+
+---
+
+## 8. ТРЕНИРОВОЧНЫЙ РАЗДЕЛ — КОНЦЕПЦИЯ
+
+### Суть
+Не инструмент, а тренер. Даёт конкретную программу на день, подстраивается под игрока, ведёт от новичка до мастера.
+
+### ЧЕТЫРЕ параметра игрока
+1. **Набор очков** — 501 (первые 9), Сектор 20/19, Набор очков
+2. **Точность в сектор** — Кругосветка-Сектора
+3. **Удвоения** — 501 (удвоения матча), Кругосветка-Удвоения
+4. **Утроения** — Кругосветка-Утроения
+
+Что НЕ даёт параметров:
+- Крикет — только разнообразие и рука
+- Большой раунд — только разминка (не отличает S от T)
+
+### Логика уровня — ДВА КОМПЛЕКСА
+- Комплекс 1 — 501. Даёт PPR. Уровень по таблице ботов 501.
+- Комплекс 2 — упражнения. Среднее 4 параметров, округление ВВЕРХ.
+- Итоговый уровень = МАКСИМУМ из двух комплексов.
+- Расхождение = сигнал психологии:
+  - 501 ниже упражнений → «в игре давит»
+  - Упражнения ниже 501 → «в упражнениях не выкладываешься»
+
+### Потенциал
+= максимум из уровней по 4 параметрам.
+Пример: «Сейчас 8, потенциал 12. Подтяни удвоения».
+
+### Экзамен (пересмотр уровня)
+- Каждые 10 тренировок (не календарных дней).
+- Внутри цикла уровень НЕ меняется.
+- Экзамен = Большой раунд + Сектор 20 + Набор очков + 501 + Крикет.
+- После экзамена: пересчёт уровня по средним за 10 тренировок.
+
+### Тренды
+- 3 последние тренировки по каждому параметру.
+- Растёт / падает / стоит.
+- Рост 3 тренировки подряд → мотивация: «через N тренировок новый уровень».
+- Падение → программа молча перестраивается.
+
+### Реакция на просадку
+- 50% следующей тренировки — на слабый параметр.
+- 50% — поддержка других.
+- Игроку — мягкий намёк без цифр.
+
+### Структура тренировки
+- Разминка (4 фазы: мышцы → траектория → кучность → прицеливание), 4–7 мин
+- Блок 1 — главная слабость
+- Блок 2 — вторая слабость
+- Блок 3 — игра на разнообразие (одна из 6)
+- Силовые (5 мин)
+
+### Режимы тренировок
+- По расписанию (пн/ср/пт)
+- Гибкий (N тренировок в неделю — рекомендуется)
+- Свободный (без расписания)
+
+### Отложенные даблы
+- Если не уложился в лимит — дабл откладывается.
+- Возврат в начале следующей тренировки.
+- Откладывался 3+ раз — приоритет.
+
+### Свободная игра vs Тренировка
+- Раздельная статистика.
+- Результаты тренировки идут только в тренировочную статистику.
+- Сравнение «свободная vs тренировка» — индикатор психологического давления.
+
+### Контрольная и время
+- Если контрольная и выбрано <60 мин → диалог: «Увеличить до 60» / «Отложить экзамен».
+- При отложении — обычная тренировка на выбранное время.
+
+---
+
+## 9. ТАБЛИЦА НОРМАТИВОВ (DartsNorms.kt)
+
+16 уровней × 6 значений: level, name, sector20, scoreSet, bigRound, doublesPercent, treblePercent.
+
+Официальные точки (Минспорт РФ, мужские):
+- I взрослый: Сектор 20 = 600, Набор = 660, Большой = 660
+- КМС: 720 / 760 / 750
+- МС: 780 / 820 / 810 (примерно)
+- Легенда (Литтлер): 900 / 940 / 930 (примерно)
+
+Удвоения:
+- Разрядник (7) — 18%
+- КМС (11) — 27%
+- Мастер (13) — 33%
+- Легенда (16) — 46%
+
+Утроения (ниже удвоений на 1–2%):
+- Разрядник (7) — 17%
+- КМС (11) — 26%
+- Мастер (13) — 32%
+- Легенда (16) — 44%
+
+Промежуточные уровни распределены пропорционально.
+
+---
+
+## 10. ЧТО УЖЕ СДЕЛАНО
+
+Инфраструктура: проект, GitHub Actions, ключи подписи.
+
+Базовые экраны: Welcome, Onboarding, Loading, MainMenu, Settings, GameSelect.
+
+Статистика:
+- StatsMenuScreen — сетка 2×3
+- StatsScreen — вкладки, матчи, графики, чекауты
+- Значок ⏸ N при незавершённых
+
+Игровые режимы работают:
+- 501 (против бота и парная)
+- Крикет (4 режима, 16 ботов) — исправлены 2 бага 10.10.2026
+- Сектор
+- Большой раунд
+- Набор очков
+- Кругосветка (Сектора / Удвоения / Утроения)
+
+Тренировочный раздел — в разработке:
+Готово: TrainingModels, TrainingDatabase, DartsNorms, LevelCalculator, WeaknessDetector, TrainingPlanner, TrainingMenuScreen, TrainingPlanScreen.
+Не сделано: экран самой тренировки, разминка (4 фазы), экран блока, экран итогов, профиль, Советы, контрольная (UI), интеграция 501/Крикет с тренировкой, облегчённые игры.
+
+Свободная игра «Просто поиграть» — готова (6 игр).
+
+---
+
+## 11. В ПЛАНАХ (ближайшее)
+
+1. Экран самой тренировки — нажатие на блок открывает упражнение.
+2. Разминка — 4 фазы с таймером.
+3. Интеграция 501/Крикет с тренировкой.
+4. Экран итогов.
+5. Раздел «Советы».
+6. Профиль игрока — уровень, потенциал, 4 параметра, прогресс.
+7. Облегчённые игры для новичков (вводная тренировка).
+
+---
+
+## 12. ИЗВЕСТНЫЕ БАГИ И ИСПРАВЛЕНИЯ
+
+10.10.2026 — Крикет:
+Баг 1: Бот не переключался на другой сектор в одном подходе. Исправлено в CricketBotAI.kt — цель пересчитывается перед КАЖДЫМ броском.
+Баг 2: Бот побеждал, даже если у игрока больше очков. Исправлено в CricketLogic.kt → checkLegWinner. Теперь победа только если у закрывшего всё больше очков, чем у ЛЮБОЙ другой команды.
+
+10.10.2026 — MPR ботов Крикета: были завышены (Разрядник = 3.1–3.4). Исправлено в CricketPlayers.kt — новая таблица (Разрядник = 2.2–2.5, Легенда = 5.2–6.0).
+
+---
+
+## 13. ПРАВИЛА ПО КОДУ
+
+- Язык интерфейса — русский, комментарии — на русском.
+- Форматирование — 4 пробела, KDoc где уместно.
+- Не подключать сторонние библиотеки без согласования.
+- При замене файла целиком — копировать ВСЁ, от package до последней }.
+- Если меняешь сигнатуру onFinish — следующим сообщением дать правку MainActivity (ОТДЕЛЬНЫМ файлом!).
+- Проверяй миграции БД. При изменении @Entity — версия +1, миграция с ALTER TABLE. НЕ использовать fallbackToDestructiveMigration().
+- Все новые модели тренировок — в data/training/, экраны — в ui/training/.
+
+---
+
+## 14. ДОКУМЕНТАЦИЯ В docs/
+
+00_Оглавление.md
+01_Концепция.md
+02_Анкета.md
+03_Режимы_тренировок.md
+04_Структура_тренировки.md
+05_Уровни_и_разряды.md
+06_Удвоения.md, 07_Набор.md, 08_Сектора.md, 09_Чекауты.md, 10_Силовые.md, 11_Свободная_игра.md, 12_Статистика.md, 13_Подсказки.md, 14_Тестирование.md, 15_План_разработки.md, 16_Контрольная_тренировка.md, 17_Психология.md, 18_Разминка.md, 19_Игра_501.md, 20_Крикет.md
+
+ВАЖНО: при вопросах по концепции — сначала смотри в этих файлах, не придумывай сам.
+
+---
+
+## 15. ЧАСТЫЕ ОШИБКИ АВТОРА
+
+1. Код попадает не в тот файл. Проверяй первую строку package.
+2. Копируется не весь файл → «Unresolved reference». Лечится заменой целиком.
+3. Забыл сохранить — сборка не меняется.
+4. Слишком много ошибок в логе. Первых 30–40 строк достаточно.
+5. Один файл в одном сообщении — критично.
+
+---
+
+## 16. ЖУРНАЛ ИЗМЕНЕНИЙ
+
+- 2026-10-07 — создан.
+- 2026-10-07 — структура папок, архитектура, таблица ботов.
+- 2026-10-08 — статистика готова, showTabs, initialTab.
+- 2026-10-08 — незавершённые партии, автосохранение, миграции.
+- 2026-10-09 — StatsAggregates отдельно, размеры шрифтов, унификация Bull.
+- 2026-10-09 — «Следующая задача» — тренировочный раздел.
+- 2026-10-10 — Крупное обновление: концепция тренировочного раздела, 4 параметра, логика 2 комплексов, экзамен каждые 10, тренды, потенциал. Созданы: TrainingModels, TrainingDatabase, DartsNorms, LevelCalculator, WeaknessDetector, TrainingPlanner, TrainingMenuScreen, TrainingPlanScreen. PPR — интегральный. Крикет и Большой раунд параметров не дают. Кругосветка — универсальный измеритель (3 режима).
+- 2026-10-10 — Исправлены 2 бага в Крикете: бот переключает сектор перед каждым броском (CricketBotAI), checkLegWinner учитывает счёт всех команд (CricketLogic).
+- 2026-10-10 — Обновлены MPR ботов Крикета (CricketPlayers.kt).
+- 2026-10-10 — AI_CONTEXT переписан с подробной структурой файлов.
