@@ -24,9 +24,6 @@ object CricketBotAI {
             updatedPlayer.botStreak *
             fatigueFactor(game.sessionStartTime)
 
-        val preferScore = decidePreferScore(currentGame, playerIndex)
-        val target = chooseTargetSector(currentGame, playerIndex, preferScore)
-
         val startLeg = currentGame.currentLegNumber
         val startSet = currentGame.currentSetNumber
 
@@ -36,6 +33,11 @@ object CricketBotAI {
             if (currentGame.currentLegNumber != startLeg ||
                 currentGame.currentSetNumber != startSet
             ) break
+
+            // ВАЖНО: перед каждым броском пересчитываем стратегию и цель.
+            // Иначе бот бьёт все 3 дротика в один сектор, даже если он уже закрыт.
+            val preferScoreNow = decidePreferScore(currentGame, playerIndex)
+            val target = chooseTargetSector(currentGame, playerIndex, preferScoreNow)
 
             val marks = marksForDart(bot, multiplier)
             val result = when (marks) {
@@ -73,25 +75,21 @@ object CricketBotAI {
     // 20% шанс новой серии, длительность 1–2 подхода, 50/50 летит/не летит
     // ─────────────────────────────────────────────
     private fun updateStreak(player: CricketPlayer): CricketPlayer {
-        // Если серия ещё идёт — уменьшаем счётчик, streak не меняется
         if (player.botStreakLeft > 0) {
             return player.copy(botStreakLeft = player.botStreakLeft - 1)
         }
 
-        // Серия закончилась (или не начиналась). 20% шанс новой серии.
         if (Random.nextDouble() < 0.20) {
             val positive = Random.nextBoolean()
             val newStreak = if (positive) {
-                1.10 + Random.nextDouble() * 0.10   // 1.10..1.20 «летит»
+                1.10 + Random.nextDouble() * 0.10
             } else {
-                0.80 + Random.nextDouble() * 0.10   // 0.80..0.90 «не летит»
+                0.80 + Random.nextDouble() * 0.10
             }
-            // Длительность: 1 или 2 подхода
             val duration = 1 + Random.nextInt(2)
             return player.copy(botStreak = newStreak, botStreakLeft = duration - 1)
         }
 
-        // Обычное состояние
         return player.copy(botStreak = 1.0, botStreakLeft = 0)
     }
 
