@@ -79,6 +79,7 @@ data class PotentialSnapshotEntity(
     val scoreValue: Float,
     val doublesValue: Float,
     val accuracyValue: Float,
+    val treblesValue: Float,
     val timestamp: Long
 )
 
@@ -436,6 +437,7 @@ private fun PotentialSnapshot.toEntity() = PotentialSnapshotEntity(
     scoreValue = scoreValue,
     doublesValue = doublesValue,
     accuracyValue = accuracyValue,
+    treblesValue = treblesValue,
     timestamp = timestamp
 )
 
@@ -448,6 +450,7 @@ private fun PotentialSnapshotEntity.toModel() = PotentialSnapshot(
     scoreValue = scoreValue,
     doublesValue = doublesValue,
     accuracyValue = accuracyValue,
+    treblesValue = treblesValue,
     timestamp = timestamp
 )
 
