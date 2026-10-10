@@ -163,13 +163,30 @@ object CricketLogic {
         return game.copy(players = updated, legHistory = newHistory)
     }
 
+    /**
+     * Проверка победителя лега.
+     *
+     * Победа возможна только если команда закрыла все сектора И имеет
+     * больше очков, чем ЛЮБАЯ другая команда (включая тех, кто ещё не закрыл всё).
+     *
+     * Иначе игра продолжается: соперник может догнать по очкам или тоже закрыть всё.
+     */
     fun checkLegWinner(game: CricketGame): Int? {
         if (game.players.isEmpty()) return null
         val closedAllTeams = (0 until game.teamCount).filter { hasClosedAllTeam(game, it) }
         if (closedAllTeams.isEmpty()) return null
         if (game.type == CricketType.NO_SCORE) return closedAllTeams.first()
-        val maxScore = closedAllTeams.maxOf { teamTotalScore(game, it) }
-        return closedAllTeams.firstOrNull { teamTotalScore(game, it) == maxScore }
+
+        // Среди тех, кто закрыл всё — побеждает только тот, кто впереди по очкам
+        // относительно ВСЕХ остальных команд.
+        for (team in closedAllTeams) {
+            val myScore = teamTotalScore(game, team)
+            val others = (0 until game.teamCount).filter { it != team }
+            if (others.all { teamTotalScore(game, it) <= myScore }) {
+                return team
+            }
+        }
+        return null
     }
 
     fun awardLegWin(game: CricketGame, winningTeam: Int): CricketGame {
@@ -214,7 +231,6 @@ object CricketLogic {
                 }
             }
             if (newSetsWon >= game.setsPerMatch) {
-                // Победа в МАТЧЕ — оставляем lastLegWinnerIndex, чтобы показать диалог лега с вопросом
                 return game.copy(
                     players = updatedPlayers,
                     isFinished = true,
