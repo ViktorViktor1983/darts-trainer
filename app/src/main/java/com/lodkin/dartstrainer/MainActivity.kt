@@ -4,14 +4,11 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import com.lodkin.dartstrainer.data.SettingsStorage
@@ -41,7 +38,8 @@ import com.lodkin.dartstrainer.data.scoreset.ScoreSetDatabase
 import com.lodkin.dartstrainer.data.scoreset.ScoreSetRepository
 import com.lodkin.dartstrainer.data.sector.SectorDatabase
 import com.lodkin.dartstrainer.data.sector.SectorRepository
-import com.lodkin.dartstrainer.theme.Accent
+import com.lodkin.dartstrainer.data.training.TrainingDatabase
+import com.lodkin.dartstrainer.data.training.TrainingRepository
 import com.lodkin.dartstrainer.theme.DarkBg
 import com.lodkin.dartstrainer.ui.GameSelectScreen
 import com.lodkin.dartstrainer.ui.LoadingScreen
@@ -70,6 +68,7 @@ import com.lodkin.dartstrainer.ui.scoreset.ScoreSetStatsScreen
 import com.lodkin.dartstrainer.ui.sector.SectorGameScreen
 import com.lodkin.dartstrainer.ui.sector.SectorSetupScreen
 import com.lodkin.dartstrainer.ui.sector.SectorStatsScreen
+import com.lodkin.dartstrainer.ui.training.TrainingMenuScreen
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.random.Random
@@ -142,6 +141,9 @@ fun DartsTrainerApp() {
     }
     val scoreSetRepository = remember {
         ScoreSetRepository(ScoreSetDatabase.get(context).scoreSetDao())
+    }
+    val trainingRepository = remember {
+        TrainingRepository(TrainingDatabase.getInstance(context))
     }
 
     val sessionStartTime = remember { System.currentTimeMillis() }
@@ -287,7 +289,15 @@ fun DartsTrainerApp() {
                 }
             )
 
-            "training" -> PlaceholderScreen("Тренировка", { screen = "main" })
+            "training" -> TrainingMenuScreen(
+                playerName = SettingsStorage.getPlayerName(context),
+                repository = trainingRepository,
+                // TODO: следующие шаги — экраны плана, тренировки, советов.
+                onStartTraining = { /* пока не реализовано */ },
+                onPlan = { /* пока не реализовано */ },
+                onTips = { /* пока не реализовано */ },
+                onBack = { screen = "main" }
+            )
 
             "game_select" -> GameSelectScreen(
                 onCricket = { screen = "cricket_setup" },
@@ -571,12 +581,5 @@ fun DartsTrainerApp() {
                 }
             )
         }
-    }
-}
-
-@Composable
-fun PlaceholderScreen(title: String, onBack: () -> Unit) {
-    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Text(text = title, color = Accent)
     }
 }
