@@ -16,7 +16,7 @@
 **CI:** GitHub Actions — APK собирается автоматически после каждого коммита (3–5 минут)
 
 Приложение для игры в дартс с ботами. 6 игровых режимов, статистика,
-настройки игрока, тренировки.
+настройки игрока, тренировочный раздел (в разработке).
 
 **Автор:** Виктор Лодкин (ViktorViktor1983).
 
@@ -47,10 +47,11 @@ Darts Checkout — справочник чекаутов.
 - **ВАЖНО:** сборка в GitHub Actions запускается автоматически при сохранении.
   Нельзя давать два шага в одном сообщении — первый закоммитится, соберётся
   с ошибкой (потому что второй ещё не готов).
-- Если автор говорит «сначала соберём все правки, потом код» — значит,
-  веди нумерованный список правок, а код выдавай только когда он скажет
-  «начинаем».
+- Если автор говорит «сначала соберём все правки, потом код» — веди
+  нумерованный список правок, а код выдавай только когда он скажет «начинаем».
 - Если автор просит «обнови AI_CONTEXT» — перепиши файл целиком.
+- Автор задаёт вопросы по одному и просит отвечать так же.
+- Автор часто уточняет логику — не торопись с кодом, сначала согласуй.
 
 **Что автор УМЕЕТ:**
 читать текст, скриншоты, фото; писать код Kotlin/Compose/Room
@@ -126,6 +127,15 @@ Darts Checkout — справочник чекаутов.
 ### data/sector/, data/aroundclock/, data/biground/, data/scoreset/
 - Каждый — своя БД (Entity + Dao + DB + Repository в одном файле).
 
+### data/training/ (НОВОЕ — тренировочный раздел, в разработке)
+- **TrainingModels.kt** — модели данных (TrainingSession, ExerciseResult,
+  PostponedDouble, WeaknessSnapshot, PotentialSnapshot, ControlMatch,
+  enum WeaknessType, BlockType, TrainingMode, ControlGameType)
+- **TrainingDatabase.kt** — Room БД, версия 1
+- **DartsNorms.kt** — таблица 16 уровней с нормативами
+- **LevelCalculator.kt** — расчёт уровня, потенциала, трендов
+- (дальше) WeaknessDetector.kt, TrainingPlanner.kt, TrainingSerializer.kt
+
 ### ui/
 - WelcomeScreen, OnboardingScreen, LoadingScreen, MainMenuScreen,
   GameSelectScreen, SettingsScreen
@@ -134,24 +144,19 @@ Darts Checkout — справочник чекаутов.
   MatchInfo, ChartSpec), объекты StatsParse (парсинг строк) и StatsCompute
   (агрегаты, графики, чекауты).
 - **StatsScreen.kt** — экран статистики с вкладками Крикет / 501.
-  Параметры: `initialTab`, `showTabs`, `onResumeGame501`, `onResumeCricket`.
-  Внутри: кнопка «📋 Список матчей», графики, чекауты, открытие старых матчей.
 - **StatsMenuScreen.kt** — меню статистики (сетка 2×3 с карточками 6 игр).
-  На карточках 501 и Крикета — красный значок `⏸ N` при незавершённых.
 
 ### ui/game501/
-- Game501SetupScreen.kt — настройка (карточки игроков с PPR: своё `ср. 75.4`,
-  у бота `ср. 52–55`), кнопка «🧪 Тест бота». ИГРА и ЗАКРЫТИЕ — в одну строку.
-- Game501Screen.kt — игровой экран (автосохранение, диалог «Прервать игру?»)
+- Game501SetupScreen.kt — настройка
+- Game501Screen.kt — игровой экран (автосохранение)
 - Game501StatsScreen.kt — отчёт о матче
-- **MatchesListDialog501.kt** — диалог списка всех матчей 501
+- MatchesListDialog501.kt — диалог списка всех матчей 501
 
 ### ui/cricket/
-- CricketSetupScreen.kt — настройка (карточки с MPR)
-- CricketGameScreen.kt — игровой экран (автосохранение, блокировка ОК 3 сек
-  после автоперехода хода)
+- CricketSetupScreen.kt — настройка
+- CricketGameScreen.kt — игровой экран
 - CricketStatsScreen.kt — отчёт о матче
-- **MatchesListDialogCricket.kt** — диалог списка всех матчей крикета
+- MatchesListDialogCricket.kt — диалог списка матчей
 
 ### ui/sector/, ui/aroundclock/, ui/biground/, ui/scoreset/
 - По 3 экрана (Setup/Game/Stats) в каждой.
