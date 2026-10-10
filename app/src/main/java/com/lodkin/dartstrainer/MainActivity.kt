@@ -70,6 +70,7 @@ import com.lodkin.dartstrainer.ui.sector.SectorSetupScreen
 import com.lodkin.dartstrainer.ui.sector.SectorStatsScreen
 import com.lodkin.dartstrainer.ui.training.TrainingMenuScreen
 import com.lodkin.dartstrainer.ui.training.TrainingPlanScreen
+import com.lodkin.dartstrainer.ui.training.TrainingWarmupScreen
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.random.Random
@@ -81,6 +82,7 @@ private val PARENT_SCREEN: Map<String, String> = mapOf(
     "settings" to "main",
     "training" to "main",
     "training_plan" to "training",
+    "training_warmup" to "training_plan",
     "game_select" to "main",
 
     "cricket_setup" to "game_select",
@@ -171,7 +173,7 @@ fun DartsTrainerApp() {
 
     var statsMenuKey by remember { mutableStateOf(0) }
 
-    // Время тренировки, выбранное в диалоге (сохраняется в SharedPreferences)
+    // Время тренировки, выбранное в диалоге
     var trainingMinutes by remember {
         mutableStateOf(
             context.getSharedPreferences("training_prefs", android.content.Context.MODE_PRIVATE)
@@ -303,11 +305,10 @@ fun DartsTrainerApp() {
                 playerName = SettingsStorage.getPlayerName(context),
                 repository = trainingRepository,
                 onStartTraining = {
-                    // Обновляем выбранное время из SharedPreferences
                     trainingMinutes = context
                         .getSharedPreferences("training_prefs", android.content.Context.MODE_PRIVATE)
                         .getInt("session_minutes", SettingsStorage.getTrainingMinutes(context))
-                    // TODO: следующий шаг — экран самой тренировки
+                    screen = "training_plan"
                 },
                 onPlan = {
                     trainingMinutes = context
@@ -323,10 +324,18 @@ fun DartsTrainerApp() {
                 playerName = SettingsStorage.getPlayerName(context),
                 minutes = trainingMinutes,
                 repository = trainingRepository,
-                onStartTraining = {
-                    // TODO: следующий шаг — экран самой тренировки
-                },
+                onStartTraining = { screen = "training_warmup" },
                 onBack = { screen = "training" }
+            )
+
+            "training_warmup" -> TrainingWarmupScreen(
+                longWarmup = trainingMinutes >= 100,
+                onFinish = {
+                    // TODO: следующий шаг — переход к первому блоку тренировки.
+                    // Пока возвращаемся на план.
+                    screen = "training_plan"
+                },
+                onBack = { screen = "training_plan" }
             )
 
             "game_select" -> GameSelectScreen(
