@@ -101,6 +101,8 @@ import com.lodkin.dartstrainer.ui.training.TrainingSummaryScreen
 import com.lodkin.dartstrainer.ui.training.TrainingTimerOverlay
 import com.lodkin.dartstrainer.ui.training.TrainingWarmupScreen
 import com.lodkin.dartstrainer.ui.training.defaultMainExercises
+import com.lodkin.dartstrainer.ui.training.defaultPsychologyExercises
+import com.lodkin.dartstrainer.ui.training.defaultStrengthExercises
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.random.Random
@@ -149,6 +151,17 @@ private val TRAINING_SCREENS: Set<String> = setOf(
     "training_exercise",
     "training_extra_game"
 )
+
+/**
+ * Какой блок сейчас активен в тренировке.
+ */
+private enum class TrainingBlockPhase {
+    WARMUP,
+    MAIN,
+    PSYCHOLOGY,
+    STRENGTH,
+    FINISHED
+}
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -208,12 +221,14 @@ fun DartsTrainerApp() {
     var showTimeUpDialog by remember { mutableStateOf(false) }
     var autoOpenTimeDialog by remember { mutableStateOf(true) }
 
+    // ── Текущий блок и упражнения ──
+    var currentPhase by remember { mutableStateOf(TrainingBlockPhase.WARMUP) }
     var mainExercises by remember { mutableStateOf<List<PlannedExercise>>(emptyList()) }
+    var psychologyExercises by remember { mutableStateOf<List<PlannedExercise>>(emptyList()) }
+    var strengthExercises by remember { mutableStateOf<List<PlannedExercise>>(emptyList()) }
     var currentExerciseIndex by remember { mutableStateOf(0) }
     var exerciseStatuses by remember { mutableStateOf<Map<Int, SummaryStatus>>(emptyMap()) }
     var currentWeakness by remember { mutableStateOf<WeaknessType?>(null) }
-
-    // Дополнительная игра из «Остаться здесь» (id)
     var extraGameId by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(isTrainingActive, trainingPaused, screen) {
@@ -234,10 +249,60 @@ fun DartsTrainerApp() {
         trainingElapsedSeconds = 0
         trainingPaused = false
         trainingSessionId = 0L
+        currentPhase = TrainingBlockPhase.WARMUP
         mainExercises = emptyList()
+        psychologyExercises = emptyList()
+        strengthExercises = emptyList()
         currentExerciseIndex = 0
         exerciseStatuses = emptyMap()
         extraGameId = null
+    }
+
+    /** Список упражнений текущего блока */
+    fun exercisesForPhase(phase: TrainingBlockPhase): List<PlannedExercise> = when (phase) {
+        TrainingBlockPhase.MAIN -> mainExercises
+        TrainingBlockPhase.PSYCHOLOGY -> psychologyExercises
+        TrainingBlockPhase.STRENGTH -> strengthExercises
+        else -> emptyList()
+    }
+
+    /** Название текущего блока (для итогов) */
+    fun phaseTitle(phase: TrainingBlockPhase): String = when (phase) {
+        TrainingBlockPhase.MAIN -> "Основная часть"
+        TrainingBlockPhase.PSYCHOLOGY -> "Психология"
+        TrainingBlockPhase.STRENGTH -> "Силовая"
+        TrainingBlockPhase.WARMUP -> "Разминка"
+        TrainingBlockPhase.FINISHED -> "Тренировка"
+    }
+
+    /** Какой блок идёт следующим */
+    fun nextPhaseAfter(phase: TrainingBlockPhase): TrainingBlockPhase = when (phase) {
+        TrainingBlockPhase.WARMUP -> TrainingBlockPhase.MAIN
+        TrainingBlockPhase.MAIN -> TrainingBlockPhase.PSYCHOLOGY
+        TrainingBlockPhase.PSYCHOLOGY -> TrainingBlockPhase.STRENGTH
+        TrainingBlockPhase.STRENGTH -> TrainingBlockPhase.FINISHED
+        TrainingBlockPhase.FINISHED -> TrainingBlockPhase.FINISHED
+    }
+
+    /** Название следующего блока для кнопки — или null, если это финал */
+    fun nextPhaseTitle(phase: TrainingBlockPhase): String? = when (phase) {
+        TrainingBlockPhase.WARMUP -> "Основная часть"
+        TrainingBlockPhase.MAIN -> "Психология"
+        TrainingBlockPhase.PSYCHOLOGY -> "Силовая"
+        TrainingBlockPhase.STRENGTH -> null
+        TrainingBlockPhase.FINISHED -> null
+    }
+
+    fun goToNextPhase() {
+        val next = nextPhaseAfter(currentPhase)
+        currentPhase = next
+        currentExerciseIndex = 0
+        exerciseStatuses = emptyMap()
+        if (next == TrainingBlockPhase.FINISHED) {
+            screen = "training_summary"
+        } else {
+            screen = "training_block"
+        }
     }
 
     BackHandler(enabled = stage == "main" && screen != "main") {
@@ -355,6 +420,9 @@ fun DartsTrainerApp() {
                             trainingPaused = false
                             showTimeUpDialog = false
                             mainExercises = defaultMainExercises()
+                            psychologyExercises = defaultPsychologyExercises()
+                            strengthExercises = defaultStrengthExercises()
+                            currentPhase = TrainingBlockPhase.WARMUP
                             currentExerciseIndex = 0
                             exerciseStatuses = emptyMap()
                             extraGameId = null
@@ -367,73 +435,93 @@ fun DartsTrainerApp() {
 
                 "training_warmup" -> TrainingWarmupScreen(
                     longWarmup = trainingMinutes >= 100,
-                    onFinish = { screen = "training_block" },
-                    onBack = { resetTrainingState(); autoOpenTimeDialog = false; screen = "training" }
-                )
-
-                "training_block" -> TrainingBlockScreen(
-                    exercises = mainExercises,
-                    currentIndex = currentExerciseIndex,
-                    onStartCurrent = { screen = "training_exercise" },
-                    onSkipCurrent = {
-                        exerciseStatuses = exerciseStatuses.toMutableMap().apply {
-                            put(currentExerciseIndex, SummaryStatus.SKIPPED)
-                        }
-                        if (currentExerciseIndex + 1 < mainExercises.size) currentExerciseIndex += 1
-                        else screen = "training_summary"
+                    onFinish = {
+                        currentPhase = TrainingBlockPhase.MAIN
+                        currentExerciseIndex = 0
+                        exerciseStatuses = emptyMap()
+                        screen = "training_block"
                     },
                     onBack = { resetTrainingState(); autoOpenTimeDialog = false; screen = "training" }
                 )
 
+                "training_block" -> {
+                    val list = exercisesForPhase(currentPhase)
+                    TrainingBlockScreen(
+                        exercises = list,
+                        currentIndex = currentExerciseIndex,
+                        onStartCurrent = { screen = "training_exercise" },
+                        onSkipCurrent = {
+                            exerciseStatuses = exerciseStatuses.toMutableMap().apply {
+                                put(currentExerciseIndex, SummaryStatus.SKIPPED)
+                            }
+                            if (currentExerciseIndex + 1 < list.size) currentExerciseIndex += 1
+                            else {
+                                // Блок закончен — на итоги блока
+                                screen = "training_summary"
+                            }
+                        },
+                        onBack = { resetTrainingState(); autoOpenTimeDialog = false; screen = "training" }
+                    )
+                }
+
                 "training_exercise" -> {
-                    val current = mainExercises.getOrNull(currentExerciseIndex)
-                    if (current == null) screen = "training_block"
-                    else when (current.id) {
-                        "aroundclock_doubles" -> AroundClockGameScreen(
-                            target = AroundClockTarget.DOUBLE,
-                            order = AroundClockOrder.ORDERED,
-                            hitsRequired = 1,
-                            repository = aroundClockRepository,
-                            onFinish = { totalDarts, _, _ ->
-                                scope.launch {
-                                    trainingRepository.insertExerciseResult(
-                                        ExerciseResult(
-                                            sessionId = trainingSessionId,
-                                            blockType = BlockType.DOUBLES,
-                                            exerciseId = current.id,
-                                            score = totalDarts,
-                                            dartsThrown = totalDarts,
-                                            timestamp = System.currentTimeMillis(),
-                                            detailsJson = ""
+                    val list = exercisesForPhase(currentPhase)
+                    val current = list.getOrNull(currentExerciseIndex)
+                    if (current == null) {
+                        screen = "training_block"
+                    } else {
+                        // Для реальных игр основной части — реальный экран.
+                        // Для психологии и силовой — заглушка (позже заменим).
+                        if (currentPhase == TrainingBlockPhase.MAIN && current.id == "aroundclock_doubles") {
+                            AroundClockGameScreen(
+                                target = AroundClockTarget.DOUBLE,
+                                order = AroundClockOrder.ORDERED,
+                                hitsRequired = 1,
+                                repository = aroundClockRepository,
+                                onFinish = { totalDarts, _, _ ->
+                                    scope.launch {
+                                        trainingRepository.insertExerciseResult(
+                                            ExerciseResult(
+                                                sessionId = trainingSessionId,
+                                                blockType = BlockType.DOUBLES,
+                                                exerciseId = current.id,
+                                                score = totalDarts,
+                                                dartsThrown = totalDarts,
+                                                timestamp = System.currentTimeMillis(),
+                                                detailsJson = ""
+                                            )
                                         )
-                                    )
-                                }
-                                exerciseStatuses = exerciseStatuses.toMutableMap().apply {
-                                    put(currentExerciseIndex, SummaryStatus.DONE)
-                                }
-                                if (currentExerciseIndex + 1 < mainExercises.size) {
-                                    currentExerciseIndex += 1; screen = "training_block"
-                                } else screen = "training_summary"
-                            },
-                            onBack = { screen = "training_block" }
-                        )
-                        else -> TrainingExercisePlaceholder(
-                            title = current.title,
-                            onDone = {
-                                exerciseStatuses = exerciseStatuses.toMutableMap().apply {
-                                    put(currentExerciseIndex, SummaryStatus.DONE)
-                                }
-                                if (currentExerciseIndex + 1 < mainExercises.size) {
-                                    currentExerciseIndex += 1; screen = "training_block"
-                                } else screen = "training_summary"
-                            },
-                            onBack = { screen = "training_block" }
-                        )
+                                    }
+                                    exerciseStatuses = exerciseStatuses.toMutableMap().apply {
+                                        put(currentExerciseIndex, SummaryStatus.DONE)
+                                    }
+                                    if (currentExerciseIndex + 1 < list.size) {
+                                        currentExerciseIndex += 1; screen = "training_block"
+                                    } else screen = "training_summary"
+                                },
+                                onBack = { screen = "training_block" }
+                            )
+                        } else {
+                            TrainingExercisePlaceholder(
+                                title = current.title,
+                                description = current.whyImportant,
+                                onDone = {
+                                    exerciseStatuses = exerciseStatuses.toMutableMap().apply {
+                                        put(currentExerciseIndex, SummaryStatus.DONE)
+                                    }
+                                    if (currentExerciseIndex + 1 < list.size) {
+                                        currentExerciseIndex += 1; screen = "training_block"
+                                    } else screen = "training_summary"
+                                },
+                                onBack = { screen = "training_block" }
+                            )
+                        }
                     }
                 }
 
                 "training_summary" -> {
-                    val summaries = mainExercises.mapIndexed { index, ex ->
+                    val list = exercisesForPhase(currentPhase)
+                    val summaries = list.mapIndexed { index, ex ->
                         ExerciseSummary(
                             title = ex.title,
                             minutes = ex.minutes,
@@ -446,11 +534,9 @@ fun DartsTrainerApp() {
                         planMinutes = trainingMinutes,
                         actualSeconds = trainingElapsedSeconds,
                         exercises = summaries,
-                        nextBlockTitle = null,
+                        nextBlockTitle = nextPhaseTitle(currentPhase),
                         recommendedIds = recommendedIds,
-                        onContinue = {
-                            resetTrainingState(); autoOpenTimeDialog = false; screen = "main"
-                        },
+                        onContinue = { goToNextPhase() },
                         onPlayGame = { gameId ->
                             extraGameId = gameId
                             screen = "training_extra_game"
@@ -532,32 +618,28 @@ fun DartsTrainerApp() {
                             },
                             onBack = { extraGameId = null; screen = "training_summary" }
                         )
-                        "sector20" -> {
-                            sectorToPlay = 20
-                            SectorGameScreen(
-                                sector = 20,
-                                repository = sectorRepository,
-                                onFinish = { score ->
-                                    scope.launch {
-                                        trainingRepository.insertExerciseResult(
-                                            ExerciseResult(
-                                                sessionId = trainingSessionId,
-                                                blockType = BlockType.SCORE,
-                                                exerciseId = "extra_sector20",
-                                                score = score,
-                                                dartsThrown = 30,
-                                                timestamp = System.currentTimeMillis(),
-                                                detailsJson = ""
-                                            )
+                        "sector20" -> SectorGameScreen(
+                            sector = 20,
+                            repository = sectorRepository,
+                            onFinish = { score ->
+                                scope.launch {
+                                    trainingRepository.insertExerciseResult(
+                                        ExerciseResult(
+                                            sessionId = trainingSessionId,
+                                            blockType = BlockType.SCORE,
+                                            exerciseId = "extra_sector20",
+                                            score = score,
+                                            dartsThrown = 30,
+                                            timestamp = System.currentTimeMillis(),
+                                            detailsJson = ""
                                         )
-                                    }
-                                    sectorToPlay = null
-                                    extraGameId = null
-                                    screen = "training_summary"
-                                },
-                                onBack = { sectorToPlay = null; extraGameId = null; screen = "training_summary" }
-                            )
-                        }
+                                    )
+                                }
+                                extraGameId = null
+                                screen = "training_summary"
+                            },
+                            onBack = { extraGameId = null; screen = "training_summary" }
+                        )
                         "scoreset" -> ScoreSetGameScreen(
                             repository = scoreSetRepository,
                             onFinish = { totalScore, _ ->
@@ -603,6 +685,7 @@ fun DartsTrainerApp() {
                         )
                         else -> TrainingExercisePlaceholder(
                             title = "Игра",
+                            description = "",
                             onDone = { extraGameId = null; screen = "training_summary" },
                             onBack = { extraGameId = null; screen = "training_summary" }
                         )
@@ -821,18 +904,40 @@ private fun recommendedGameIds(weakness: WeaknessType?): Set<String> = when (wea
 }
 
 @Composable
-private fun TrainingExercisePlaceholder(title: String, onDone: () -> Unit, onBack: () -> Unit) {
+private fun TrainingExercisePlaceholder(
+    title: String,
+    description: String,
+    onDone: () -> Unit,
+    onBack: () -> Unit
+) {
     Box(modifier = Modifier.fillMaxSize().background(DarkBg).padding(16.dp)) {
         Column(modifier = Modifier.fillMaxSize()) {
             Box(
                 modifier = Modifier.clip(RoundedCornerShape(12.dp)).background(TileBgDark)
                     .clickable { onBack() }.padding(horizontal = 14.dp, vertical = 10.dp)
             ) { Text("← Назад", color = Accent, fontSize = 14.sp, fontWeight = FontWeight.Medium) }
+
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.padding(24.dp)
+                ) {
                     Text(title, color = GoldAccent, fontSize = 24.sp, fontWeight = FontWeight.Bold)
-                    Text("Упражнение в разработке", color = Color.White.copy(alpha = 0.6f), fontSize = 14.sp,
-                        modifier = Modifier.padding(top = 8.dp))
+                    if (description.isNotBlank()) {
+                        Spacer(Modifier.padding(top = 12.dp))
+                        Text(
+                            description,
+                            color = Color.White.copy(alpha = 0.85f),
+                            fontSize = 14.sp,
+                            modifier = Modifier.padding(top = 12.dp)
+                        )
+                    }
+                    Text(
+                        "Упражнение в разработке",
+                        color = Color.White.copy(alpha = 0.5f),
+                        fontSize = 12.sp,
+                        modifier = Modifier.padding(top = 16.dp)
+                    )
                     Box(
                         modifier = Modifier.padding(top = 24.dp).clip(RoundedCornerShape(14.dp))
                             .background(Accent).clickable { onDone() }
