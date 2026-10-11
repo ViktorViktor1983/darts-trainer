@@ -84,7 +84,6 @@ import com.lodkin.dartstrainer.ui.sector.SectorGameScreen
 import com.lodkin.dartstrainer.ui.sector.SectorSetupScreen
 import com.lodkin.dartstrainer.ui.sector.SectorStatsScreen
 import com.lodkin.dartstrainer.ui.training.TrainingMenuScreen
-import com.lodkin.dartstrainer.ui.training.TrainingPlanScreen
 import com.lodkin.dartstrainer.ui.training.TrainingTimerOverlay
 import com.lodkin.dartstrainer.ui.training.TrainingWarmupScreen
 import kotlinx.coroutines.delay
@@ -97,9 +96,8 @@ private val PARENT_SCREEN: Map<String, String> = mapOf(
     "stats_501" to "stats_menu",
     "settings" to "main",
     "training" to "main",
-    "training_plan" to "training",
-    "training_warmup" to "training_plan",
-    "training_block" to "training_plan",
+    "training_warmup" to "training",
+    "training_block" to "training",
     "game_select" to "main",
 
     "cricket_setup" to "game_select",
@@ -128,7 +126,6 @@ private val PARENT_SCREEN: Map<String, String> = mapOf(
 )
 
 private val TRAINING_SCREENS: Set<String> = setOf(
-    "training_plan",
     "training_warmup",
     "training_block"
 )
@@ -232,6 +229,12 @@ fun DartsTrainerApp() {
             if (parent == "main" && isTrainingActive) {
                 isTrainingActive = false
                 trainingElapsedSeconds = 0
+            }
+            // Если из тренировочного экрана уходим на "training" — останавливаем таймер
+            if (screen in TRAINING_SCREENS) {
+                isTrainingActive = false
+                trainingElapsedSeconds = 0
+                trainingSessionId = 0L
             }
             screen = parent
         }
@@ -361,27 +364,6 @@ fun DartsTrainerApp() {
                         trainingMinutes = context
                             .getSharedPreferences("training_prefs", android.content.Context.MODE_PRIVATE)
                             .getInt("session_minutes", SettingsStorage.getTrainingMinutes(context))
-                        screen = "training_plan"
-                    },
-                    onPlan = {
-                        trainingMinutes = context
-                            .getSharedPreferences("training_prefs", android.content.Context.MODE_PRIVATE)
-                            .getInt("session_minutes", SettingsStorage.getTrainingMinutes(context))
-                        screen = "training_plan"
-                    },
-                    onTips = { /* пока не реализовано */ },
-                    onBack = {
-                        isTrainingActive = false
-                        trainingElapsedSeconds = 0
-                        screen = "main"
-                    }
-                )
-
-                "training_plan" -> TrainingPlanScreen(
-                    playerName = SettingsStorage.getPlayerName(context),
-                    minutes = trainingMinutes,
-                    repository = trainingRepository,
-                    onStartTraining = {
                         scope.launch {
                             val session = TrainingSession(
                                 dateMillis = System.currentTimeMillis(),
@@ -401,13 +383,22 @@ fun DartsTrainerApp() {
                             screen = "training_warmup"
                         }
                     },
-                    onBack = { screen = "training" }
+                    onBack = {
+                        isTrainingActive = false
+                        trainingElapsedSeconds = 0
+                        screen = "main"
+                    }
                 )
 
                 "training_warmup" -> TrainingWarmupScreen(
                     longWarmup = trainingMinutes >= 100,
                     onFinish = { screen = "training_block" },
-                    onBack = { screen = "training_plan" }
+                    onBack = {
+                        isTrainingActive = false
+                        trainingElapsedSeconds = 0
+                        trainingSessionId = 0L
+                        screen = "training"
+                    }
                 )
 
                 "training_block" -> {
@@ -429,9 +420,17 @@ fun DartsTrainerApp() {
                                 )
                                 trainingRepository.insertExerciseResult(result)
                             }
-                            screen = "training_plan"
+                            isTrainingActive = false
+                            trainingElapsedSeconds = 0
+                            trainingSessionId = 0L
+                            screen = "training"
                         },
-                        onBack = { screen = "training_plan" }
+                        onBack = {
+                            isTrainingActive = false
+                            trainingElapsedSeconds = 0
+                            trainingSessionId = 0L
+                            screen = "training"
+                        }
                     )
                 }
 
