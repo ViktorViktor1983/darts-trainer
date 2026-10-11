@@ -6,8 +6,9 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -25,9 +26,9 @@ import com.lodkin.dartstrainer.theme.TileBgDark
  * Статус упражнения в итогах тренировки.
  */
 enum class SummaryStatus {
-    DONE,       // Пройдено
-    SKIPPED,    // Пропущено
-    NOT_DONE    // Не дошли
+    DONE,
+    SKIPPED,
+    NOT_DONE
 }
 
 /**
@@ -40,7 +41,45 @@ data class ExerciseSummary(
 )
 
 /**
- * Экран итогов тренировки.
+ * Игра, доступная в разделе «Остаться здесь».
+ *
+ * @param id        строковый ID для запуска (совпадает с id в MainActivity)
+ * @param title     название
+ * @param isRecommended  показывать ли звёздочку ★
+ */
+data class ExtraGame(
+    val id: String,
+    val title: String,
+    val isRecommended: Boolean
+)
+
+/**
+ * Список игр основной части.
+ * ★ — рекомендуемые. Сортируются наверх.
+ */
+fun defaultMainGames(recommendedIds: Set<String>): List<ExtraGame> {
+    val all = listOf(
+        ExtraGame("aroundclock_doubles", "Кругосветка: Удвоения", recommendedIds.contains("aroundclock_doubles")),
+        ExtraGame("aroundclock_trebles", "Кругосветка: Утроения", recommendedIds.contains("aroundclock_trebles")),
+        ExtraGame("aroundclock_sectors", "Кругосветка: Сектора", recommendedIds.contains("aroundclock_sectors")),
+        ExtraGame("sector20", "Сектор 20", recommendedIds.contains("sector20")),
+        ExtraGame("scoreset", "Набор очков", recommendedIds.contains("scoreset")),
+        ExtraGame("biground", "Большой раунд", recommendedIds.contains("biground")),
+        ExtraGame("game501", "501", recommendedIds.contains("game501")),
+        ExtraGame("cricket", "Крикет", recommendedIds.contains("cricket"))
+    )
+    // Сначала рекомендованные, потом остальные — в исходном порядке
+    return all.sortedByDescending { it.isRecommended }
+}
+
+/**
+ * Экран итогов тренировки (обновлён).
+ *
+ * @param nextBlockTitle  название следующего блока («Психология», «Силовая», …).
+ *                        null — это был последний блок, кнопка «Закончить тренировку».
+ * @param recommendedIds  id игр, которые надо подсветить ★ в разделе «Остаться здесь».
+ * @param onContinue      перейти к следующему блоку (или завершить, если следующего нет).
+ * @param onPlayGame      запустить конкретную игру из «Остаться здесь».
  */
 @Composable
 fun TrainingSummaryScreen(
@@ -48,13 +87,17 @@ fun TrainingSummaryScreen(
     planMinutes: Int,
     actualSeconds: Int,
     exercises: List<ExerciseSummary>,
-    onRestart: () -> Unit,
-    onFinish: () -> Unit
+    nextBlockTitle: String?,
+    recommendedIds: Set<String>,
+    onContinue: () -> Unit,
+    onPlayGame: (String) -> Unit
 ) {
     val actualMinutes = (actualSeconds / 60).coerceAtLeast(1)
     val doneCount = exercises.count { it.status == SummaryStatus.DONE }
     val skippedCount = exercises.count { it.status == SummaryStatus.SKIPPED }
     val totalCount = exercises.size
+
+    var showStayDialog by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
@@ -83,14 +126,14 @@ fun TrainingSummaryScreen(
                 Text("🏆", fontSize = 40.sp)
                 Spacer(Modifier.height(10.dp))
                 Text(
-                    "Тренировка завершена!",
+                    "Блок завершён!",
                     color = GoldAccent,
                     fontSize = 22.sp,
                     fontWeight = FontWeight.Bold
                 )
                 Spacer(Modifier.height(6.dp))
                 Text(
-                    "$playerName, ты хорошо потрудился сегодня.",
+                    "$playerName, ты хорошо потрудился.",
                     color = Color.White.copy(alpha = 0.8f),
                     fontSize = 14.sp
                 )
@@ -107,11 +150,7 @@ fun TrainingSummaryScreen(
                     .padding(16.dp)
             ) {
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        "Планировал",
-                        color = Color.White.copy(alpha = 0.6f),
-                        fontSize = 12.sp
-                    )
+                    Text("Планировал", color = Color.White.copy(alpha = 0.6f), fontSize = 12.sp)
                     Spacer(Modifier.height(4.dp))
                     Text(
                         "$planMinutes мин",
@@ -124,11 +163,7 @@ fun TrainingSummaryScreen(
                     modifier = Modifier.weight(1f),
                     horizontalAlignment = Alignment.End
                 ) {
-                    Text(
-                        "Оттренировал",
-                        color = Color.White.copy(alpha = 0.6f),
-                        fontSize = 12.sp
-                    )
+                    Text("В тренировке", color = Color.White.copy(alpha = 0.6f), fontSize = 12.sp)
                     Spacer(Modifier.height(4.dp))
                     Text(
                         "$actualMinutes мин",
@@ -158,7 +193,6 @@ fun TrainingSummaryScreen(
 
             Spacer(Modifier.height(16.dp))
 
-            // ── Итоговая строка ──
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -184,43 +218,154 @@ fun TrainingSummaryScreen(
             Spacer(Modifier.height(24.dp))
         }
 
-        // ── Кнопки внизу ──
+        // ── Две кнопки внизу ──
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
+            // Кнопка «Остаться здесь»
             Box(
                 modifier = Modifier
                     .weight(1f)
                     .clip(RoundedCornerShape(14.dp))
                     .background(TileBgDark)
-                    .clickable { onFinish() }
+                    .clickable { showStayDialog = true }
                     .padding(vertical = 14.dp),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    "В меню",
-                    color = Color.White.copy(alpha = 0.85f),
+                    "Остаться здесь",
+                    color = Color.White.copy(alpha = 0.9f),
                     fontSize = 15.sp,
                     fontWeight = FontWeight.Medium
                 )
             }
+
+            // Кнопка «Продолжить тренировку» / «Закончить тренировку»
+            val continueLabel = if (nextBlockTitle == null) {
+                "Закончить тренировку"
+            } else {
+                "Продолжить тренировку"
+            }
             Box(
                 modifier = Modifier
-                    .weight(1f)
+                    .weight(1.3f)
                     .clip(RoundedCornerShape(14.dp))
                     .background(Accent)
-                    .clickable { onRestart() }
+                    .clickable { onContinue() }
                     .padding(vertical = 14.dp),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    "Ещё тренировку",
+                    continueLabel,
                     color = Color(0xFF121212),
                     fontSize = 15.sp,
                     fontWeight = FontWeight.Bold
                 )
             }
+        }
+    }
+
+    // ── Диалог «Остаться здесь» ──
+    if (showStayDialog) {
+        val games = defaultMainGames(recommendedIds)
+        StayHereDialog(
+            games = games,
+            onSelect = { id ->
+                showStayDialog = false
+                onPlayGame(id)
+            },
+            onClose = { showStayDialog = false }
+        )
+    }
+}
+
+// ─────────────────────────────────────────────
+// Диалог «Остаться здесь» — список игр
+// ─────────────────────────────────────────────
+
+@Composable
+private fun StayHereDialog(
+    games: List<ExtraGame>,
+    onSelect: (String) -> Unit,
+    onClose: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onClose,
+        containerColor = TileBgDark,
+        title = {
+            Text(
+                "Продолжить здесь",
+                color = GoldAccent,
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Bold
+            )
+        },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 400.dp)
+                    .verticalScroll(rememberScrollState())
+            ) {
+                Text(
+                    "Выбери игру. Результат пойдёт в тренировочную статистику.",
+                    color = Color.White.copy(alpha = 0.7f),
+                    fontSize = 13.sp
+                )
+                Spacer(Modifier.height(12.dp))
+
+                games.forEach { game ->
+                    GameRow(game) { onSelect(game.id) }
+                    Spacer(Modifier.height(8.dp))
+                }
+            }
+        },
+        confirmButton = {
+            Text(
+                "Закрыть",
+                color = Accent,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(Accent.copy(alpha = 0.15f))
+                    .clickable { onClose() }
+                    .padding(horizontal = 18.dp, vertical = 10.dp)
+            )
+        }
+    )
+}
+
+@Composable
+private fun GameRow(game: ExtraGame, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(if (game.isRecommended) Accent.copy(alpha = 0.12f) else TileBg)
+            .clickable { onClick() }
+            .padding(horizontal = 14.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            game.title,
+            color = Color.White,
+            fontSize = 14.sp,
+            fontWeight = if (game.isRecommended) FontWeight.Bold else FontWeight.Medium,
+            modifier = Modifier.weight(1f)
+        )
+        if (game.isRecommended) {
+            Column(horizontalAlignment = Alignment.End) {
+                Text("★", color = GoldAccent, fontSize = 16.sp)
+                Text(
+                    "рекомендуем",
+                    color = GoldAccent.copy(alpha = 0.85f),
+                    fontSize = 10.sp
+                )
+            }
+        } else {
+            Text("→", color = Accent, fontSize = 16.sp, fontWeight = FontWeight.Bold)
         }
     }
 }
@@ -258,12 +403,7 @@ private fun SummaryRow(exercise: ExerciseSummary) {
                 .background(if (exercise.status == SummaryStatus.DONE) Accent.copy(alpha = 0.2f) else TileBg),
             contentAlignment = Alignment.Center
         ) {
-            Text(
-                icon,
-                color = iconColor,
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Bold
-            )
+            Text(icon, color = iconColor, fontSize = 16.sp, fontWeight = FontWeight.Bold)
         }
 
         Spacer(Modifier.width(12.dp))
