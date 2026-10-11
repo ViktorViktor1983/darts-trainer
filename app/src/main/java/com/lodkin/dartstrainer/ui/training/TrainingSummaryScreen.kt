@@ -22,67 +22,59 @@ import com.lodkin.dartstrainer.theme.GoldAccent
 import com.lodkin.dartstrainer.theme.TileBg
 import com.lodkin.dartstrainer.theme.TileBgDark
 
-/**
- * Статус упражнения в итогах тренировки.
- */
-enum class SummaryStatus {
-    DONE,
-    SKIPPED,
-    NOT_DONE
-}
+enum class SummaryStatus { DONE, SKIPPED, NOT_DONE }
 
-/**
- * Одно упражнение в итогах.
- */
+enum class SummaryBlockType { WARMUP, MAIN, PSYCHOLOGY, STRENGTH }
+
 data class ExerciseSummary(
     val title: String,
     val minutes: Int,
     val status: SummaryStatus
 )
 
-/**
- * Игра, доступная в разделе «Остаться здесь».
- */
-data class ExtraGame(
+data class BlockExerciseItem(
     val id: String,
     val title: String,
-    val isRecommended: Boolean
+    val isRecommended: Boolean = false
 )
 
-/**
- * Список игр основной части.
- * Рекомендуемые — наверх.
- */
-fun defaultMainGames(recommendedIds: Set<String>): List<ExtraGame> {
+/** 8 игр основной части (с рекомендациями наверху). */
+fun defaultMainBlockItems(recommendedIds: Set<String>): List<BlockExerciseItem> {
     val all = listOf(
-        ExtraGame("aroundclock_doubles", "Кругосветка: Удвоения", recommendedIds.contains("aroundclock_doubles")),
-        ExtraGame("aroundclock_trebles", "Кругосветка: Утроения", recommendedIds.contains("aroundclock_trebles")),
-        ExtraGame("aroundclock_sectors", "Кругосветка: Сектора", recommendedIds.contains("aroundclock_sectors")),
-        ExtraGame("sector20", "Сектор 20", recommendedIds.contains("sector20")),
-        ExtraGame("scoreset", "Набор очков", recommendedIds.contains("scoreset")),
-        ExtraGame("biground", "Большой раунд", recommendedIds.contains("biground")),
-        ExtraGame("game501", "501", recommendedIds.contains("game501")),
-        ExtraGame("cricket", "Крикет", recommendedIds.contains("cricket"))
+        BlockExerciseItem("aroundclock_doubles", "Кругосветка: Удвоения", recommendedIds.contains("aroundclock_doubles")),
+        BlockExerciseItem("aroundclock_trebles", "Кругосветка: Утроения", recommendedIds.contains("aroundclock_trebles")),
+        BlockExerciseItem("aroundclock_sectors", "Кругосветка: Сектора", recommendedIds.contains("aroundclock_sectors")),
+        BlockExerciseItem("sector20", "Сектор 20", recommendedIds.contains("sector20")),
+        BlockExerciseItem("scoreset", "Набор очков", recommendedIds.contains("scoreset")),
+        BlockExerciseItem("biground", "Большой раунд", recommendedIds.contains("biground")),
+        BlockExerciseItem("game501", "501", recommendedIds.contains("game501")),
+        BlockExerciseItem("cricket", "Крикет", recommendedIds.contains("cricket"))
     )
     return all.sortedByDescending { it.isRecommended }
 }
 
-/**
- * Экран итогов тренировки.
- *
- * @param nextBlockTitle  название следующего блока. null — тренировка завершена.
- * @param recommendedIds  id рекомендованных игр (★).
- */
+/** 4 упражнения разминки. */
+fun warmupBlockItems(): List<BlockExerciseItem> = listOf(
+    BlockExerciseItem("warmup_muscles", "Мышцы"),
+    BlockExerciseItem("warmup_trajectory", "Траектория"),
+    BlockExerciseItem("warmup_accuracy", "Кучность"),
+    BlockExerciseItem("warmup_aim", "Прицеливание")
+)
+
 @Composable
 fun TrainingSummaryScreen(
     playerName: String,
     planMinutes: Int,
     actualSeconds: Int,
     exercises: List<ExerciseSummary>,
-    nextBlockTitle: String?,
+    blockType: SummaryBlockType,
+    blockExercises: List<BlockExerciseItem>,
+    isLastBlock: Boolean,
     recommendedIds: Set<String>,
     onContinue: () -> Unit,
-    onPlayGame: (String) -> Unit
+    onPlayExercise: (String) -> Unit,
+    onPlayGame: (String) -> Unit,
+    onFinishTraining: () -> Unit
 ) {
     val actualMinutes = (actualSeconds / 60).coerceAtLeast(1)
     val doneCount = exercises.count { it.status == SummaryStatus.DONE }
@@ -90,7 +82,9 @@ fun TrainingSummaryScreen(
     val totalCount = exercises.size
 
     var showCoachWarning by remember { mutableStateOf(false) }
-    var showStayDialog by remember { mutableStateOf(false) }
+    var showBlockDialog by remember { mutableStateOf(false) }
+    var showFinishDialog by remember { mutableStateOf(false) }
+    var showGamesDialog by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
@@ -106,7 +100,6 @@ fun TrainingSummaryScreen(
         ) {
             Spacer(Modifier.height(16.dp))
 
-            // ── Поздравление ──
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -133,7 +126,6 @@ fun TrainingSummaryScreen(
 
             Spacer(Modifier.height(16.dp))
 
-            // ── Время ──
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -196,17 +188,24 @@ fun TrainingSummaryScreen(
             Spacer(Modifier.height(24.dp))
         }
 
-        // ── Две кнопки внизу ──
+        // ── Кнопки ──
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
+            // Левая: «Остаться здесь»
             Box(
                 modifier = Modifier
                     .weight(1f)
                     .clip(RoundedCornerShape(14.dp))
                     .background(TileBgDark)
-                    .clickable { showCoachWarning = true }
+                    .clickable {
+                        if (isLastBlock) {
+                            showBlockDialog = true
+                        } else {
+                            showCoachWarning = true
+                        }
+                    }
                     .padding(vertical = 14.dp),
                 contentAlignment = Alignment.Center
             ) {
@@ -218,18 +217,25 @@ fun TrainingSummaryScreen(
                 )
             }
 
-            val continueLabel = if (nextBlockTitle == null) "Закончить тренировку" else "Продолжить тренировку"
+            // Правая: «Продолжить» / «Завершить тренировку»
+            val rightLabel = if (isLastBlock) "Завершить тренировку" else "Продолжить тренировку"
             Box(
                 modifier = Modifier
                     .weight(1.3f)
                     .clip(RoundedCornerShape(14.dp))
                     .background(Accent)
-                    .clickable { onContinue() }
+                    .clickable {
+                        if (isLastBlock) {
+                            showFinishDialog = true
+                        } else {
+                            onContinue()
+                        }
+                    }
                     .padding(vertical = 14.dp),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    continueLabel,
+                    rightLabel,
                     color = Color(0xFF121212),
                     fontSize = 15.sp,
                     fontWeight = FontWeight.Bold
@@ -238,23 +244,18 @@ fun TrainingSummaryScreen(
         }
     }
 
-    // ── Диалог-предупреждение от тренера ──
+    // ── Совет тренера ──
     if (showCoachWarning) {
         AlertDialog(
             onDismissRequest = { showCoachWarning = false },
             containerColor = TileBgDark,
             title = {
-                Text(
-                    "Совет тренера",
-                    color = GoldAccent,
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.Bold
-                )
+                Text("Совет тренера", color = GoldAccent, fontSize = 20.sp, fontWeight = FontWeight.Bold)
             },
             text = {
                 Column {
                     Text(
-                        playerName + ", рекомендую сначала завершить программу полностью — " +
+                        "$playerName, рекомендую сначала завершить программу полностью — " +
                                 "так будет больше пользы от тренировки.",
                         color = Color.White.copy(alpha = 0.9f),
                         fontSize = 14.sp,
@@ -267,12 +268,6 @@ fun TrainingSummaryScreen(
                         color = Color.White.copy(alpha = 0.75f),
                         fontSize = 13.sp,
                         lineHeight = 19.sp
-                    )
-                    Spacer(Modifier.height(14.dp))
-                    Text(
-                        "Что делаем?",
-                        color = Color.White.copy(alpha = 0.6f),
-                        fontSize = 13.sp
                     )
                 }
             },
@@ -301,7 +296,7 @@ fun TrainingSummaryScreen(
                         .clip(RoundedCornerShape(10.dp))
                         .clickable {
                             showCoachWarning = false
-                            showStayDialog = true
+                            showBlockDialog = true
                         }
                         .padding(horizontal = 14.dp, vertical = 10.dp)
                 )
@@ -309,92 +304,169 @@ fun TrainingSummaryScreen(
         )
     }
 
-    // ── Диалог «Остаться здесь» — список игр ──
-    if (showStayDialog) {
-        val games = defaultMainGames(recommendedIds)
-        StayHereDialog(
-            games = games,
-            onSelect = { id ->
-                showStayDialog = false
-                onPlayGame(id)
+    // ── Остаться в блоке (упражнения текущего блока) ──
+    if (showBlockDialog) {
+        AlertDialog(
+            onDismissRequest = { showBlockDialog = false },
+            containerColor = TileBgDark,
+            title = {
+                Text("Остаться в блоке", color = GoldAccent, fontSize = 20.sp, fontWeight = FontWeight.Bold)
             },
-            onClose = { showStayDialog = false }
+            text = {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 400.dp)
+                        .verticalScroll(rememberScrollState())
+                ) {
+                    Text(
+                        "Выбери упражнение. Результат пойдёт в тренировочную статистику.",
+                        color = Color.White.copy(alpha = 0.7f),
+                        fontSize = 13.sp
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    blockExercises.forEach { ex ->
+                        BlockItemRow(ex) {
+                            showBlockDialog = false
+                            onPlayExercise(ex.id)
+                        }
+                        Spacer(Modifier.height(8.dp))
+                    }
+                }
+            },
+            confirmButton = {
+                Text(
+                    "Закрыть",
+                    color = Accent,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(Accent.copy(alpha = 0.15f))
+                        .clickable { showBlockDialog = false }
+                        .padding(horizontal = 18.dp, vertical = 10.dp)
+                )
+            }
+        )
+    }
+
+    // ── Завершить тренировку (последний блок) ──
+    if (showFinishDialog) {
+        AlertDialog(
+            onDismissRequest = { showFinishDialog = false },
+            containerColor = TileBgDark,
+            title = {
+                Text("Тренировка завершена", color = GoldAccent, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+            },
+            text = {
+                Column {
+                    Text(
+                        "Что делаем дальше?",
+                        color = Color.White.copy(alpha = 0.9f),
+                        fontSize = 14.sp
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        "Можно ещё поиграть в любую игру или полностью завершить тренировку.",
+                        color = Color.White.copy(alpha = 0.7f),
+                        fontSize = 13.sp
+                    )
+                }
+            },
+            confirmButton = {
+                Text(
+                    "Ещё поиграть",
+                    color = Color(0xFF121212),
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(Accent)
+                        .clickable {
+                            showFinishDialog = false
+                            showGamesDialog = true
+                        }
+                        .padding(horizontal = 16.dp, vertical = 10.dp)
+                )
+            },
+            dismissButton = {
+                Text(
+                    "Полностью закончить",
+                    color = Color.White.copy(alpha = 0.75f),
+                    fontSize = 14.sp,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(10.dp))
+                        .clickable {
+                            showFinishDialog = false
+                            onFinishTraining()
+                        }
+                        .padding(horizontal = 14.dp, vertical = 10.dp)
+                )
+            }
+        )
+    }
+
+    // ── Список игр для «Ещё поиграть» ──
+    if (showGamesDialog) {
+        val games = defaultMainBlockItems(recommendedIds)
+        AlertDialog(
+            onDismissRequest = { showGamesDialog = false },
+            containerColor = TileBgDark,
+            title = {
+                Text("Во что сыграем?", color = GoldAccent, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+            },
+            text = {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 400.dp)
+                        .verticalScroll(rememberScrollState())
+                ) {
+                    games.forEach { g ->
+                        BlockItemRow(g) {
+                            showGamesDialog = false
+                            onPlayGame(g.id)
+                        }
+                        Spacer(Modifier.height(8.dp))
+                    }
+                }
+            },
+            confirmButton = {
+                Text(
+                    "Закрыть",
+                    color = Accent,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(Accent.copy(alpha = 0.15f))
+                        .clickable { showGamesDialog = false }
+                        .padding(horizontal = 18.dp, vertical = 10.dp)
+                )
+            }
         )
     }
 }
 
 @Composable
-private fun StayHereDialog(
-    games: List<ExtraGame>,
-    onSelect: (String) -> Unit,
-    onClose: () -> Unit
-) {
-    AlertDialog(
-        onDismissRequest = onClose,
-        containerColor = TileBgDark,
-        title = {
-            Text(
-                "Продолжить здесь",
-                color = GoldAccent,
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Bold
-            )
-        },
-        text = {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(max = 400.dp)
-                    .verticalScroll(rememberScrollState())
-            ) {
-                Text(
-                    "Выбери игру. Результат пойдёт в тренировочную статистику.",
-                    color = Color.White.copy(alpha = 0.7f),
-                    fontSize = 13.sp
-                )
-                Spacer(Modifier.height(12.dp))
-
-                games.forEach { game ->
-                    GameRow(game) { onSelect(game.id) }
-                    Spacer(Modifier.height(8.dp))
-                }
-            }
-        },
-        confirmButton = {
-            Text(
-                "Закрыть",
-                color = Accent,
-                fontSize = 15.sp,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(Accent.copy(alpha = 0.15f))
-                    .clickable { onClose() }
-                    .padding(horizontal = 18.dp, vertical = 10.dp)
-            )
-        }
-    )
-}
-
-@Composable
-private fun GameRow(game: ExtraGame, onClick: () -> Unit) {
+private fun BlockItemRow(item: BlockExerciseItem, onClick: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
-            .background(if (game.isRecommended) Accent.copy(alpha = 0.12f) else TileBg)
+            .background(if (item.isRecommended) Accent.copy(alpha = 0.12f) else TileBg)
             .clickable { onClick() }
             .padding(horizontal = 14.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
-            game.title,
+            item.title,
             color = Color.White,
             fontSize = 14.sp,
-            fontWeight = if (game.isRecommended) FontWeight.Bold else FontWeight.Medium,
+            fontWeight = if (item.isRecommended) FontWeight.Bold else FontWeight.Medium,
             modifier = Modifier.weight(1f)
         )
-        if (game.isRecommended) {
+        if (item.isRecommended) {
             Column(horizontalAlignment = Alignment.End) {
                 Text("★", color = GoldAccent, fontSize = 16.sp)
                 Text("рекомендуем", color = GoldAccent.copy(alpha = 0.85f), fontSize = 10.sp)
