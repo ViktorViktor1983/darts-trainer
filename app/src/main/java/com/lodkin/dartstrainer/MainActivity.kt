@@ -4,13 +4,25 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.lodkin.dartstrainer.data.SettingsStorage
 import com.lodkin.dartstrainer.data.aroundclock.AroundClockDatabase
 import com.lodkin.dartstrainer.data.aroundclock.AroundClockOrder
@@ -44,7 +56,11 @@ import com.lodkin.dartstrainer.data.training.TrainingDatabase
 import com.lodkin.dartstrainer.data.training.TrainingMode
 import com.lodkin.dartstrainer.data.training.TrainingRepository
 import com.lodkin.dartstrainer.data.training.TrainingSession
+import com.lodkin.dartstrainer.theme.Accent
 import com.lodkin.dartstrainer.theme.DarkBg
+import com.lodkin.dartstrainer.theme.ErrorColor
+import com.lodkin.dartstrainer.theme.GoldAccent
+import com.lodkin.dartstrainer.theme.TileBg
 import com.lodkin.dartstrainer.ui.GameSelectScreen
 import com.lodkin.dartstrainer.ui.LoadingScreen
 import com.lodkin.dartstrainer.ui.MainMenuScreen
@@ -113,6 +129,13 @@ private val PARENT_SCREEN: Map<String, String> = mapOf(
     "scoreset_setup" to "game_select",
     "scoreset_game" to "game_select",
     "scoreset_stats" to "stats_menu"
+)
+
+// Экраны, где показывается таймер тренировки
+private val TRAINING_SCREENS: Set<String> = setOf(
+    "training_plan",
+    "training_warmup",
+    "training_block"
 )
 
 class MainActivity : ComponentActivity() {
@@ -189,9 +212,37 @@ fun DartsTrainerApp() {
     // ID текущей тренировочной сессии (0 = нет активной)
     var trainingSessionId by remember { mutableStateOf(0L) }
 
+    // ── Таймер тренировки ──
+    var isTrainingActive by remember { mutableStateOf(false) }
+    var trainingElapsedSeconds by remember { mutableStateOf(0) }
+    var trainingPaused by remember { mutableStateOf(false) }
+    var showTimeUpDialog by remember { mutableStateOf(false) }
+
+    // Тик таймера: идёт, пока тренировка активна, не на паузе и игрок на тренировочном экране
+    LaunchedEffect(isTrainingActive, trainingPaused, screen) {
+        if (!isTrainingActive || trainingPaused || screen !in TRAINING_SCREENS) {
+            return@LaunchedEffect
+        }
+        while (true) {
+            delay(1000L)
+            trainingElapsedSeconds += 1
+            if (trainingElapsedSeconds >= trainingMinutes * 60) {
+                showTimeUpDialog = true
+                break
+            }
+        }
+    }
+
+    val trainingSecondsLeft = (trainingMinutes * 60 - trainingElapsedSeconds).coerceAtLeast(0)
+
     BackHandler(enabled = stage == "main" && screen != "main") {
         PARENT_SCREEN[screen]?.let { parent ->
             if (parent == "stats_menu") statsMenuKey++
+            // Если выходим из тренировки в главное меню — сбрасываем таймер
+            if (parent == "main" && isTrainingActive) {
+                isTrainingActive = false
+                trainingElapsedSeconds = 0
+            }
             screen = parent
         }
     }
@@ -200,477 +251,595 @@ fun DartsTrainerApp() {
         LaunchedEffect(Unit) { delay(3000); stage = "main" }
     }
 
-    when (stage) {
-        "welcome" -> WelcomeScreen(onStart = { stage = "onboarding" })
+    Box(modifier = Modifier.fillMaxSize()) {
+        when (stage) {
+            "welcome" -> WelcomeScreen(onStart = { stage = "onboarding" })
 
-        "onboarding" -> OnboardingScreen(onFinish = { result: OnboardingResult ->
-            SettingsStorage.setPlayerName(context, result.name)
-            SettingsStorage.setTrainingMinutes(context, result.trainingMinutes)
-            SettingsStorage.setTrainingsPerWeek(context, result.trainingsPerWeek)
-            SettingsStorage.setTrainingMode(context, result.trainingMode)
-            SettingsStorage.setStartMode(context, result.startMode)
-            SettingsStorage.setOnboardingDone(context)
-            onboardingDone = true
-            stage = "main"
-        })
+            "onboarding" -> OnboardingScreen(onFinish = { result: OnboardingResult ->
+                SettingsStorage.setPlayerName(context, result.name)
+                SettingsStorage.setTrainingMinutes(context, result.trainingMinutes)
+                SettingsStorage.setTrainingsPerWeek(context, result.trainingsPerWeek)
+                SettingsStorage.setTrainingMode(context, result.trainingMode)
+                SettingsStorage.setStartMode(context, result.startMode)
+                SettingsStorage.setOnboardingDone(context)
+                onboardingDone = true
+                stage = "main"
+            })
 
-        "loading" -> LoadingScreen()
+            "loading" -> LoadingScreen()
 
-        "main" -> when (screen) {
-            "main" -> MainMenuScreen(
-                onTraining = { screen = "training" },
-                onFreePlay = { screen = "game_select" },
-                onStatsClick = {
-                    statsMenuKey++
-                    screen = "stats_menu"
-                },
-                onSettingsClick = { screen = "settings" }
-            )
+            "main" -> when (screen) {
+                "main" -> MainMenuScreen(
+                    onTraining = { screen = "training" },
+                    onFreePlay = { screen = "game_select" },
+                    onStatsClick = {
+                        statsMenuKey++
+                        screen = "stats_menu"
+                    },
+                    onSettingsClick = { screen = "settings" }
+                )
 
-            "stats_menu" -> StatsMenuScreen(
-                cricketRepository = cricketRepository,
-                reloadKey = statsMenuKey,
-                onResumeGame501 = { entity ->
-                    val restored = Game501Serializer.fromJson(entity.stateBlob)
-                    if (restored != null) {
-                        game501 = restored
-                        game501ExistingId = entity.id
-                        screen = "game501_game"
-                    }
-                },
-                onResumeCricket = { entity ->
-                    val restored = CricketSerializer.fromJson(entity.stateBlob)
-                    if (restored != null) {
-                        cricketGame = restored
-                        cricketExistingId = entity.id
-                        screen = "cricket_game"
-                    }
-                },
-                onCricket = { screen = "stats_cricket" },
-                on501 = { screen = "stats_501" },
-                onSector = { screen = "sector_stats" },
-                onBigRound = { screen = "biground_stats" },
-                onScoreSet = { screen = "scoreset_stats" },
-                onAroundClock = { screen = "aroundclock_stats" },
-                onBack = { screen = "main" }
-            )
-
-            "stats_cricket" -> StatsScreen(
-                repository = cricketRepository,
-                initialTab = 0,
-                showTabs = false,
-                onResumeCricket = { entity ->
-                    val restored = CricketSerializer.fromJson(entity.stateBlob)
-                    if (restored != null) {
-                        cricketGame = restored
-                        cricketExistingId = entity.id
-                        screen = "cricket_game"
-                    }
-                },
-                onBack = {
-                    statsMenuKey++
-                    screen = "stats_menu"
-                }
-            )
-
-            "stats_501" -> StatsScreen(
-                repository = cricketRepository,
-                initialTab = 1,
-                showTabs = false,
-                onResumeGame501 = { entity ->
-                    val restored = Game501Serializer.fromJson(entity.stateBlob)
-                    if (restored != null) {
-                        game501 = restored
-                        game501ExistingId = entity.id
-                        screen = "game501_game"
-                    }
-                },
-                onBack = {
-                    statsMenuKey++
-                    screen = "stats_menu"
-                }
-            )
-
-            "settings" -> SettingsScreen(
-                onBack = { screen = "main" },
-                onFactoryReset = {
-                    cricketGame = null
-                    cricketExistingId = 0L
-                    game501 = null
-                    game501ExistingId = 0L
-                    sectorToPlay = null
-                    aroundClockTarget = null
-                    aroundClockOrder = null
-                    aroundClockHits = 1
-                    bigRoundCategory = null
-                    trainingSessionId = 0L
-                    onboardingDone = false
-                    screen = "main"
-                    stage = "welcome"
-                }
-            )
-
-            "training" -> TrainingMenuScreen(
-                playerName = SettingsStorage.getPlayerName(context),
-                repository = trainingRepository,
-                onStartTraining = {
-                    trainingMinutes = context
-                        .getSharedPreferences("training_prefs", android.content.Context.MODE_PRIVATE)
-                        .getInt("session_minutes", SettingsStorage.getTrainingMinutes(context))
-                    screen = "training_plan"
-                },
-                onPlan = {
-                    trainingMinutes = context
-                        .getSharedPreferences("training_prefs", android.content.Context.MODE_PRIVATE)
-                        .getInt("session_minutes", SettingsStorage.getTrainingMinutes(context))
-                    screen = "training_plan"
-                },
-                onTips = { /* пока не реализовано */ },
-                onBack = { screen = "main" }
-            )
-
-            "training_plan" -> TrainingPlanScreen(
-                playerName = SettingsStorage.getPlayerName(context),
-                minutes = trainingMinutes,
-                repository = trainingRepository,
-                onStartTraining = {
-                    // Создаём новую тренировочную сессию и идём на разминку
-                    scope.launch {
-                        val session = TrainingSession(
-                            dateMillis = System.currentTimeMillis(),
-                            plannedMinutes = trainingMinutes,
-                            actualMinutes = 0,
-                            levelAtStart = 1,
-                            mode = TrainingMode.FLEXIBLE,
-                            focus = null,
-                            isControl = false,
-                            isCompleted = false
-                        )
-                        trainingSessionId = trainingRepository.insertSession(session)
-                        screen = "training_warmup"
-                    }
-                },
-                onBack = { screen = "training" }
-            )
-
-            "training_warmup" -> TrainingWarmupScreen(
-                longWarmup = trainingMinutes >= 100,
-                onFinish = {
-                    // После разминки — идём на первый блок
-                    screen = "training_block"
-                },
-                onBack = { screen = "training_plan" }
-            )
-
-            "training_block" -> {
-                // Первый блок — Раунды на удвоения (переиспользуем Кругосветку в режиме Удвоения).
-                AroundClockGameScreen(
-                    target = AroundClockTarget.DOUBLE,
-                    order = AroundClockOrder.ORDERED,
-                    hitsRequired = 1,
-                    repository = aroundClockRepository,
-                    onFinish = { totalDarts, completed, sectorResults ->
-                        // Сохраняем результат в тренировочную БД (не в игровую!)
-                        scope.launch {
-                            val result = ExerciseResult(
-                                sessionId = trainingSessionId,
-                                blockType = BlockType.DOUBLES,
-                                exerciseId = "aroundclock_doubles",
-                                score = totalDarts,
-                                dartsThrown = totalDarts,
-                                timestamp = System.currentTimeMillis(),
-                                detailsJson = ""
-                            )
-                            trainingRepository.insertExerciseResult(result)
+                "stats_menu" -> StatsMenuScreen(
+                    cricketRepository = cricketRepository,
+                    reloadKey = statsMenuKey,
+                    onResumeGame501 = { entity ->
+                        val restored = Game501Serializer.fromJson(entity.stateBlob)
+                        if (restored != null) {
+                            game501 = restored
+                            game501ExistingId = entity.id
+                            screen = "game501_game"
                         }
-                        // Возврат на план
+                    },
+                    onResumeCricket = { entity ->
+                        val restored = CricketSerializer.fromJson(entity.stateBlob)
+                        if (restored != null) {
+                            cricketGame = restored
+                            cricketExistingId = entity.id
+                            screen = "cricket_game"
+                        }
+                    },
+                    onCricket = { screen = "stats_cricket" },
+                    on501 = { screen = "stats_501" },
+                    onSector = { screen = "sector_stats" },
+                    onBigRound = { screen = "biground_stats" },
+                    onScoreSet = { screen = "scoreset_stats" },
+                    onAroundClock = { screen = "aroundclock_stats" },
+                    onBack = { screen = "main" }
+                )
+
+                "stats_cricket" -> StatsScreen(
+                    repository = cricketRepository,
+                    initialTab = 0,
+                    showTabs = false,
+                    onResumeCricket = { entity ->
+                        val restored = CricketSerializer.fromJson(entity.stateBlob)
+                        if (restored != null) {
+                            cricketGame = restored
+                            cricketExistingId = entity.id
+                            screen = "cricket_game"
+                        }
+                    },
+                    onBack = {
+                        statsMenuKey++
+                        screen = "stats_menu"
+                    }
+                )
+
+                "stats_501" -> StatsScreen(
+                    repository = cricketRepository,
+                    initialTab = 1,
+                    showTabs = false,
+                    onResumeGame501 = { entity ->
+                        val restored = Game501Serializer.fromJson(entity.stateBlob)
+                        if (restored != null) {
+                            game501 = restored
+                            game501ExistingId = entity.id
+                            screen = "game501_game"
+                        }
+                    },
+                    onBack = {
+                        statsMenuKey++
+                        screen = "stats_menu"
+                    }
+                )
+
+                "settings" -> SettingsScreen(
+                    onBack = { screen = "main" },
+                    onFactoryReset = {
+                        cricketGame = null
+                        cricketExistingId = 0L
+                        game501 = null
+                        game501ExistingId = 0L
+                        sectorToPlay = null
+                        aroundClockTarget = null
+                        aroundClockOrder = null
+                        aroundClockHits = 1
+                        bigRoundCategory = null
+                        trainingSessionId = 0L
+                        isTrainingActive = false
+                        trainingElapsedSeconds = 0
+                        onboardingDone = false
+                        screen = "main"
+                        stage = "welcome"
+                    }
+                )
+
+                "training" -> TrainingMenuScreen(
+                    playerName = SettingsStorage.getPlayerName(context),
+                    repository = trainingRepository,
+                    onStartTraining = {
+                        trainingMinutes = context
+                            .getSharedPreferences("training_prefs", android.content.Context.MODE_PRIVATE)
+                            .getInt("session_minutes", SettingsStorage.getTrainingMinutes(context))
                         screen = "training_plan"
+                    },
+                    onPlan = {
+                        trainingMinutes = context
+                            .getSharedPreferences("training_prefs", android.content.Context.MODE_PRIVATE)
+                            .getInt("session_minutes", SettingsStorage.getTrainingMinutes(context))
+                        screen = "training_plan"
+                    },
+                    onTips = { /* пока не реализовано */ },
+                    onBack = {
+                        isTrainingActive = false
+                        trainingElapsedSeconds = 0
+                        screen = "main"
+                    }
+                )
+
+                "training_plan" -> TrainingPlanScreen(
+                    playerName = SettingsStorage.getPlayerName(context),
+                    minutes = trainingMinutes,
+                    repository = trainingRepository,
+                    onStartTraining = {
+                        // Создаём тренировочную сессию и запускаем таймер
+                        scope.launch {
+                            val session = TrainingSession(
+                                dateMillis = System.currentTimeMillis(),
+                                plannedMinutes = trainingMinutes,
+                                actualMinutes = 0,
+                                levelAtStart = 1,
+                                mode = TrainingMode.FLEXIBLE,
+                                focus = null,
+                                isControl = false,
+                                isCompleted = false
+                            )
+                            trainingSessionId = trainingRepository.insertSession(session)
+                            trainingElapsedSeconds = 0
+                            trainingPaused = false
+                            showTimeUpDialog = false
+                            isTrainingActive = true
+                            screen = "training_warmup"
+                        }
+                    },
+                    onBack = { screen = "training" }
+                )
+
+                "training_warmup" -> TrainingWarmupScreen(
+                    longWarmup = trainingMinutes >= 100,
+                    onFinish = {
+                        screen = "training_block"
                     },
                     onBack = { screen = "training_plan" }
                 )
-            }
 
-            "game_select" -> GameSelectScreen(
-                onCricket = { screen = "cricket_setup" },
-                on501 = { screen = "game501_setup" },
-                onSector = { screen = "sector_setup" },
-                onAroundClock = { screen = "aroundclock_setup" },
-                onBigRound = { screen = "biground_setup" },
-                onScoreSet = { screen = "scoreset_setup" },
-                onBack = { screen = "main" }
-            )
-
-            "cricket_setup" -> CricketSetupScreen(
-                playerName = SettingsStorage.getPlayerName(context),
-                onStartGame = { type: CricketType,
-                                players: List<CricketPlayer>,
-                                legsPerSet: Int,
-                                setsPerMatch: Int,
-                                isPairGame: Boolean,
-                                startingTeam: Int,
-                                autoOkSeconds: Int ->
-                    cricketGame = CricketLogic.newGame(
-                        type = type,
-                        players = players,
-                        legsPerSet = legsPerSet,
-                        setsPerMatch = setsPerMatch,
-                        isPairGame = isPairGame,
-                        startingTeamIndex = startingTeam,
-                        autoOkSeconds = autoOkSeconds,
-                        sessionStartTime = sessionStartTime,
-                        sessionForm = sessionForm
-                    )
-                    cricketExistingId = 0L
-                    screen = "cricket_game"
-                },
-                onBack = { screen = "game_select" }
-            )
-
-            "cricket_game" -> {
-                val game = cricketGame
-                if (game != null) {
-                    CricketGameScreen(
-                        repository = cricketRepository,
-                        initialGame = game,
-                        existingId = cricketExistingId,
-                        onGameFinish = { finished: CricketGame, id: Long ->
-                            scope.launch {
-                                cricketRepository.saveGame(finished, existingId = id)
-                            }
-                            cricketGame = finished
-                            cricketExistingId = 0L
-                            screen = "cricket_stats"
-                        },
-                        onBack = {
-                            cricketGame = null
-                            cricketExistingId = 0L
-                            screen = "game_select"
-                        }
-                    )
-                } else screen = "cricket_setup"
-            }
-
-            "cricket_stats" -> {
-                val game = cricketGame
-                if (game != null) {
-                    CricketStatsScreen(
-                        game = game,
-                        onPlayAgain = { screen = "cricket_setup" },
-                        onBackToMenu = { cricketGame = null; screen = "main" }
-                    )
-                } else screen = "main"
-            }
-
-            "game501_setup" -> Game501SetupScreen(
-                playerName = SettingsStorage.getPlayerName(context),
-                onStartGame = { gameType: GameType,
-                                outMode: OutMode,
-                                players: List<Player501>,
-                                legsPerSet: Int,
-                                setsPerMatch: Int,
-                                isPairGame: Boolean,
-                                startingTeam: Int,
-                                autoOkSeconds: Int ->
-                    game501 = Game501Logic.newGame(
-                        gameType = gameType,
-                        outMode = outMode,
-                        players = players,
-                        legsPerSet = legsPerSet,
-                        setsPerMatch = setsPerMatch,
-                        isPairGame = isPairGame,
-                        startingTeamIndex = startingTeam,
-                        autoOkSeconds = autoOkSeconds,
-                        sessionStartTime = sessionStartTime,
-                        sessionForm = sessionForm
-                    )
-                    game501ExistingId = 0L
-                    screen = "game501_game"
-                },
-                onBack = { screen = "game_select" }
-            )
-
-            "game501_game" -> {
-                val game = game501
-                if (game != null) {
-                    Game501Screen(
-                        repository = game501Repository,
-                        initialGame = game,
-                        existingId = game501ExistingId,
-                        onGameFinish = { finished: Game501, id: Long ->
-                            scope.launch {
-                                game501Repository.saveGame(finished, existingId = id)
-                            }
-                            game501 = finished
-                            game501ExistingId = 0L
-                            screen = "game501_stats"
-                        },
-                        onBack = {
-                            game501 = null
-                            game501ExistingId = 0L
-                            screen = "game_select"
-                        }
-                    )
-                } else screen = "game501_setup"
-            }
-
-            "game501_stats" -> {
-                val game = game501
-                if (game != null) {
-                    Game501StatsScreen(
-                        game = game,
-                        onPlayAgain = { screen = "game501_setup" },
-                        onBackToMenu = { game501 = null; screen = "main" }
-                    )
-                } else screen = "main"
-            }
-
-            "sector_setup" -> SectorSetupScreen(
-                sectorRepository = sectorRepository,
-                onStartGame = { sector ->
-                    sectorToPlay = sector
-                    screen = "sector_game"
-                },
-                onOpenStats = { screen = "sector_stats" },
-                onBack = { screen = "game_select" }
-            )
-
-            "sector_game" -> {
-                val sector = sectorToPlay
-                if (sector != null) {
-                    SectorGameScreen(
-                        sector = sector,
-                        repository = sectorRepository,
-                        onFinish = { _score ->
-                            sectorToPlay = null
-                            screen = "game_select"
-                        },
-                        onBack = { screen = "game_select" }
-                    )
-                } else screen = "sector_setup"
-            }
-
-            "sector_stats" -> SectorStatsScreen(
-                repository = sectorRepository,
-                onBack = {
-                    statsMenuKey++
-                    screen = "stats_menu"
-                }
-            )
-
-            "aroundclock_setup" -> AroundClockSetupScreen(
-                playerName = SettingsStorage.getPlayerName(context),
-                repository = aroundClockRepository,
-                onStartGame = { target, order, hits ->
-                    aroundClockTarget = target
-                    aroundClockOrder = order
-                    aroundClockHits = hits
-                    screen = "aroundclock_game"
-                },
-                onOpenStats = { screen = "aroundclock_stats" },
-                onBack = { screen = "game_select" }
-            )
-
-            "aroundclock_game" -> {
-                val t = aroundClockTarget
-                val o = aroundClockOrder
-                if (t != null && o != null) {
+                "training_block" -> {
                     AroundClockGameScreen(
-                        target = t,
-                        order = o,
-                        hitsRequired = aroundClockHits,
+                        target = AroundClockTarget.DOUBLE,
+                        order = AroundClockOrder.ORDERED,
+                        hitsRequired = 1,
                         repository = aroundClockRepository,
                         onFinish = { totalDarts, completed, sectorResults ->
                             scope.launch {
-                                aroundClockRepository.saveGame(
-                                    target = t,
-                                    order = o,
-                                    hitsRequired = aroundClockHits,
-                                    totalDarts = totalDarts,
-                                    completed = completed,
-                                    sectorResults = sectorResults
+                                val result = ExerciseResult(
+                                    sessionId = trainingSessionId,
+                                    blockType = BlockType.DOUBLES,
+                                    exerciseId = "aroundclock_doubles",
+                                    score = totalDarts,
+                                    dartsThrown = totalDarts,
+                                    timestamp = System.currentTimeMillis(),
+                                    detailsJson = ""
                                 )
+                                trainingRepository.insertExerciseResult(result)
                             }
-                            aroundClockTarget = null
-                            aroundClockOrder = null
-                            aroundClockHits = 1
-                            screen = "game_select"
+                            screen = "training_plan"
                         },
-                        onBack = { screen = "game_select" }
+                        onBack = { screen = "training_plan" }
                     )
-                } else screen = "aroundclock_setup"
-            }
-
-            "aroundclock_stats" -> AroundClockStatsScreen(
-                repository = aroundClockRepository,
-                onBack = {
-                    statsMenuKey++
-                    screen = "stats_menu"
                 }
-            )
 
-            "biground_setup" -> BigRoundSetupScreen(
-                playerName = SettingsStorage.getPlayerName(context),
-                repository = bigRoundRepository,
-                onStartGame = { category ->
-                    bigRoundCategory = category
-                    screen = "biground_game"
-                },
-                onOpenStats = { screen = "biground_stats" },
-                onBack = { screen = "game_select" }
-            )
+                "game_select" -> GameSelectScreen(
+                    onCricket = { screen = "cricket_setup" },
+                    on501 = { screen = "game501_setup" },
+                    onSector = { screen = "sector_setup" },
+                    onAroundClock = { screen = "aroundclock_setup" },
+                    onBigRound = { screen = "biground_setup" },
+                    onScoreSet = { screen = "scoreset_setup" },
+                    onBack = { screen = "main" }
+                )
 
-            "biground_game" -> {
-                val cat = bigRoundCategory
-                if (cat != null) {
-                    BigRoundGameScreen(
-                        category = cat,
-                        repository = bigRoundRepository,
-                        onFinish = { _score ->
-                            bigRoundCategory = null
-                            screen = "game_select"
-                        },
-                        onBack = { screen = "game_select" }
-                    )
-                } else screen = "biground_setup"
-            }
-
-            "biground_stats" -> BigRoundStatsScreen(
-                repository = bigRoundRepository,
-                onBack = {
-                    statsMenuKey++
-                    screen = "stats_menu"
-                }
-            )
-
-            "scoreset_setup" -> ScoreSetSetupScreen(
-                playerName = SettingsStorage.getPlayerName(context),
-                repository = scoreSetRepository,
-                onStartGame = { screen = "scoreset_game" },
-                onOpenStats = { screen = "scoreset_stats" },
-                onBack = { screen = "game_select" }
-            )
-
-            "scoreset_game" -> ScoreSetGameScreen(
-                repository = scoreSetRepository,
-                onFinish = { totalScore: Int, approaches: List<Int> ->
-                    scope.launch {
-                        scoreSetRepository.saveGame(
-                            totalScore = totalScore,
-                            approaches = approaches
+                "cricket_setup" -> CricketSetupScreen(
+                    playerName = SettingsStorage.getPlayerName(context),
+                    onStartGame = { type: CricketType,
+                                    players: List<CricketPlayer>,
+                                    legsPerSet: Int,
+                                    setsPerMatch: Int,
+                                    isPairGame: Boolean,
+                                    startingTeam: Int,
+                                    autoOkSeconds: Int ->
+                        cricketGame = CricketLogic.newGame(
+                            type = type,
+                            players = players,
+                            legsPerSet = legsPerSet,
+                            setsPerMatch = setsPerMatch,
+                            isPairGame = isPairGame,
+                            startingTeamIndex = startingTeam,
+                            autoOkSeconds = autoOkSeconds,
+                            sessionStartTime = sessionStartTime,
+                            sessionForm = sessionForm
                         )
-                    }
-                    screen = "game_select"
-                },
-                onBack = { screen = "game_select" }
-            )
+                        cricketExistingId = 0L
+                        screen = "cricket_game"
+                    },
+                    onBack = { screen = "game_select" }
+                )
 
-            "scoreset_stats" -> ScoreSetStatsScreen(
-                repository = scoreSetRepository,
-                onBack = {
-                    statsMenuKey++
-                    screen = "stats_menu"
+                "cricket_game" -> {
+                    val game = cricketGame
+                    if (game != null) {
+                        CricketGameScreen(
+                            repository = cricketRepository,
+                            initialGame = game,
+                            existingId = cricketExistingId,
+                            onGameFinish = { finished: CricketGame, id: Long ->
+                                scope.launch {
+                                    cricketRepository.saveGame(finished, existingId = id)
+                                }
+                                cricketGame = finished
+                                cricketExistingId = 0L
+                                screen = "cricket_stats"
+                            },
+                            onBack = {
+                                cricketGame = null
+                                cricketExistingId = 0L
+                                screen = "game_select"
+                            }
+                        )
+                    } else screen = "cricket_setup"
                 }
+
+                "cricket_stats" -> {
+                    val game = cricketGame
+                    if (game != null) {
+                        CricketStatsScreen(
+                            game = game,
+                            onPlayAgain = { screen = "cricket_setup" },
+                            onBackToMenu = { cricketGame = null; screen = "main" }
+                        )
+                    } else screen = "main"
+                }
+
+                "game501_setup" -> Game501SetupScreen(
+                    playerName = SettingsStorage.getPlayerName(context),
+                    onStartGame = { gameType: GameType,
+                                    outMode: OutMode,
+                                    players: List<Player501>,
+                                    legsPerSet: Int,
+                                    setsPerMatch: Int,
+                                    isPairGame: Boolean,
+                                    startingTeam: Int,
+                                    autoOkSeconds: Int ->
+                        game501 = Game501Logic.newGame(
+                            gameType = gameType,
+                            outMode = outMode,
+                            players = players,
+                            legsPerSet = legsPerSet,
+                            setsPerMatch = setsPerMatch,
+                            isPairGame = isPairGame,
+                            startingTeamIndex = startingTeam,
+                            autoOkSeconds = autoOkSeconds,
+                            sessionStartTime = sessionStartTime,
+                            sessionForm = sessionForm
+                        )
+                        game501ExistingId = 0L
+                        screen = "game501_game"
+                    },
+                    onBack = { screen = "game_select" }
+                )
+
+                "game501_game" -> {
+                    val game = game501
+                    if (game != null) {
+                        Game501Screen(
+                            repository = game501Repository,
+                            initialGame = game,
+                            existingId = game501ExistingId,
+                            onGameFinish = { finished: Game501, id: Long ->
+                                scope.launch {
+                                    game501Repository.saveGame(finished, existingId = id)
+                                }
+                                game501 = finished
+                                game501ExistingId = 0L
+                                screen = "game501_stats"
+                            },
+                            onBack = {
+                                game501 = null
+                                game501ExistingId = 0L
+                                screen = "game_select"
+                            }
+                        )
+                    } else screen = "game501_setup"
+                }
+
+                "game501_stats" -> {
+                    val game = game501
+                    if (game != null) {
+                        Game501StatsScreen(
+                            game = game,
+                            onPlayAgain = { screen = "game501_setup" },
+                            onBackToMenu = { game501 = null; screen = "main" }
+                        )
+                    } else screen = "main"
+                }
+
+                "sector_setup" -> SectorSetupScreen(
+                    sectorRepository = sectorRepository,
+                    onStartGame = { sector ->
+                        sectorToPlay = sector
+                        screen = "sector_game"
+                    },
+                    onOpenStats = { screen = "sector_stats" },
+                    onBack = { screen = "game_select" }
+                )
+
+                "sector_game" -> {
+                    val sector = sectorToPlay
+                    if (sector != null) {
+                        SectorGameScreen(
+                            sector = sector,
+                            repository = sectorRepository,
+                            onFinish = { _score ->
+                                sectorToPlay = null
+                                screen = "game_select"
+                            },
+                            onBack = { screen = "game_select" }
+                        )
+                    } else screen = "sector_setup"
+                }
+
+                "sector_stats" -> SectorStatsScreen(
+                    repository = sectorRepository,
+                    onBack = {
+                        statsMenuKey++
+                        screen = "stats_menu"
+                    }
+                )
+
+                "aroundclock_setup" -> AroundClockSetupScreen(
+                    playerName = SettingsStorage.getPlayerName(context),
+                    repository = aroundClockRepository,
+                    onStartGame = { target, order, hits ->
+                        aroundClockTarget = target
+                        aroundClockOrder = order
+                        aroundClockHits = hits
+                        screen = "aroundclock_game"
+                    },
+                    onOpenStats = { screen = "aroundclock_stats" },
+                    onBack = { screen = "game_select" }
+                )
+
+                "aroundclock_game" -> {
+                    val t = aroundClockTarget
+                    val o = aroundClockOrder
+                    if (t != null && o != null) {
+                        AroundClockGameScreen(
+                            target = t,
+                            order = o,
+                            hitsRequired = aroundClockHits,
+                            repository = aroundClockRepository,
+                            onFinish = { totalDarts, completed, sectorResults ->
+                                scope.launch {
+                                    aroundClockRepository.saveGame(
+                                        target = t,
+                                        order = o,
+                                        hitsRequired = aroundClockHits,
+                                        totalDarts = totalDarts,
+                                        completed = completed,
+                                        sectorResults = sectorResults
+                                    )
+                                }
+                                aroundClockTarget = null
+                                aroundClockOrder = null
+                                aroundClockHits = 1
+                                screen = "game_select"
+                            },
+                            onBack = { screen = "game_select" }
+                        )
+                    } else screen = "aroundclock_setup"
+                }
+
+                "aroundclock_stats" -> AroundClockStatsScreen(
+                    repository = aroundClockRepository,
+                    onBack = {
+                        statsMenuKey++
+                        screen = "stats_menu"
+                    }
+                )
+
+                "biground_setup" -> BigRoundSetupScreen(
+                    playerName = SettingsStorage.getPlayerName(context),
+                    repository = bigRoundRepository,
+                    onStartGame = { category ->
+                        bigRoundCategory = category
+                        screen = "biground_game"
+                    },
+                    onOpenStats = { screen = "biground_stats" },
+                    onBack = { screen = "game_select" }
+                )
+
+                "biground_game" -> {
+                    val cat = bigRoundCategory
+                    if (cat != null) {
+                        BigRoundGameScreen(
+                            category = cat,
+                            repository = bigRoundRepository,
+                            onFinish = { _score ->
+                                bigRoundCategory = null
+                                screen = "game_select"
+                            },
+                            onBack = { screen = "game_select" }
+                        )
+                    } else screen = "biground_setup"
+                }
+
+                "biground_stats" -> BigRoundStatsScreen(
+                    repository = bigRoundRepository,
+                    onBack = {
+                        statsMenuKey++
+                        screen = "stats_menu"
+                    }
+                )
+
+                "scoreset_setup" -> ScoreSetSetupScreen(
+                    playerName = SettingsStorage.getPlayerName(context),
+                    repository = scoreSetRepository,
+                    onStartGame = { screen = "scoreset_game" },
+                    onOpenStats = { screen = "scoreset_stats" },
+                    onBack = { screen = "game_select" }
+                )
+
+                "scoreset_game" -> ScoreSetGameScreen(
+                    repository = scoreSetRepository,
+                    onFinish = { totalScore: Int, approaches: List<Int> ->
+                        scope.launch {
+                            scoreSetRepository.saveGame(
+                                totalScore = totalScore,
+                                approaches = approaches
+                            )
+                        }
+                        screen = "game_select"
+                    },
+                    onBack = { screen = "game_select" }
+                )
+
+                "scoreset_stats" -> ScoreSetStatsScreen(
+                    repository = scoreSetRepository,
+                    onBack = {
+                        statsMenuKey++
+                        screen = "stats_menu"
+                    }
+                )
+            }
+        }
+
+        // ── Таймер поверх тренировочных экранов ──
+        if (isTrainingActive && screen in TRAINING_SCREENS) {
+            TrainingTimerBar(
+                secondsLeft = trainingSecondsLeft,
+                isPaused = trainingPaused,
+                onTogglePause = { trainingPaused = !trainingPaused },
+                modifier = Modifier.align(Alignment.TopCenter)
             )
         }
     }
+
+    // ── Диалог «время вышло» ──
+    if (showTimeUpDialog) {
+        AlertDialog(
+            onDismissRequest = { },
+            containerColor = com.lodkin.dartstrainer.theme.TileBgDark,
+            title = {
+                Text(
+                    "⏱ Время тренировки вышло",
+                    color = GoldAccent,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Column {
+                    Text(
+                        "Ты потренировался $trainingMinutes минут — это твоя цель на сегодня. " +
+                                "Что делаем дальше?",
+                        color = Color.White.copy(alpha = 0.85f),
+                        fontSize = 14.sp
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showTimeUpDialog = false
+                    isTrainingActive = false
+                    trainingElapsedSeconds = 0
+                    trainingSessionId = 0L
+                    screen = "training"
+                }) {
+                    Text("Закончить", color = ErrorColor, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    showTimeUpDialog = false
+                    // Продолжаем — добавляем 20 минут к общему таймеру
+                    trainingMinutes += 20
+                }) {
+                    Text("Продолжить +20 мин", color = Accent, fontWeight = FontWeight.Bold)
+                }
+            }
+        )
+    }
+}
+
+// ─────────────────────────────────────────────
+// Плашка таймера
+// ─────────────────────────────────────────────
+
+@Composable
+private fun TrainingTimerBar(
+    secondsLeft: Int,
+    isPaused: Boolean,
+    onTogglePause: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier
+            .padding(top = 4.dp, start = 12.dp, end = 12.dp)
+            .clip(RoundedCornerShape(20.dp))
+            .background(Color(0xE61A2332))
+            .padding(horizontal = 12.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text("⏱", fontSize = 14.sp)
+        Spacer(Modifier.width(6.dp))
+        Text(
+            formatTrainingTime(secondsLeft),
+            color = if (secondsLeft < 60) ErrorColor else GoldAccent,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Bold
+        )
+        Spacer(Modifier.width(10.dp))
+        Box(
+            modifier = Modifier
+                .clip(RoundedCornerShape(10.dp))
+                .background(TileBg)
+                .clickable { onTogglePause() }
+                .padding(horizontal = 10.dp, vertical = 3.dp)
+        ) {
+            Text(
+                if (isPaused) "▶" else "⏸",
+                color = Accent,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
+    }
+}
+
+private fun formatTrainingTime(total: Int): String {
+    val safe = total.coerceAtLeast(0)
+    val h = safe / 3600
+    val m = (safe % 3600) / 60
+    val s = safe % 60
+    return if (h > 0) "%d:%02d:%02d".format(h, m, s)
+    else "%02d:%02d".format(m, s)
 }
