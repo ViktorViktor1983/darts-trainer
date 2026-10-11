@@ -4,9 +4,13 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -14,10 +18,13 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.lodkin.dartstrainer.data.SettingsStorage
 import com.lodkin.dartstrainer.data.aroundclock.AroundClockDatabase
@@ -52,9 +59,11 @@ import com.lodkin.dartstrainer.data.training.TrainingDatabase
 import com.lodkin.dartstrainer.data.training.TrainingMode
 import com.lodkin.dartstrainer.data.training.TrainingRepository
 import com.lodkin.dartstrainer.data.training.TrainingSession
+import com.lodkin.dartstrainer.theme.Accent
 import com.lodkin.dartstrainer.theme.DarkBg
 import com.lodkin.dartstrainer.theme.ErrorColor
 import com.lodkin.dartstrainer.theme.GoldAccent
+import com.lodkin.dartstrainer.theme.TileBg
 import com.lodkin.dartstrainer.theme.TileBgDark
 import com.lodkin.dartstrainer.ui.GameSelectScreen
 import com.lodkin.dartstrainer.ui.LoadingScreen
@@ -83,9 +92,12 @@ import com.lodkin.dartstrainer.ui.scoreset.ScoreSetStatsScreen
 import com.lodkin.dartstrainer.ui.sector.SectorGameScreen
 import com.lodkin.dartstrainer.ui.sector.SectorSetupScreen
 import com.lodkin.dartstrainer.ui.sector.SectorStatsScreen
+import com.lodkin.dartstrainer.ui.training.PlannedExercise
+import com.lodkin.dartstrainer.ui.training.TrainingBlockScreen
 import com.lodkin.dartstrainer.ui.training.TrainingMenuScreen
 import com.lodkin.dartstrainer.ui.training.TrainingTimerOverlay
 import com.lodkin.dartstrainer.ui.training.TrainingWarmupScreen
+import com.lodkin.dartstrainer.ui.training.defaultMainExercises
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.random.Random
@@ -98,6 +110,7 @@ private val PARENT_SCREEN: Map<String, String> = mapOf(
     "training" to "main",
     "training_warmup" to "training",
     "training_block" to "training",
+    "training_exercise" to "training_block",
     "game_select" to "main",
 
     "cricket_setup" to "game_select",
@@ -127,7 +140,8 @@ private val PARENT_SCREEN: Map<String, String> = mapOf(
 
 private val TRAINING_SCREENS: Set<String> = setOf(
     "training_warmup",
-    "training_block"
+    "training_block",
+    "training_exercise"
 )
 
 class MainActivity : ComponentActivity() {
@@ -207,6 +221,10 @@ fun DartsTrainerApp() {
     var trainingPaused by remember { mutableStateOf(false) }
     var showTimeUpDialog by remember { mutableStateOf(false) }
 
+    // Основная часть тренировки
+    var mainExercises by remember { mutableStateOf<List<PlannedExercise>>(emptyList()) }
+    var currentExerciseIndex by remember { mutableStateOf(0) }
+
     LaunchedEffect(isTrainingActive, trainingPaused, screen) {
         if (!isTrainingActive || trainingPaused || screen !in TRAINING_SCREENS) {
             return@LaunchedEffect
@@ -226,16 +244,25 @@ fun DartsTrainerApp() {
     BackHandler(enabled = stage == "main" && screen != "main") {
         PARENT_SCREEN[screen]?.let { parent ->
             if (parent == "stats_menu") statsMenuKey++
-            if (parent == "main" && isTrainingActive) {
-                isTrainingActive = false
-                trainingElapsedSeconds = 0
-            }
-            // Если из тренировочного экрана уходим на "training" — останавливаем таймер
-            if (screen in TRAINING_SCREENS) {
+
+            // Выход из тренировки в главное меню — сбрасываем всё
+            if (parent == "main") {
                 isTrainingActive = false
                 trainingElapsedSeconds = 0
                 trainingSessionId = 0L
+                mainExercises = emptyList()
+                currentExerciseIndex = 0
             }
+
+            // Выход из разминки или с любого тренировочного экрана в меню "training" — сбрасываем
+            if (screen in TRAINING_SCREENS && parent == "training") {
+                isTrainingActive = false
+                trainingElapsedSeconds = 0
+                trainingSessionId = 0L
+                mainExercises = emptyList()
+                currentExerciseIndex = 0
+            }
+
             screen = parent
         }
     }
@@ -351,6 +378,8 @@ fun DartsTrainerApp() {
                         trainingSessionId = 0L
                         isTrainingActive = false
                         trainingElapsedSeconds = 0
+                        mainExercises = emptyList()
+                        currentExerciseIndex = 0
                         onboardingDone = false
                         screen = "main"
                         stage = "welcome"
@@ -379,6 +408,8 @@ fun DartsTrainerApp() {
                             trainingElapsedSeconds = 0
                             trainingPaused = false
                             showTimeUpDialog = false
+                            mainExercises = defaultMainExercises()
+                            currentExerciseIndex = 0
                             isTrainingActive = true
                             screen = "training_warmup"
                         }
@@ -386,6 +417,8 @@ fun DartsTrainerApp() {
                     onBack = {
                         isTrainingActive = false
                         trainingElapsedSeconds = 0
+                        mainExercises = emptyList()
+                        currentExerciseIndex = 0
                         screen = "main"
                     }
                 )
@@ -397,41 +430,96 @@ fun DartsTrainerApp() {
                         isTrainingActive = false
                         trainingElapsedSeconds = 0
                         trainingSessionId = 0L
+                        mainExercises = emptyList()
+                        currentExerciseIndex = 0
                         screen = "training"
                     }
                 )
 
-                "training_block" -> {
-                    AroundClockGameScreen(
-                        target = AroundClockTarget.DOUBLE,
-                        order = AroundClockOrder.ORDERED,
-                        hitsRequired = 1,
-                        repository = aroundClockRepository,
-                        onFinish = { totalDarts, completed, sectorResults ->
-                            scope.launch {
-                                val result = ExerciseResult(
-                                    sessionId = trainingSessionId,
-                                    blockType = BlockType.DOUBLES,
-                                    exerciseId = "aroundclock_doubles",
-                                    score = totalDarts,
-                                    dartsThrown = totalDarts,
-                                    timestamp = System.currentTimeMillis(),
-                                    detailsJson = ""
-                                )
-                                trainingRepository.insertExerciseResult(result)
-                            }
+                "training_block" -> TrainingBlockScreen(
+                    exercises = mainExercises,
+                    currentIndex = currentExerciseIndex,
+                    onStartCurrent = { screen = "training_exercise" },
+                    onSkipCurrent = {
+                        if (currentExerciseIndex + 1 < mainExercises.size) {
+                            currentExerciseIndex += 1
+                        } else {
+                            // Все упражнения пройдены
                             isTrainingActive = false
                             trainingElapsedSeconds = 0
                             trainingSessionId = 0L
-                            screen = "training"
-                        },
-                        onBack = {
-                            isTrainingActive = false
-                            trainingElapsedSeconds = 0
-                            trainingSessionId = 0L
+                            mainExercises = emptyList()
+                            currentExerciseIndex = 0
                             screen = "training"
                         }
-                    )
+                    },
+                    onBack = {
+                        isTrainingActive = false
+                        trainingElapsedSeconds = 0
+                        trainingSessionId = 0L
+                        mainExercises = emptyList()
+                        currentExerciseIndex = 0
+                        screen = "training"
+                    }
+                )
+
+                "training_exercise" -> {
+                    val current = mainExercises.getOrNull(currentExerciseIndex)
+                    if (current == null) {
+                        screen = "training_block"
+                    } else {
+                        when (current.id) {
+                            "aroundclock_doubles" -> AroundClockGameScreen(
+                                target = AroundClockTarget.DOUBLE,
+                                order = AroundClockOrder.ORDERED,
+                                hitsRequired = 1,
+                                repository = aroundClockRepository,
+                                onFinish = { totalDarts, _, _ ->
+                                    scope.launch {
+                                        val result = ExerciseResult(
+                                            sessionId = trainingSessionId,
+                                            blockType = BlockType.DOUBLES,
+                                            exerciseId = current.id,
+                                            score = totalDarts,
+                                            dartsThrown = totalDarts,
+                                            timestamp = System.currentTimeMillis(),
+                                            detailsJson = ""
+                                        )
+                                        trainingRepository.insertExerciseResult(result)
+                                    }
+                                    if (currentExerciseIndex + 1 < mainExercises.size) {
+                                        currentExerciseIndex += 1
+                                        screen = "training_block"
+                                    } else {
+                                        isTrainingActive = false
+                                        trainingElapsedSeconds = 0
+                                        trainingSessionId = 0L
+                                        mainExercises = emptyList()
+                                        currentExerciseIndex = 0
+                                        screen = "training"
+                                    }
+                                },
+                                onBack = { screen = "training_block" }
+                            )
+                            else -> TrainingExercisePlaceholder(
+                                title = current.title,
+                                onDone = {
+                                    if (currentExerciseIndex + 1 < mainExercises.size) {
+                                        currentExerciseIndex += 1
+                                        screen = "training_block"
+                                    } else {
+                                        isTrainingActive = false
+                                        trainingElapsedSeconds = 0
+                                        trainingSessionId = 0L
+                                        mainExercises = emptyList()
+                                        currentExerciseIndex = 0
+                                        screen = "training"
+                                    }
+                                },
+                                onBack = { screen = "training_block" }
+                            )
+                        }
+                    }
                 }
 
                 "game_select" -> GameSelectScreen(
@@ -755,6 +843,8 @@ fun DartsTrainerApp() {
                     isTrainingActive = false
                     trainingElapsedSeconds = 0
                     trainingSessionId = 0L
+                    mainExercises = emptyList()
+                    currentExerciseIndex = 0
                     screen = "training"
                 }) {
                     Text("Закончить", color = ErrorColor, fontWeight = FontWeight.Bold)
@@ -769,5 +859,69 @@ fun DartsTrainerApp() {
                 }
             }
         )
+    }
+}
+
+/**
+ * Заглушка для упражнений, которые ещё не реализованы.
+ */
+@Composable
+private fun TrainingExercisePlaceholder(
+    title: String,
+    onDone: () -> Unit,
+    onBack: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(DarkBg)
+            .padding(16.dp)
+    ) {
+        Column(modifier = Modifier.fillMaxSize()) {
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(TileBgDark)
+                    .clickable { onBack() }
+                    .padding(horizontal = 14.dp, vertical = 10.dp)
+            ) {
+                Text("← Назад", color = Accent, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+            }
+
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        title,
+                        color = GoldAccent,
+                        fontSize = 24.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        "Упражнение в разработке",
+                        color = Color.White.copy(alpha = 0.6f),
+                        fontSize = 14.sp,
+                        modifier = Modifier.padding(top = 8.dp)
+                    )
+                    Box(
+                        modifier = Modifier
+                            .padding(top = 24.dp)
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(Accent)
+                            .clickable { onDone() }
+                            .padding(horizontal = 32.dp, vertical = 14.dp)
+                    ) {
+                        Text(
+                            "Готово",
+                            color = Color(0xFF121212),
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
+        }
     }
 }
