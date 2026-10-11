@@ -4,10 +4,8 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -15,13 +13,10 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.lodkin.dartstrainer.data.SettingsStorage
 import com.lodkin.dartstrainer.data.aroundclock.AroundClockDatabase
@@ -56,11 +51,10 @@ import com.lodkin.dartstrainer.data.training.TrainingDatabase
 import com.lodkin.dartstrainer.data.training.TrainingMode
 import com.lodkin.dartstrainer.data.training.TrainingRepository
 import com.lodkin.dartstrainer.data.training.TrainingSession
-import com.lodkin.dartstrainer.theme.Accent
 import com.lodkin.dartstrainer.theme.DarkBg
 import com.lodkin.dartstrainer.theme.ErrorColor
 import com.lodkin.dartstrainer.theme.GoldAccent
-import com.lodkin.dartstrainer.theme.TileBg
+import com.lodkin.dartstrainer.theme.TileBgDark
 import com.lodkin.dartstrainer.ui.GameSelectScreen
 import com.lodkin.dartstrainer.ui.LoadingScreen
 import com.lodkin.dartstrainer.ui.MainMenuScreen
@@ -90,6 +84,7 @@ import com.lodkin.dartstrainer.ui.sector.SectorSetupScreen
 import com.lodkin.dartstrainer.ui.sector.SectorStatsScreen
 import com.lodkin.dartstrainer.ui.training.TrainingMenuScreen
 import com.lodkin.dartstrainer.ui.training.TrainingPlanScreen
+import com.lodkin.dartstrainer.ui.training.TrainingTimerOverlay
 import com.lodkin.dartstrainer.ui.training.TrainingWarmupScreen
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -218,7 +213,7 @@ fun DartsTrainerApp() {
     var trainingPaused by remember { mutableStateOf(false) }
     var showTimeUpDialog by remember { mutableStateOf(false) }
 
-    // Тик таймера: идёт, пока тренировка активна, не на паузе и игрок на тренировочном экране
+    // Тик таймера
     LaunchedEffect(isTrainingActive, trainingPaused, screen) {
         if (!isTrainingActive || trainingPaused || screen !in TRAINING_SCREENS) {
             return@LaunchedEffect
@@ -238,7 +233,6 @@ fun DartsTrainerApp() {
     BackHandler(enabled = stage == "main" && screen != "main") {
         PARENT_SCREEN[screen]?.let { parent ->
             if (parent == "stats_menu") statsMenuKey++
-            // Если выходим из тренировки в главное меню — сбрасываем таймер
             if (parent == "main" && isTrainingActive) {
                 isTrainingActive = false
                 trainingElapsedSeconds = 0
@@ -392,7 +386,6 @@ fun DartsTrainerApp() {
                     minutes = trainingMinutes,
                     repository = trainingRepository,
                     onStartTraining = {
-                        // Создаём тренировочную сессию и запускаем таймер
                         scope.launch {
                             val session = TrainingSession(
                                 dateMillis = System.currentTimeMillis(),
@@ -734,11 +727,10 @@ fun DartsTrainerApp() {
 
         // ── Таймер поверх тренировочных экранов ──
         if (isTrainingActive && screen in TRAINING_SCREENS) {
-            TrainingTimerBar(
+            TrainingTimerOverlay(
                 secondsLeft = trainingSecondsLeft,
                 isPaused = trainingPaused,
-                onTogglePause = { trainingPaused = !trainingPaused },
-                modifier = Modifier.align(Alignment.TopCenter)
+                onTogglePause = { trainingPaused = !trainingPaused }
             )
         }
     }
@@ -747,7 +739,7 @@ fun DartsTrainerApp() {
     if (showTimeUpDialog) {
         AlertDialog(
             onDismissRequest = { },
-            containerColor = com.lodkin.dartstrainer.theme.TileBgDark,
+            containerColor = TileBgDark,
             title = {
                 Text(
                     "⏱ Время тренировки вышло",
@@ -780,66 +772,11 @@ fun DartsTrainerApp() {
             dismissButton = {
                 TextButton(onClick = {
                     showTimeUpDialog = false
-                    // Продолжаем — добавляем 20 минут к общему таймеру
                     trainingMinutes += 20
                 }) {
-                    Text("Продолжить +20 мин", color = Accent, fontWeight = FontWeight.Bold)
+                    Text("Продолжить +20 мин", color = GoldAccent, fontWeight = FontWeight.Bold)
                 }
             }
         )
     }
-}
-
-// ─────────────────────────────────────────────
-// Плашка таймера
-// ─────────────────────────────────────────────
-
-@Composable
-private fun TrainingTimerBar(
-    secondsLeft: Int,
-    isPaused: Boolean,
-    onTogglePause: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Row(
-        modifier = modifier
-            .padding(top = 4.dp, start = 12.dp, end = 12.dp)
-            .clip(RoundedCornerShape(20.dp))
-            .background(Color(0xE61A2332))
-            .padding(horizontal = 12.dp, vertical = 6.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text("⏱", fontSize = 14.sp)
-        Spacer(Modifier.width(6.dp))
-        Text(
-            formatTrainingTime(secondsLeft),
-            color = if (secondsLeft < 60) ErrorColor else GoldAccent,
-            fontSize = 14.sp,
-            fontWeight = FontWeight.Bold
-        )
-        Spacer(Modifier.width(10.dp))
-        Box(
-            modifier = Modifier
-                .clip(RoundedCornerShape(10.dp))
-                .background(TileBg)
-                .clickable { onTogglePause() }
-                .padding(horizontal = 10.dp, vertical = 3.dp)
-        ) {
-            Text(
-                if (isPaused) "▶" else "⏸",
-                color = Accent,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Bold
-            )
-        }
-    }
-}
-
-private fun formatTrainingTime(total: Int): String {
-    val safe = total.coerceAtLeast(0)
-    val h = safe / 3600
-    val m = (safe % 3600) / 60
-    val s = safe % 60
-    return if (h > 0) "%d:%02d:%02d".format(h, m, s)
-    else "%02d:%02d".format(m, s)
 }
