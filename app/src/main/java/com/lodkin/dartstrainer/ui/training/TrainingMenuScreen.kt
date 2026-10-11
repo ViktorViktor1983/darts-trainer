@@ -20,6 +20,7 @@ import androidx.compose.ui.unit.sp
 import com.lodkin.dartstrainer.data.SettingsStorage
 import com.lodkin.dartstrainer.data.training.DartsNorms
 import com.lodkin.dartstrainer.data.training.PotentialSnapshot
+import com.lodkin.dartstrainer.data.training.TrainingBlocksStorage
 import com.lodkin.dartstrainer.data.training.TrainingRepository
 import com.lodkin.dartstrainer.theme.Accent
 import com.lodkin.dartstrainer.theme.GoldAccent
@@ -53,7 +54,16 @@ fun TrainingMenuScreen(
     var selectedMinutes by remember { mutableStateOf(defaultMinutes) }
     var openedSection by remember { mutableStateOf<TrainingSection?>(null) }
 
+    // Флаги блоков — перечитываются каждый раз при возврате на экран
+    var warmupOn by remember { mutableStateOf(TrainingBlocksStorage.isWarmupEnabled(context)) }
+    var psychologyOn by remember { mutableStateOf(TrainingBlocksStorage.isPsychologyEnabled(context)) }
+    var strengthOn by remember { mutableStateOf(TrainingBlocksStorage.isStrengthEnabled(context)) }
+
+    // Перечитываем флаги при каждом возврате на экран (key можно увеличивать извне)
     LaunchedEffect(Unit) {
+        warmupOn = TrainingBlocksStorage.isWarmupEnabled(context)
+        psychologyOn = TrainingBlocksStorage.isPsychologyEnabled(context)
+        strengthOn = TrainingBlocksStorage.isStrengthEnabled(context)
         snapshot = repository.getLastPotential()
         loading = false
     }
@@ -86,7 +96,7 @@ fun TrainingMenuScreen(
             .verticalScroll(rememberScrollState())
             .padding(16.dp)
     ) {
-        // ── Верхняя панель: Назад + Тренировка + ⚙ ──
+        // ── Верхняя панель ──
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
@@ -108,16 +118,16 @@ fun TrainingMenuScreen(
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.weight(1f)
             )
-            // Кнопка настроек тренировки
+            // Кнопка настроек тренировки — акцентная
             Box(
                 modifier = Modifier
                     .size(42.dp)
                     .clip(RoundedCornerShape(12.dp))
-                    .background(TileBgDark)
+                    .background(Accent.copy(alpha = 0.18f))
                     .clickable { onOpenSettings() },
                 contentAlignment = Alignment.Center
             ) {
-                Text("⚙", fontSize = 20.sp)
+                Text("⚙", fontSize = 20.sp, color = Accent)
             }
         }
 
@@ -176,13 +186,21 @@ fun TrainingMenuScreen(
 
         Spacer(Modifier.height(20.dp))
 
-        SectionRow("🔥", "Разминка", estimateWarmup(selectedMinutes)) { openedSection = TrainingSection.WARMUP }
+        SectionRow("🔥", "Разминка", estimateWarmup(selectedMinutes), enabled = warmupOn) {
+            openedSection = TrainingSection.WARMUP
+        }
         Spacer(Modifier.height(10.dp))
-        SectionRow("🎯", "Основная часть", estimateMain(selectedMinutes)) { openedSection = TrainingSection.MAIN }
+        SectionRow("🎯", "Основная часть", estimateMain(selectedMinutes), enabled = true) {
+            openedSection = TrainingSection.MAIN
+        }
         Spacer(Modifier.height(10.dp))
-        SectionRow("🧠", "Психология", estimatePsychology(selectedMinutes)) { openedSection = TrainingSection.PSYCHOLOGY }
+        SectionRow("🧠", "Психология", estimatePsychology(selectedMinutes), enabled = psychologyOn) {
+            openedSection = TrainingSection.PSYCHOLOGY
+        }
         Spacer(Modifier.height(10.dp))
-        SectionRow("💪", "Силовая", estimateStrength()) { openedSection = TrainingSection.STRENGTH }
+        SectionRow("💪", "Силовая", estimateStrength(), enabled = strengthOn) {
+            openedSection = TrainingSection.STRENGTH
+        }
 
         Spacer(Modifier.height(24.dp))
 
@@ -549,38 +567,53 @@ private fun SectionRow(
     icon: String,
     title: String,
     minutes: Int,
+    enabled: Boolean,
     onClick: () -> Unit
 ) {
+    val bgColor = if (enabled) TileBgDark else TileBgDark.copy(alpha = 0.4f)
+    val iconAlpha = if (enabled) 1f else 0.35f
+    val titleColor = if (enabled) Color.White else Color.White.copy(alpha = 0.4f)
+    val minutesColor = if (enabled) Accent else Color.White.copy(alpha = 0.3f)
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(14.dp))
-            .background(TileBgDark)
-            .clickable { onClick() }
+            .background(bgColor)
+            .clickable(enabled = enabled) { onClick() }
             .padding(horizontal = 16.dp, vertical = 16.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(icon, fontSize = 22.sp)
+        Text(icon, fontSize = 22.sp, color = Color.White.copy(alpha = iconAlpha))
         Spacer(Modifier.width(14.dp))
         Text(
             title,
-            color = Color.White,
+            color = titleColor,
             fontSize = 16.sp,
             fontWeight = FontWeight.Medium,
             modifier = Modifier.weight(1f)
         )
-        Text(
-            "~$minutes мин",
-            color = Accent,
-            fontSize = 13.sp,
-            fontWeight = FontWeight.Bold
-        )
-        Spacer(Modifier.width(10.dp))
-        Text(
-            "ℹ",
-            color = Accent,
-            fontSize = 16.sp,
-            fontWeight = FontWeight.Bold
-        )
+        if (enabled) {
+            Text(
+                "~$minutes мин",
+                color = minutesColor,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(Modifier.width(10.dp))
+            Text(
+                "ℹ",
+                color = Accent,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold
+            )
+        } else {
+            Text(
+                "выкл",
+                color = Color.White.copy(alpha = 0.35f),
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
     }
 }
