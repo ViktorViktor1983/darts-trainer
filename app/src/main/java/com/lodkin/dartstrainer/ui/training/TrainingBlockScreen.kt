@@ -22,19 +22,18 @@ import com.lodkin.dartstrainer.theme.TileBg
 import com.lodkin.dartstrainer.theme.TileBgDark
 
 /**
- * Одно упражнение в основной части тренировки.
+ * Одно упражнение в блоке.
  */
 data class PlannedExercise(
     val id: String,
     val title: String,
     val minutes: Int,
-    val whyImportant: String   // зачем это упражнение — показываем при попытке пропуска
+    val whyImportant: String
 )
 
 /**
- * Список упражнений основной части по умолчанию.
- *
- * Пока хардкод. Позже будем брать из TrainingPlanner по слабым местам игрока.
+ * Упражнения основной части (по умолчанию).
+ * Позже будем брать из TrainingPlanner по слабым местам игрока.
  */
 fun defaultMainExercises(): List<PlannedExercise> = listOf(
     PlannedExercise(
@@ -61,10 +60,77 @@ fun defaultMainExercises(): List<PlannedExercise> = listOf(
 )
 
 /**
- * Экран «Основная часть».
+ * Психологические упражнения.
+ */
+fun defaultPsychologyExercises(): List<PlannedExercise> = listOf(
+    PlannedExercise(
+        id = "psych_breathing",
+        title = "Дыхание 4-2-6",
+        minutes = 3,
+        whyImportant = "Дыхание замедляет пульс и снимает напряжение. " +
+                "Особенно помогает, когда рука начинает дрожать перед важным броском."
+    ),
+    PlannedExercise(
+        id = "psych_visualization",
+        title = "Визуализация броска",
+        minutes = 3,
+        whyImportant = "Перед броском не поднимай дротик, а сначала «прокрути» его в голове. " +
+                "Мозг даёт мышцам правильный сигнал заранее."
+    ),
+    PlannedExercise(
+        id = "psych_ritual",
+        title = "Ритуал",
+        minutes = 2,
+        whyImportant = "Ритуал запускает мышечную память в обход сознания. " +
+                "На турнире он становится «кнопкой спокойствия»."
+    )
+)
+
+/**
+ * Силовые упражнения.
+ */
+fun defaultStrengthExercises(): List<PlannedExercise> = listOf(
+    PlannedExercise(
+        id = "strength_throw_imitation",
+        title = "Имитация броска с гантелей",
+        minutes = 1,
+        whyImportant = "Укрепляет плечо и предплечье. Гантель 1 кг, медленное движение " +
+                "как при броске. 10 раз каждой рукой."
+    ),
+    PlannedExercise(
+        id = "strength_hold_arm",
+        title = "Удержание руки с гантелей",
+        minutes = 2,
+        whyImportant = "Укрепляет стабилизаторы плеча. Рука вытянута как в позиции броска, " +
+                "держи 30 секунд. Сначала одна рука, потом другая."
+    ),
+    PlannedExercise(
+        id = "strength_shoulder_iso",
+        title = "Изометрическое удержание плеча",
+        minutes = 2,
+        whyImportant = "Укрепляет дельтовидные мышцы. Локоть поднят в позицию прицеливания, " +
+                "держи 1–2 минуты, 2–3 подхода."
+    ),
+    PlannedExercise(
+        id = "strength_expander",
+        title = "Разгибания с эспандером",
+        minutes = 1,
+        whyImportant = "Приучает трицепс долго работать без «закисления». " +
+                "3 подхода по 20–30 повторений."
+    ),
+    PlannedExercise(
+        id = "strength_relaxation",
+        title = "Расслабление антагониста",
+        minutes = 1,
+        whyImportant = "Это не про силу, а про технику. Если бицепс зажат при броске — " +
+                "траектория ломается. Встань перед зеркалом и медленно имитируй бросок."
+    )
+)
+
+/**
+ * Экран блока тренировки (список упражнений).
  *
- * Показывает список упражнений с прогрессом. Игрок проходит их по порядку.
- * Пропустить упражнение можно — но с подтверждением и объяснением, зачем оно.
+ * Используется для всех блоков: Основная часть, Психология, Силовая.
  */
 @Composable
 fun TrainingBlockScreen(
@@ -85,7 +151,6 @@ fun TrainingBlockScreen(
             .background(Color(0xFF0D1117))
             .padding(16.dp)
     ) {
-        // ── Верхняя панель ──
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
@@ -101,24 +166,15 @@ fun TrainingBlockScreen(
             }
             Spacer(Modifier.width(12.dp))
             Text(
-                "Основная часть",
+                "Упражнение ${currentIndex + 1} из $total",
                 color = GoldAccent,
-                fontSize = 22.sp,
+                fontSize = 20.sp,
                 fontWeight = FontWeight.Bold
             )
         }
 
-        Spacer(Modifier.height(8.dp))
-
-        Text(
-            "Упражнение ${currentIndex + 1} из $total",
-            color = Color.White.copy(alpha = 0.6f),
-            fontSize = 13.sp
-        )
-
         Spacer(Modifier.height(16.dp))
 
-        // ── Карточка текущего упражнения ──
         if (current != null) {
             Column(
                 modifier = Modifier
@@ -151,7 +207,6 @@ fun TrainingBlockScreen(
 
             Spacer(Modifier.height(16.dp))
 
-            // ── Кнопка «Начать упражнение» ──
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -171,7 +226,6 @@ fun TrainingBlockScreen(
 
             Spacer(Modifier.height(10.dp))
 
-            // ── Кнопка «Пропустить» ──
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -192,7 +246,6 @@ fun TrainingBlockScreen(
 
         Spacer(Modifier.height(20.dp))
 
-        // ── Список всех упражнений ──
         Text(
             "ЧТО ВПЕРЕДИ",
             color = Accent,
@@ -220,7 +273,6 @@ fun TrainingBlockScreen(
         }
     }
 
-    // ── Диалог «Пропустить?» ──
     if (showSkipDialog && current != null) {
         AlertDialog(
             onDismissRequest = { showSkipDialog = false },
@@ -281,15 +333,7 @@ fun TrainingBlockScreen(
     }
 }
 
-// ─────────────────────────────────────────────
-// Статус упражнения
-// ─────────────────────────────────────────────
-
 private enum class ExerciseStatus { DONE, CURRENT, PENDING }
-
-// ─────────────────────────────────────────────
-// Строка упражнения в списке
-// ─────────────────────────────────────────────
 
 @Composable
 private fun ExerciseRow(
@@ -302,13 +346,11 @@ private fun ExerciseRow(
         ExerciseStatus.DONE -> TileBgDark.copy(alpha = 0.5f)
         ExerciseStatus.PENDING -> TileBgDark
     }
-
     val numberBg = when (status) {
         ExerciseStatus.CURRENT -> Accent
         ExerciseStatus.DONE -> TileBg
         ExerciseStatus.PENDING -> TileBg
     }
-
     val numberColor = when (status) {
         ExerciseStatus.CURRENT -> Color(0xFF121212)
         ExerciseStatus.DONE -> Accent
@@ -336,9 +378,7 @@ private fun ExerciseRow(
                 Text("$number", color = numberColor, fontSize = 14.sp, fontWeight = FontWeight.Bold)
             }
         }
-
         Spacer(Modifier.width(12.dp))
-
         Text(
             exercise.title,
             color = if (status == ExerciseStatus.DONE) Color.White.copy(alpha = 0.5f) else Color.White,
@@ -346,7 +386,6 @@ private fun ExerciseRow(
             fontWeight = if (status == ExerciseStatus.CURRENT) FontWeight.Bold else FontWeight.Medium,
             modifier = Modifier.weight(1f)
         )
-
         Text(
             "~${exercise.minutes} мин",
             color = if (status == ExerciseStatus.DONE) Color.White.copy(alpha = 0.4f) else Accent,
