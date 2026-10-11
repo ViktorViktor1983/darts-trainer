@@ -42,10 +42,6 @@ data class ExerciseSummary(
 
 /**
  * Игра, доступная в разделе «Остаться здесь».
- *
- * @param id        строковый ID для запуска (совпадает с id в MainActivity)
- * @param title     название
- * @param isRecommended  показывать ли звёздочку ★
  */
 data class ExtraGame(
     val id: String,
@@ -55,7 +51,7 @@ data class ExtraGame(
 
 /**
  * Список игр основной части.
- * ★ — рекомендуемые. Сортируются наверх.
+ * Рекомендуемые — наверх.
  */
 fun defaultMainGames(recommendedIds: Set<String>): List<ExtraGame> {
     val all = listOf(
@@ -68,18 +64,14 @@ fun defaultMainGames(recommendedIds: Set<String>): List<ExtraGame> {
         ExtraGame("game501", "501", recommendedIds.contains("game501")),
         ExtraGame("cricket", "Крикет", recommendedIds.contains("cricket"))
     )
-    // Сначала рекомендованные, потом остальные — в исходном порядке
     return all.sortedByDescending { it.isRecommended }
 }
 
 /**
- * Экран итогов тренировки (обновлён).
+ * Экран итогов тренировки.
  *
- * @param nextBlockTitle  название следующего блока («Психология», «Силовая», …).
- *                        null — это был последний блок, кнопка «Закончить тренировку».
- * @param recommendedIds  id игр, которые надо подсветить ★ в разделе «Остаться здесь».
- * @param onContinue      перейти к следующему блоку (или завершить, если следующего нет).
- * @param onPlayGame      запустить конкретную игру из «Остаться здесь».
+ * @param nextBlockTitle  название следующего блока. null — тренировка завершена.
+ * @param recommendedIds  id рекомендованных игр (★).
  */
 @Composable
 fun TrainingSummaryScreen(
@@ -97,6 +89,7 @@ fun TrainingSummaryScreen(
     val skippedCount = exercises.count { it.status == SummaryStatus.SKIPPED }
     val totalCount = exercises.size
 
+    var showCoachWarning by remember { mutableStateOf(false) }
     var showStayDialog by remember { mutableStateOf(false) }
 
     Column(
@@ -105,7 +98,6 @@ fun TrainingSummaryScreen(
             .background(Color(0xFF0D1117))
             .padding(16.dp)
     ) {
-        // ── Прокручиваемая часть ──
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -152,31 +144,17 @@ fun TrainingSummaryScreen(
                 Column(modifier = Modifier.weight(1f)) {
                     Text("Планировал", color = Color.White.copy(alpha = 0.6f), fontSize = 12.sp)
                     Spacer(Modifier.height(4.dp))
-                    Text(
-                        "$planMinutes мин",
-                        color = Color.White,
-                        fontSize = 20.sp,
-                        fontWeight = FontWeight.Bold
-                    )
+                    Text("$planMinutes мин", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
                 }
-                Column(
-                    modifier = Modifier.weight(1f),
-                    horizontalAlignment = Alignment.End
-                ) {
+                Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.End) {
                     Text("В тренировке", color = Color.White.copy(alpha = 0.6f), fontSize = 12.sp)
                     Spacer(Modifier.height(4.dp))
-                    Text(
-                        "$actualMinutes мин",
-                        color = Accent,
-                        fontSize = 20.sp,
-                        fontWeight = FontWeight.Bold
-                    )
+                    Text("$actualMinutes мин", color = Accent, fontSize = 20.sp, fontWeight = FontWeight.Bold)
                 }
             }
 
             Spacer(Modifier.height(20.dp))
 
-            // ── Сводка по упражнениям ──
             Text(
                 "ЧТО СДЕЛАНО",
                 color = Accent,
@@ -223,13 +201,12 @@ fun TrainingSummaryScreen(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            // Кнопка «Остаться здесь»
             Box(
                 modifier = Modifier
                     .weight(1f)
                     .clip(RoundedCornerShape(14.dp))
                     .background(TileBgDark)
-                    .clickable { showStayDialog = true }
+                    .clickable { showCoachWarning = true }
                     .padding(vertical = 14.dp),
                 contentAlignment = Alignment.Center
             ) {
@@ -241,12 +218,7 @@ fun TrainingSummaryScreen(
                 )
             }
 
-            // Кнопка «Продолжить тренировку» / «Закончить тренировку»
-            val continueLabel = if (nextBlockTitle == null) {
-                "Закончить тренировку"
-            } else {
-                "Продолжить тренировку"
-            }
+            val continueLabel = if (nextBlockTitle == null) "Закончить тренировку" else "Продолжить тренировку"
             Box(
                 modifier = Modifier
                     .weight(1.3f)
@@ -266,7 +238,78 @@ fun TrainingSummaryScreen(
         }
     }
 
-    // ── Диалог «Остаться здесь» ──
+    // ── Диалог-предупреждение от тренера ──
+    if (showCoachWarning) {
+        AlertDialog(
+            onDismissRequest = { showCoachWarning = false },
+            containerColor = TileBgDark,
+            title = {
+                Text(
+                    "Совет тренера",
+                    color = GoldAccent,
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Column {
+                    Text(
+                        playerName + ", рекомендую сначала завершить программу полностью — " +
+                                "так будет больше пользы от тренировки.",
+                        color = Color.White.copy(alpha = 0.9f),
+                        fontSize = 14.sp,
+                        lineHeight = 20.sp
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    Text(
+                        "А в самом конце сможешь поиграть в любую игру или выполнить " +
+                                "любое упражнение, какое захочешь.",
+                        color = Color.White.copy(alpha = 0.75f),
+                        fontSize = 13.sp,
+                        lineHeight = 19.sp
+                    )
+                    Spacer(Modifier.height(14.dp))
+                    Text(
+                        "Что делаем?",
+                        color = Color.White.copy(alpha = 0.6f),
+                        fontSize = 13.sp
+                    )
+                }
+            },
+            confirmButton = {
+                Text(
+                    "Продолжить тренировку",
+                    color = Color(0xFF121212),
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(Accent)
+                        .clickable {
+                            showCoachWarning = false
+                            onContinue()
+                        }
+                        .padding(horizontal = 16.dp, vertical = 10.dp)
+                )
+            },
+            dismissButton = {
+                Text(
+                    "Всё равно остаться",
+                    color = Color.White.copy(alpha = 0.75f),
+                    fontSize = 14.sp,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(10.dp))
+                        .clickable {
+                            showCoachWarning = false
+                            showStayDialog = true
+                        }
+                        .padding(horizontal = 14.dp, vertical = 10.dp)
+                )
+            }
+        )
+    }
+
+    // ── Диалог «Остаться здесь» — список игр ──
     if (showStayDialog) {
         val games = defaultMainGames(recommendedIds)
         StayHereDialog(
@@ -279,10 +322,6 @@ fun TrainingSummaryScreen(
         )
     }
 }
-
-// ─────────────────────────────────────────────
-// Диалог «Остаться здесь» — список игр
-// ─────────────────────────────────────────────
 
 @Composable
 private fun StayHereDialog(
@@ -358,21 +397,13 @@ private fun GameRow(game: ExtraGame, onClick: () -> Unit) {
         if (game.isRecommended) {
             Column(horizontalAlignment = Alignment.End) {
                 Text("★", color = GoldAccent, fontSize = 16.sp)
-                Text(
-                    "рекомендуем",
-                    color = GoldAccent.copy(alpha = 0.85f),
-                    fontSize = 10.sp
-                )
+                Text("рекомендуем", color = GoldAccent.copy(alpha = 0.85f), fontSize = 10.sp)
             }
         } else {
             Text("→", color = Accent, fontSize = 16.sp, fontWeight = FontWeight.Bold)
         }
     }
 }
-
-// ─────────────────────────────────────────────
-// Строка упражнения в итогах
-// ─────────────────────────────────────────────
 
 @Composable
 private fun SummaryRow(exercise: ExerciseSummary) {
@@ -381,7 +412,6 @@ private fun SummaryRow(exercise: ExerciseSummary) {
         SummaryStatus.SKIPPED -> Triple("–", Color.White.copy(alpha = 0.4f), TileBgDark.copy(alpha = 0.6f))
         SummaryStatus.NOT_DONE -> Triple("·", ErrorColor.copy(alpha = 0.6f), TileBgDark.copy(alpha = 0.6f))
     }
-
     val titleColor = when (exercise.status) {
         SummaryStatus.DONE -> Color.White
         SummaryStatus.SKIPPED -> Color.White.copy(alpha = 0.5f)
@@ -405,9 +435,7 @@ private fun SummaryRow(exercise: ExerciseSummary) {
         ) {
             Text(icon, color = iconColor, fontSize = 16.sp, fontWeight = FontWeight.Bold)
         }
-
         Spacer(Modifier.width(12.dp))
-
         Text(
             exercise.title,
             color = titleColor,
@@ -415,7 +443,6 @@ private fun SummaryRow(exercise: ExerciseSummary) {
             fontWeight = if (exercise.status == SummaryStatus.DONE) FontWeight.Medium else FontWeight.Normal,
             modifier = Modifier.weight(1f)
         )
-
         Text(
             "~${exercise.minutes} мин",
             color = if (exercise.status == SummaryStatus.DONE) Accent else Color.White.copy(alpha = 0.4f),
