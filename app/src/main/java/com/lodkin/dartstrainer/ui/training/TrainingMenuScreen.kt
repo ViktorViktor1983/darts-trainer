@@ -15,97 +15,75 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.lodkin.dartstrainer.data.SettingsStorage
 import com.lodkin.dartstrainer.data.training.DartsNorms
 import com.lodkin.dartstrainer.data.training.PotentialSnapshot
-import com.lodkin.dartstrainer.data.training.TrainingPlanner
 import com.lodkin.dartstrainer.data.training.TrainingRepository
-import com.lodkin.dartstrainer.data.training.WeaknessDetector
-import com.lodkin.dartstrainer.data.training.WeaknessType
 import com.lodkin.dartstrainer.theme.Accent
 import com.lodkin.dartstrainer.theme.GoldAccent
 import com.lodkin.dartstrainer.theme.TileBg
 import com.lodkin.dartstrainer.theme.TileBgDark
 
 /**
- * Главный экран тренировочного раздела.
+ * Четыре раздела тренировки.
+ */
+enum class TrainingSection {
+    WARMUP,
+    MAIN,
+    PSYCHOLOGY,
+    STRENGTH
+}
+
+/**
+ * Главный экран тренировки.
  *
- * При заходе показывает диалог выбора времени тренировки.
- * По умолчанию подсвечено время, выбранное в анкете.
- *
- * Если это контрольная тренировка (каждая 10-я), а время меньше 60 минут —
- * предлагает увеличить время или отложить экзамен.
+ * Карточки разделов кликабельны — открывают диалог «что внутри раздела».
+ * Стартовать с любого раздела нельзя. Тренировка запускается только целиком
+ * кнопкой «Начать тренировку».
  */
 @Composable
 fun TrainingMenuScreen(
     playerName: String,
     repository: TrainingRepository,
     onStartTraining: () -> Unit,
-    onPlan: () -> Unit,
-    onTips: () -> Unit,
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
 
     var snapshot by remember { mutableStateOf<PotentialSnapshot?>(null) }
     var loading by remember { mutableStateOf(true) }
-    var completedCount by remember { mutableStateOf(0) }
 
-    // Время из анкеты (по умолчанию)
     val defaultMinutes = remember { SettingsStorage.getTrainingMinutes(context) }
 
-    // Состояние диалогов
     var showTimeDialog by remember { mutableStateOf(true) }
-    var showControlDialog by remember { mutableStateOf(false) }
     var selectedMinutes by remember { mutableStateOf(defaultMinutes) }
+    var openedSection by remember { mutableStateOf<TrainingSection?>(null) }
 
     LaunchedEffect(Unit) {
         snapshot = repository.getLastPotential()
-        completedCount = repository.getCompletedSessionCount()
         loading = false
     }
 
-    val isControl = TrainingPlanner.isControlSession(completedCount)
-
-    // ── Диалог 1: выбор времени ──
     if (showTimeDialog) {
         TimeSelectionDialog(
             defaultMinutes = defaultMinutes,
             selectedMinutes = selectedMinutes,
             onSelect = { selectedMinutes = it },
             onConfirm = {
-                if (isControl && selectedMinutes < 60) {
-                    // Показываем предупреждение про контрольную
-                    showTimeDialog = false
-                    showControlDialog = true
-                } else {
-                    saveSessionPrefs(context, selectedMinutes, skipControl = false)
-                    showTimeDialog = false
-                    onStartTraining()
-                }
+                saveSessionPrefs(context, selectedMinutes)
+                showTimeDialog = false
             },
             onCancel = { showTimeDialog = false }
         )
     }
 
-    // ── Диалог 2: контрольная и мало времени ──
-    if (showControlDialog) {
-        ControlTimeDialog(
-            selectedMinutes = selectedMinutes,
-            onIncreaseTo60 = {
-                saveSessionPrefs(context, 60, skipControl = false)
-                showControlDialog = false
-                onStartTraining()
-            },
-            onPostpone = {
-                saveSessionPrefs(context, selectedMinutes, skipControl = true)
-                showControlDialog = false
-                onStartTraining()
-            },
-            onCancel = { showControlDialog = false }
+    openedSection?.let { section ->
+        SectionPreviewDialog(
+            section = section,
+            minutes = selectedMinutes,
+            onClose = { openedSection = null }
         )
     }
 
@@ -116,7 +94,6 @@ fun TrainingMenuScreen(
             .verticalScroll(rememberScrollState())
             .padding(16.dp)
     ) {
-        // ── Верхняя панель ──
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
@@ -156,63 +133,77 @@ fun TrainingMenuScreen(
             WelcomeNoTrainingCard(playerName)
         } else {
             LevelCard(playerName, snap)
-            Spacer(Modifier.height(16.dp))
-            FocusCard(snap)
         }
 
         Spacer(Modifier.height(16.dp))
 
-        // Строка с выбранным временем
-        SessionInfoRow(
-            selectedMinutes = selectedMinutes,
-            completedCount = completedCount,
-            isControl = isControl
-        )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(12.dp))
+                .background(TileBgDark)
+                .padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                "Сегодня",
+                color = Color.White.copy(alpha = 0.7f),
+                fontSize = 13.sp,
+                modifier = Modifier.weight(1f)
+            )
+            Text(
+                "$selectedMinutes мин",
+                color = Accent,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(Modifier.width(12.dp))
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(TileBg)
+                    .clickable { showTimeDialog = true }
+                    .padding(horizontal = 10.dp, vertical = 6.dp)
+            ) {
+                Text("Изменить", color = Accent, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+            }
+        }
 
-        Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.height(20.dp))
 
-        BigButton(
-            title = "🏃 Начать тренировку",
-            subtitle = "Программа на $selectedMinutes минут",
-            isPrimary = true,
-            onClick = {
-                if (isControl && selectedMinutes < 60) {
-                    showControlDialog = true
-                } else {
-                    saveSessionPrefs(context, selectedMinutes, skipControl = false)
+        SectionRow("🔥", "Разминка", estimateWarmup(selectedMinutes)) { openedSection = TrainingSection.WARMUP }
+        Spacer(Modifier.height(10.dp))
+        SectionRow("🎯", "Основная часть", estimateMain(selectedMinutes)) { openedSection = TrainingSection.MAIN }
+        Spacer(Modifier.height(10.dp))
+        SectionRow("🧠", "Психология", estimatePsychology(selectedMinutes)) { openedSection = TrainingSection.PSYCHOLOGY }
+        Spacer(Modifier.height(10.dp))
+        SectionRow("💪", "Силовая", estimateStrength()) { openedSection = TrainingSection.STRENGTH }
+
+        Spacer(Modifier.height(24.dp))
+
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(14.dp))
+                .background(Accent)
+                .clickable {
+                    saveSessionPrefs(context, selectedMinutes)
                     onStartTraining()
                 }
-            }
-        )
-        Spacer(Modifier.height(10.dp))
-        BigButton(
-            title = "⏱ Изменить время",
-            subtitle = "Сейчас выбрано: $selectedMinutes мин",
-            isPrimary = false,
-            onClick = { showTimeDialog = true }
-        )
-        Spacer(Modifier.height(10.dp))
-        BigButton(
-            title = "📋 План дня",
-            subtitle = "Что тебя ждёт сегодня",
-            isPrimary = false,
-            onClick = onPlan
-        )
-        Spacer(Modifier.height(10.dp))
-        BigButton(
-            title = "💡 Советы",
-            subtitle = "Психология и техника",
-            isPrimary = false,
-            onClick = onTips
-        )
+                .padding(vertical = 16.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                "▶  Начать тренировку",
+                color = Color(0xFF121212),
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
 
         Spacer(Modifier.height(24.dp))
     }
 }
-
-// ─────────────────────────────────────────────
-// ДИАЛОГ 1: выбор времени тренировки
-// ─────────────────────────────────────────────
 
 @Composable
 private fun TimeSelectionDialog(
@@ -245,7 +236,6 @@ private fun TimeSelectionDialog(
                 )
                 Spacer(Modifier.height(16.dp))
 
-                // Варианты в 2 строки по 3
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -268,7 +258,7 @@ private fun TimeSelectionDialog(
         },
         confirmButton = {
             Text(
-                "Начать",
+                "Готово",
                 color = Accent,
                 fontSize = 15.sp,
                 fontWeight = FontWeight.Bold,
@@ -317,98 +307,149 @@ private fun TimeOptionButton(
     }
 }
 
-// ─────────────────────────────────────────────
-// ДИАЛОГ 2: контрольная и мало времени
-// ─────────────────────────────────────────────
-
 @Composable
-private fun ControlTimeDialog(
-    selectedMinutes: Int,
-    onIncreaseTo60: () -> Unit,
-    onPostpone: () -> Unit,
-    onCancel: () -> Unit
+private fun SectionPreviewDialog(
+    section: TrainingSection,
+    minutes: Int,
+    onClose: () -> Unit
 ) {
+    val preview = when (section) {
+        TrainingSection.WARMUP -> SectionPreview(
+            icon = "🔥",
+            title = "Разминка",
+            subtitle = "Разогреваем мышцы и настраиваем технику. Внутри ${estimateWarmup(minutes)} минут.",
+            items = listOf(
+                "Мышцы — вращения плечами, локтями, кистями, растяжка",
+                "Траектория — броски без цели, фокус на движении руки",
+                "Кучность — повторяем одинаковое движение",
+                "Прицеливание — переходим к конкретным секторам"
+            )
+        )
+        TrainingSection.MAIN -> SectionPreview(
+            icon = "🎯",
+            title = "Основная часть",
+            subtitle = "Главные упражнения тренировки. Состав подбирается программой под тебя.",
+            items = listOf(
+                "Первое упражнение — из программы дня",
+                "Второе упражнение — закрепление",
+                "Игровой блок — партия на выбор (501 или Крикет)",
+                "Между упражнениями — короткие паузы"
+            )
+        )
+        TrainingSection.PSYCHOLOGY -> SectionPreview(
+            icon = "🧠",
+            title = "Психология",
+            subtitle = "Настраиваем голову: дыхание, визуализация, ритуал.",
+            items = listOf(
+                "Дыхание 4-2-6 — снимаем напряжение",
+                "Визуализация броска — настраиваемся перед важным броском",
+                "Ритуал — последовательность действий, которая помогает"
+            )
+        )
+        TrainingSection.STRENGTH -> SectionPreview(
+            icon = "💪",
+            title = "Силовая",
+            subtitle = "Укрепляем мышцы, чтобы рука не садилась в конце турнира.",
+            items = listOf(
+                "Имитация броска с гантелей",
+                "Удержание руки с гантелей",
+                "Изометрическое удержание плеча",
+                "Разгибания с эспандером",
+                "Расслабление антагониста"
+            )
+        )
+    }
+
     AlertDialog(
-        onDismissRequest = onCancel,
+        onDismissRequest = onClose,
         containerColor = TileBgDark,
         title = {
-            Text(
-                "Сегодня контрольная тренировка",
-                color = GoldAccent,
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Bold
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(preview.icon, fontSize = 22.sp)
+                Spacer(Modifier.width(10.dp))
+                Text(
+                    preview.title,
+                    color = GoldAccent,
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
         },
         text = {
             Column {
                 Text(
-                    "Контрольная тренировка — это экзамен, где ты сдаёшь нормативы " +
-                            "и определяешь свой уровень. Она занимает около часа.",
-                    color = Color.White.copy(alpha = 0.85f),
-                    fontSize = 14.sp
-                )
-                Spacer(Modifier.height(12.dp))
-                Text(
-                    "Ты выбрал $selectedMinutes мин — этого мало для полной программы.",
-                    color = Accent,
+                    preview.subtitle,
+                    color = Color.White.copy(alpha = 0.75f),
                     fontSize = 13.sp
                 )
-                Spacer(Modifier.height(12.dp))
+                Spacer(Modifier.height(14.dp))
                 Text(
-                    "Что делаем?",
-                    color = Color.White,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Medium
+                    "Что будет внутри:",
+                    color = Accent,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 1.sp
+                )
+                Spacer(Modifier.height(8.dp))
+                preview.items.forEach { item ->
+                    Row(
+                        modifier = Modifier.padding(vertical = 3.dp),
+                        verticalAlignment = Alignment.Top
+                    ) {
+                        Text("•", color = Accent, fontSize = 14.sp)
+                        Spacer(Modifier.width(8.dp))
+                        Text(item, color = Color.White, fontSize = 13.sp)
+                    }
+                }
+                Spacer(Modifier.height(14.dp))
+                Text(
+                    "Начать сразу с этого раздела нельзя — тренировка идёт по программе.",
+                    color = Color.White.copy(alpha = 0.5f),
+                    fontSize = 11.sp
                 )
             }
         },
         confirmButton = {
             Text(
-                "Увеличить до 60",
-                color = Color(0xFF121212),
-                fontSize = 14.sp,
+                "Понятно",
+                color = Accent,
+                fontSize = 15.sp,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier
                     .clip(RoundedCornerShape(10.dp))
-                    .background(Accent)
-                    .clickable { onIncreaseTo60() }
-                    .padding(horizontal = 14.dp, vertical = 10.dp)
-            )
-        },
-        dismissButton = {
-            Text(
-                "Отложить экзамен",
-                color = Color.White.copy(alpha = 0.85f),
-                fontSize = 14.sp,
-                modifier = Modifier
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(TileBg)
-                    .clickable { onPostpone() }
-                    .padding(horizontal = 14.dp, vertical = 10.dp)
+                    .background(Accent.copy(alpha = 0.15f))
+                    .clickable { onClose() }
+                    .padding(horizontal = 18.dp, vertical = 10.dp)
             )
         }
     )
 }
 
-// ─────────────────────────────────────────────
-// Сохранение выбора в SharedPreferences
-// ─────────────────────────────────────────────
+private data class SectionPreview(
+    val icon: String,
+    val title: String,
+    val subtitle: String,
+    val items: List<String>
+)
 
-private fun saveSessionPrefs(
-    context: android.content.Context,
-    minutes: Int,
-    skipControl: Boolean
-) {
+private fun estimateWarmup(totalMinutes: Int): Int =
+    if (totalMinutes >= 100) 7 else 5
+
+private fun estimatePsychology(totalMinutes: Int): Int =
+    if (totalMinutes >= 80) 10 else 5
+
+private fun estimateStrength(): Int = 5
+
+private fun estimateMain(totalMinutes: Int): Int =
+    (totalMinutes - estimateWarmup(totalMinutes) - estimatePsychology(totalMinutes) - estimateStrength())
+        .coerceAtLeast(10)
+
+private fun saveSessionPrefs(context: android.content.Context, minutes: Int) {
     context.getSharedPreferences("training_prefs", android.content.Context.MODE_PRIVATE)
         .edit()
         .putInt("session_minutes", minutes)
-        .putBoolean("skip_control_exam", skipControl)
         .apply()
 }
-
-// ─────────────────────────────────────────────
-// КАРТОЧКИ
-// ─────────────────────────────────────────────
 
 @Composable
 private fun LevelCard(playerName: String, snap: PotentialSnapshot) {
@@ -431,104 +472,36 @@ private fun LevelCard(playerName: String, snap: PotentialSnapshot) {
             Text(
                 "Уровень ${snap.level}",
                 color = GoldAccent,
-                fontSize = 32.sp,
+                fontSize = 28.sp,
                 fontWeight = FontWeight.Bold
             )
-            Spacer(Modifier.width(12.dp))
+            Spacer(Modifier.width(10.dp))
             Text(
                 DartsNorms.getLevelName(snap.level),
                 color = Color.White,
-                fontSize = 18.sp,
+                fontSize = 16.sp,
                 fontWeight = FontWeight.Medium
             )
         }
 
-        Spacer(Modifier.height(8.dp))
-
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(10.dp)
-                .clip(RoundedCornerShape(5.dp))
-                .background(TileBgDark)
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth(0.5f)
-                    .height(10.dp)
-                    .clip(RoundedCornerShape(5.dp))
-                    .background(Accent)
-            )
-        }
-
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(10.dp))
 
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Column {
-                Text("Потенциал", color = Color.White.copy(alpha = 0.6f), fontSize = 12.sp)
-                Text(
-                    "${snap.potential}",
-                    color = Accent,
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-            Column(horizontalAlignment = Alignment.End) {
-                Text("Слабое место", color = Color.White.copy(alpha = 0.6f), fontSize = 12.sp)
-                Text(
-                    WeaknessDetector.describe(snap.weakestType),
-                    color = GoldAccent,
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Bold
-                )
-            }
+            Text(
+                "Потенциал",
+                color = Color.White.copy(alpha = 0.6f),
+                fontSize = 12.sp
+            )
+            Text(
+                "${snap.potential}",
+                color = Accent,
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold
+            )
         }
-    }
-}
-
-@Composable
-private fun FocusCard(snap: PotentialSnapshot) {
-    val description = when (snap.weakestType) {
-        WeaknessType.DOUBLES ->
-            "Сегодня потренируем удвоения — они решают исход партии."
-        WeaknessType.SCORE ->
-            "Сегодня фокус на набор очков — важно быстро прийти к чекауту."
-        WeaknessType.ACCURACY ->
-            "Сегодня тренируем точность в сектор — умение попасть туда, куда нужно."
-        WeaknessType.TREBLES ->
-            "Сегодня работаем над утроениями — база набора очков."
-    }
-
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .background(TileBgDark)
-            .padding(16.dp)
-    ) {
-        Text(
-            "ФОКУС ДНЯ",
-            color = Accent,
-            fontSize = 12.sp,
-            fontWeight = FontWeight.Medium,
-            letterSpacing = 3.sp
-        )
-        Spacer(Modifier.height(8.dp))
-        Text(
-            WeaknessDetector.describe(snap.weakestType),
-            color = GoldAccent,
-            fontSize = 20.sp,
-            fontWeight = FontWeight.Bold
-        )
-        Spacer(Modifier.height(6.dp))
-        Text(
-            description,
-            color = Color.White.copy(alpha = 0.85f),
-            fontSize = 14.sp
-        )
     }
 }
 
@@ -563,89 +536,41 @@ private fun WelcomeNoTrainingCard(playerName: String) {
 }
 
 @Composable
-private fun SessionInfoRow(
-    selectedMinutes: Int,
-    completedCount: Int,
-    isControl: Boolean
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .background(TileBgDark)
-            .padding(12.dp)
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Text(
-                "Сегодняшняя тренировка",
-                color = Color.White.copy(alpha = 0.7f),
-                fontSize = 12.sp
-            )
-            Text(
-                "$selectedMinutes мин",
-                color = Accent,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Bold
-            )
-        }
-        if (isControl) {
-            Spacer(Modifier.height(4.dp))
-            Text(
-                "🎯 Сегодня контрольная — экзамен на уровень",
-                color = GoldAccent,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Medium
-            )
-        } else {
-            Spacer(Modifier.height(4.dp))
-            Text(
-                "Тренировок всего: $completedCount. До экзамена: " +
-                        "${TrainingPlanner.sessionsUntilControl(completedCount)}",
-                color = Color.White.copy(alpha = 0.6f),
-                fontSize = 11.sp
-            )
-        }
-    }
-}
-
-@Composable
-private fun BigButton(
+private fun SectionRow(
+    icon: String,
     title: String,
-    subtitle: String,
-    isPrimary: Boolean,
+    minutes: Int,
     onClick: () -> Unit
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(14.dp))
-            .background(if (isPrimary) Accent else TileBgDark)
+            .background(TileBgDark)
             .clickable { onClick() }
-            .padding(horizontal = 16.dp, vertical = 14.dp),
+            .padding(horizontal = 16.dp, vertical = 16.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                title,
-                color = if (isPrimary) Color(0xFF121212) else Color.White,
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Bold
-            )
-            Spacer(Modifier.height(2.dp))
-            Text(
-                subtitle,
-                color = if (isPrimary) Color(0xFF121212).copy(alpha = 0.7f)
-                else Color.White.copy(alpha = 0.6f),
-                fontSize = 12.sp
-            )
-        }
+        Text(icon, fontSize = 22.sp)
+        Spacer(Modifier.width(14.dp))
         Text(
-            "→",
-            color = if (isPrimary) Color(0xFF121212) else Accent,
-            fontSize = 20.sp,
+            title,
+            color = Color.White,
+            fontSize = 16.sp,
+            fontWeight = FontWeight.Medium,
+            modifier = Modifier.weight(1f)
+        )
+        Text(
+            "~$minutes мин",
+            color = Accent,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Bold
+        )
+        Spacer(Modifier.width(10.dp))
+        Text(
+            "ℹ",
+            color = Accent,
+            fontSize = 16.sp,
             fontWeight = FontWeight.Bold
         )
     }
