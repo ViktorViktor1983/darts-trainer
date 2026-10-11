@@ -33,19 +33,13 @@ enum class TrainingSection {
     STRENGTH
 }
 
-/**
- * Главный экран тренировки.
- *
- * @param autoOpenTimeDialog  true — при заходе открыть диалог выбора времени
- *                            (обычно при входе из главного меню).
- *                            false — не открывать (например, после завершения тренировки).
- */
 @Composable
 fun TrainingMenuScreen(
     playerName: String,
     repository: TrainingRepository,
     autoOpenTimeDialog: Boolean,
     onStartTraining: () -> Unit,
+    onOpenSettings: () -> Unit,
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
@@ -92,6 +86,7 @@ fun TrainingMenuScreen(
             .verticalScroll(rememberScrollState())
             .padding(16.dp)
     ) {
+        // ── Верхняя панель: Назад + Тренировка + ⚙ ──
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
@@ -110,8 +105,20 @@ fun TrainingMenuScreen(
                 "Тренировка",
                 color = GoldAccent,
                 fontSize = 22.sp,
-                fontWeight = FontWeight.Bold
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.weight(1f)
             )
+            // Кнопка настроек тренировки
+            Box(
+                modifier = Modifier
+                    .size(42.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(TileBgDark)
+                    .clickable { onOpenSettings() },
+                contentAlignment = Alignment.Center
+            ) {
+                Text("⚙", fontSize = 20.sp)
+            }
         }
 
         Spacer(Modifier.height(20.dp))
@@ -202,6 +209,10 @@ fun TrainingMenuScreen(
         Spacer(Modifier.height(24.dp))
     }
 }
+
+// ─────────────────────────────────────────────
+// ДИАЛОГ ВЫБОРА ВРЕМЕНИ
+// ─────────────────────────────────────────────
 
 @Composable
 private fun TimeSelectionDialog(
