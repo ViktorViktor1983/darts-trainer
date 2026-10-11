@@ -5,6 +5,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
@@ -126,7 +127,6 @@ private val PARENT_SCREEN: Map<String, String> = mapOf(
     "scoreset_stats" to "stats_menu"
 )
 
-// Экраны, где показывается таймер тренировки
 private val TRAINING_SCREENS: Set<String> = setOf(
     "training_plan",
     "training_warmup",
@@ -196,7 +196,6 @@ fun DartsTrainerApp() {
 
     var statsMenuKey by remember { mutableStateOf(0) }
 
-    // Время тренировки, выбранное в диалоге
     var trainingMinutes by remember {
         mutableStateOf(
             context.getSharedPreferences("training_prefs", android.content.Context.MODE_PRIVATE)
@@ -204,16 +203,13 @@ fun DartsTrainerApp() {
         )
     }
 
-    // ID текущей тренировочной сессии (0 = нет активной)
     var trainingSessionId by remember { mutableStateOf(0L) }
 
-    // ── Таймер тренировки ──
     var isTrainingActive by remember { mutableStateOf(false) }
     var trainingElapsedSeconds by remember { mutableStateOf(0) }
     var trainingPaused by remember { mutableStateOf(false) }
     var showTimeUpDialog by remember { mutableStateOf(false) }
 
-    // Тик таймера
     LaunchedEffect(isTrainingActive, trainingPaused, screen) {
         if (!isTrainingActive || trainingPaused || screen !in TRAINING_SCREENS) {
             return@LaunchedEffect
@@ -410,9 +406,7 @@ fun DartsTrainerApp() {
 
                 "training_warmup" -> TrainingWarmupScreen(
                     longWarmup = trainingMinutes >= 100,
-                    onFinish = {
-                        screen = "training_block"
-                    },
+                    onFinish = { screen = "training_block" },
                     onBack = { screen = "training_plan" }
                 )
 
@@ -725,7 +719,6 @@ fun DartsTrainerApp() {
             }
         }
 
-        // ── Таймер поверх тренировочных экранов ──
         if (isTrainingActive && screen in TRAINING_SCREENS) {
             TrainingTimerOverlay(
                 secondsLeft = trainingSecondsLeft,
@@ -735,7 +728,6 @@ fun DartsTrainerApp() {
         }
     }
 
-    // ── Диалог «время вышло» ──
     if (showTimeUpDialog) {
         AlertDialog(
             onDismissRequest = { },
