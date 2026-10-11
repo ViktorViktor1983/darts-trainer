@@ -33,15 +33,31 @@ data class PlannedExercise(
 
 /**
  * Упражнения основной части (по умолчанию).
- * Позже будем брать из TrainingPlanner по слабым местам игрока.
+ *
+ * Все 6 рабочих упражнений. 501 и Крикет подключим отдельно.
+ * Позже TrainingPlanner будет выбирать нужные по слабым местам игрока.
  */
 fun defaultMainExercises(): List<PlannedExercise> = listOf(
     PlannedExercise(
         id = "aroundclock_doubles",
-        title = "Раунды на удвоения",
-        minutes = 25,
+        title = "Кругосветка: Удвоения",
+        minutes = 20,
         whyImportant = "Это упражнение тренирует закрытие лега. В игре именно удвоения " +
                 "решают, кто победит — даже если ты хорошо набираешь, без закрытия победы не будет."
+    ),
+    PlannedExercise(
+        id = "aroundclock_sectors",
+        title = "Кругосветка: Сектора",
+        minutes = 15,
+        whyImportant = "Тренирует точность попадания в сектор. В игре важно уметь попасть " +
+                "именно туда, куда целишься — например, в S12, чтобы выйти на D20."
+    ),
+    PlannedExercise(
+        id = "aroundclock_trebles",
+        title = "Кругосветка: Утроения",
+        minutes = 15,
+        whyImportant = "Утроения — это набор очков. Чем стабильнее попадаешь в T20, " +
+                "тем быстрее приходишь к удобному чекауту."
     ),
     PlannedExercise(
         id = "sector20",
@@ -56,6 +72,13 @@ fun defaultMainExercises(): List<PlannedExercise> = listOf(
         minutes = 10,
         whyImportant = "Это упражнение показывает твой реальный средний набор. " +
                 "По нему мы видим прогресс и подбираем программу."
+    ),
+    PlannedExercise(
+        id = "biground",
+        title = "Большой раунд",
+        minutes = 15,
+        whyImportant = "Разминка по всем секторам и тренировка точности. " +
+                "Помогает выявить, какие сектора у тебя хромают."
     )
 )
 
@@ -127,11 +150,6 @@ fun defaultStrengthExercises(): List<PlannedExercise> = listOf(
     )
 )
 
-/**
- * Экран блока тренировки (список упражнений).
- *
- * Используется для всех блоков: Основная часть, Психология, Силовая.
- */
 @Composable
 fun TrainingBlockScreen(
     exercises: List<PlannedExercise>,
