@@ -26,9 +26,6 @@ import com.lodkin.dartstrainer.theme.GoldAccent
 import com.lodkin.dartstrainer.theme.TileBg
 import com.lodkin.dartstrainer.theme.TileBgDark
 
-/**
- * Четыре раздела тренировки.
- */
 enum class TrainingSection {
     WARMUP,
     MAIN,
@@ -39,14 +36,15 @@ enum class TrainingSection {
 /**
  * Главный экран тренировки.
  *
- * Карточки разделов кликабельны — открывают диалог «что внутри раздела».
- * Стартовать с любого раздела нельзя. Тренировка запускается только целиком
- * кнопкой «Начать тренировку».
+ * @param autoOpenTimeDialog  true — при заходе открыть диалог выбора времени
+ *                            (обычно при входе из главного меню).
+ *                            false — не открывать (например, после завершения тренировки).
  */
 @Composable
 fun TrainingMenuScreen(
     playerName: String,
     repository: TrainingRepository,
+    autoOpenTimeDialog: Boolean,
     onStartTraining: () -> Unit,
     onBack: () -> Unit
 ) {
@@ -57,7 +55,7 @@ fun TrainingMenuScreen(
 
     val defaultMinutes = remember { SettingsStorage.getTrainingMinutes(context) }
 
-    var showTimeDialog by remember { mutableStateOf(true) }
+    var showTimeDialog by remember { mutableStateOf(autoOpenTimeDialog) }
     var selectedMinutes by remember { mutableStateOf(defaultMinutes) }
     var openedSection by remember { mutableStateOf<TrainingSection?>(null) }
 
