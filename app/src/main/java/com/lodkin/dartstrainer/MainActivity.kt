@@ -92,9 +92,12 @@ import com.lodkin.dartstrainer.ui.scoreset.ScoreSetStatsScreen
 import com.lodkin.dartstrainer.ui.sector.SectorGameScreen
 import com.lodkin.dartstrainer.ui.sector.SectorSetupScreen
 import com.lodkin.dartstrainer.ui.sector.SectorStatsScreen
+import com.lodkin.dartstrainer.ui.training.ExerciseSummary
 import com.lodkin.dartstrainer.ui.training.PlannedExercise
+import com.lodkin.dartstrainer.ui.training.SummaryStatus
 import com.lodkin.dartstrainer.ui.training.TrainingBlockScreen
 import com.lodkin.dartstrainer.ui.training.TrainingMenuScreen
+import com.lodkin.dartstrainer.ui.training.TrainingSummaryScreen
 import com.lodkin.dartstrainer.ui.training.TrainingTimerOverlay
 import com.lodkin.dartstrainer.ui.training.TrainingWarmupScreen
 import com.lodkin.dartstrainer.ui.training.defaultMainExercises
@@ -111,6 +114,7 @@ private val PARENT_SCREEN: Map<String, String> = mapOf(
     "training_warmup" to "training",
     "training_block" to "training",
     "training_exercise" to "training_block",
+    "training_summary" to "training",
     "game_select" to "main",
 
     "cricket_setup" to "game_select",
@@ -221,9 +225,16 @@ fun DartsTrainerApp() {
     var trainingPaused by remember { mutableStateOf(false) }
     var showTimeUpDialog by remember { mutableStateOf(false) }
 
+    // Автооткрытие диалога времени при заходе в тренировку.
+    // true — зашли из главного меню. false — вернулись после завершения.
+    var autoOpenTimeDialog by remember { mutableStateOf(true) }
+
     // Основная часть тренировки
     var mainExercises by remember { mutableStateOf<List<PlannedExercise>>(emptyList()) }
     var currentExerciseIndex by remember { mutableStateOf(0) }
+    // Статусы: для каждого индекса — DONE или SKIPPED.
+    // Если упражнение не в мапе — ещё не пройдено и не пропущено.
+    var exerciseStatuses by remember { mutableStateOf<Map<Int, SummaryStatus>>(emptyMap()) }
 
     LaunchedEffect(isTrainingActive, trainingPaused, screen) {
         if (!isTrainingActive || trainingPaused || screen !in TRAINING_SCREENS) {
@@ -241,26 +252,34 @@ fun DartsTrainerApp() {
 
     val trainingSecondsLeft = (trainingMinutes * 60 - trainingElapsedSeconds).coerceAtLeast(0)
 
+    // Сбрасывает состояние тренировки (при выходе в меню или после итогов)
+    fun resetTrainingState() {
+        isTrainingActive = false
+        trainingElapsedSeconds = 0
+        trainingPaused = false
+        trainingSessionId = 0L
+        mainExercises = emptyList()
+        currentExerciseIndex = 0
+        exerciseStatuses = emptyMap()
+    }
+
     BackHandler(enabled = stage == "main" && screen != "main") {
         PARENT_SCREEN[screen]?.let { parent ->
             if (parent == "stats_menu") statsMenuKey++
 
-            // Выход из тренировки в главное меню — сбрасываем всё
             if (parent == "main") {
-                isTrainingActive = false
-                trainingElapsedSeconds = 0
-                trainingSessionId = 0L
-                mainExercises = emptyList()
-                currentExerciseIndex = 0
+                resetTrainingState()
+                autoOpenTimeDialog = true
             }
 
-            // Выход из разминки или с любого тренировочного экрана в меню "training" — сбрасываем
             if (screen in TRAINING_SCREENS && parent == "training") {
-                isTrainingActive = false
-                trainingElapsedSeconds = 0
-                trainingSessionId = 0L
-                mainExercises = emptyList()
-                currentExerciseIndex = 0
+                resetTrainingState()
+                autoOpenTimeDialog = false
+            }
+
+            if (screen == "training_summary" && parent == "training") {
+                // Из итогов не даём уйти назад — только кнопки на экране
+                return@BackHandler
             }
 
             screen = parent
@@ -290,7 +309,10 @@ fun DartsTrainerApp() {
 
             "main" -> when (screen) {
                 "main" -> MainMenuScreen(
-                    onTraining = { screen = "training" },
+                    onTraining = {
+                        autoOpenTimeDialog = true
+                        screen = "training"
+                    },
                     onFreePlay = { screen = "game_select" },
                     onStatsClick = {
                         statsMenuKey++
@@ -375,11 +397,8 @@ fun DartsTrainerApp() {
                         aroundClockOrder = null
                         aroundClockHits = 1
                         bigRoundCategory = null
-                        trainingSessionId = 0L
-                        isTrainingActive = false
-                        trainingElapsedSeconds = 0
-                        mainExercises = emptyList()
-                        currentExerciseIndex = 0
+                        resetTrainingState()
+                        autoOpenTimeDialog = true
                         onboardingDone = false
                         screen = "main"
                         stage = "welcome"
@@ -389,7 +408,11 @@ fun DartsTrainerApp() {
                 "training" -> TrainingMenuScreen(
                     playerName = SettingsStorage.getPlayerName(context),
                     repository = trainingRepository,
+                    autoOpenTimeDialog = autoOpenTimeDialog,
                     onStartTraining = {
+                        // Сбрасываем флаг — на следующем возврате диалог не откроется
+                        autoOpenTimeDialog = false
+
                         trainingMinutes = context
                             .getSharedPreferences("training_prefs", android.content.Context.MODE_PRIVATE)
                             .getInt("session_minutes", SettingsStorage.getTrainingMinutes(context))
@@ -410,15 +433,14 @@ fun DartsTrainerApp() {
                             showTimeUpDialog = false
                             mainExercises = defaultMainExercises()
                             currentExerciseIndex = 0
+                            exerciseStatuses = emptyMap()
                             isTrainingActive = true
                             screen = "training_warmup"
                         }
                     },
                     onBack = {
-                        isTrainingActive = false
-                        trainingElapsedSeconds = 0
-                        mainExercises = emptyList()
-                        currentExerciseIndex = 0
+                        resetTrainingState()
+                        autoOpenTimeDialog = true
                         screen = "main"
                     }
                 )
@@ -427,11 +449,8 @@ fun DartsTrainerApp() {
                     longWarmup = trainingMinutes >= 100,
                     onFinish = { screen = "training_block" },
                     onBack = {
-                        isTrainingActive = false
-                        trainingElapsedSeconds = 0
-                        trainingSessionId = 0L
-                        mainExercises = emptyList()
-                        currentExerciseIndex = 0
+                        resetTrainingState()
+                        autoOpenTimeDialog = false
                         screen = "training"
                     }
                 )
@@ -441,24 +460,20 @@ fun DartsTrainerApp() {
                     currentIndex = currentExerciseIndex,
                     onStartCurrent = { screen = "training_exercise" },
                     onSkipCurrent = {
+                        // Помечаем текущее как SKIPPED
+                        exerciseStatuses = exerciseStatuses.toMutableMap().apply {
+                            put(currentExerciseIndex, SummaryStatus.SKIPPED)
+                        }
                         if (currentExerciseIndex + 1 < mainExercises.size) {
                             currentExerciseIndex += 1
                         } else {
-                            // Все упражнения пройдены
-                            isTrainingActive = false
-                            trainingElapsedSeconds = 0
-                            trainingSessionId = 0L
-                            mainExercises = emptyList()
-                            currentExerciseIndex = 0
-                            screen = "training"
+                            // Все упражнения пройдены или пропущены — на итоги
+                            screen = "training_summary"
                         }
                     },
                     onBack = {
-                        isTrainingActive = false
-                        trainingElapsedSeconds = 0
-                        trainingSessionId = 0L
-                        mainExercises = emptyList()
-                        currentExerciseIndex = 0
+                        resetTrainingState()
+                        autoOpenTimeDialog = false
                         screen = "training"
                     }
                 )
@@ -487,16 +502,15 @@ fun DartsTrainerApp() {
                                         )
                                         trainingRepository.insertExerciseResult(result)
                                     }
+                                    // Помечаем как DONE
+                                    exerciseStatuses = exerciseStatuses.toMutableMap().apply {
+                                        put(currentExerciseIndex, SummaryStatus.DONE)
+                                    }
                                     if (currentExerciseIndex + 1 < mainExercises.size) {
                                         currentExerciseIndex += 1
                                         screen = "training_block"
                                     } else {
-                                        isTrainingActive = false
-                                        trainingElapsedSeconds = 0
-                                        trainingSessionId = 0L
-                                        mainExercises = emptyList()
-                                        currentExerciseIndex = 0
-                                        screen = "training"
+                                        screen = "training_summary"
                                     }
                                 },
                                 onBack = { screen = "training_block" }
@@ -504,22 +518,48 @@ fun DartsTrainerApp() {
                             else -> TrainingExercisePlaceholder(
                                 title = current.title,
                                 onDone = {
+                                    exerciseStatuses = exerciseStatuses.toMutableMap().apply {
+                                        put(currentExerciseIndex, SummaryStatus.DONE)
+                                    }
                                     if (currentExerciseIndex + 1 < mainExercises.size) {
                                         currentExerciseIndex += 1
                                         screen = "training_block"
                                     } else {
-                                        isTrainingActive = false
-                                        trainingElapsedSeconds = 0
-                                        trainingSessionId = 0L
-                                        mainExercises = emptyList()
-                                        currentExerciseIndex = 0
-                                        screen = "training"
+                                        screen = "training_summary"
                                     }
                                 },
                                 onBack = { screen = "training_block" }
                             )
                         }
                     }
+                }
+
+                "training_summary" -> {
+                    val summaries = mainExercises.mapIndexed { index, ex ->
+                        val status = exerciseStatuses[index] ?: SummaryStatus.NOT_DONE
+                        ExerciseSummary(
+                            title = ex.title,
+                            minutes = ex.minutes,
+                            status = status
+                        )
+                    }
+
+                    TrainingSummaryScreen(
+                        playerName = SettingsStorage.getPlayerName(context),
+                        planMinutes = trainingMinutes,
+                        actualSeconds = trainingElapsedSeconds,
+                        exercises = summaries,
+                        onRestart = {
+                            resetTrainingState()
+                            autoOpenTimeDialog = false
+                            screen = "training"
+                        },
+                        onFinish = {
+                            resetTrainingState()
+                            autoOpenTimeDialog = false
+                            screen = "main"
+                        }
+                    )
                 }
 
                 "game_select" -> GameSelectScreen(
@@ -840,11 +880,8 @@ fun DartsTrainerApp() {
             confirmButton = {
                 TextButton(onClick = {
                     showTimeUpDialog = false
-                    isTrainingActive = false
-                    trainingElapsedSeconds = 0
-                    trainingSessionId = 0L
-                    mainExercises = emptyList()
-                    currentExerciseIndex = 0
+                    resetTrainingState()
+                    autoOpenTimeDialog = false
                     screen = "training"
                 }) {
                     Text("Закончить", color = ErrorColor, fontWeight = FontWeight.Bold)
@@ -862,9 +899,6 @@ fun DartsTrainerApp() {
     }
 }
 
-/**
- * Заглушка для упражнений, которые ещё не реализованы.
- */
 @Composable
 private fun TrainingExercisePlaceholder(
     title: String,
