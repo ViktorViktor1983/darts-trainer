@@ -466,7 +466,6 @@ fun DartsTrainerApp() {
                         }
                     },
                     onOpenSettings = {
-                        // После захода в настройки тренировки не показываем диалог времени при возврате
                         autoOpenTimeDialog = false
                         screen = "training_settings"
                     },
@@ -515,26 +514,11 @@ fun DartsTrainerApp() {
                     val current = list.getOrNull(currentExerciseIndex)
                     if (current == null) {
                         screen = "training_block"
-                    } else if (currentPhase == TrainingBlockPhase.MAIN && current.id == "aroundclock_doubles") {
-                        AroundClockGameScreen(
-                            target = AroundClockTarget.DOUBLE,
-                            order = AroundClockOrder.ORDERED,
-                            hitsRequired = 1,
-                            repository = aroundClockRepository,
-                            onFinish = { totalDarts, _, _ ->
-                                scope.launch {
-                                    trainingRepository.insertExerciseResult(
-                                        ExerciseResult(
-                                            sessionId = trainingSessionId,
-                                            blockType = BlockType.DOUBLES,
-                                            exerciseId = current.id,
-                                            score = totalDarts,
-                                            dartsThrown = totalDarts,
-                                            timestamp = System.currentTimeMillis(),
-                                            detailsJson = ""
-                                        )
-                                    )
-                                }
+                    } else if (currentPhase != TrainingBlockPhase.MAIN) {
+                        TrainingExercisePlaceholder(
+                            title = current.title,
+                            description = current.whyImportant,
+                            onDone = {
                                 exerciseStatuses = exerciseStatuses.toMutableMap().apply {
                                     put(currentExerciseIndex, SummaryStatus.DONE)
                                 }
@@ -545,10 +529,27 @@ fun DartsTrainerApp() {
                             onBack = { screen = "training_block" }
                         )
                     } else {
-                        TrainingExercisePlaceholder(
-                            title = current.title,
-                            description = current.whyImportant,
-                            onDone = {
+                        // Основная часть — все 6 упражнений реальные
+                        MainExerciseRunner(
+                            exerciseId = current.id,
+                            aroundClockRepository = aroundClockRepository,
+                            sectorRepository = sectorRepository,
+                            scoreSetRepository = scoreSetRepository,
+                            bigRoundRepository = bigRoundRepository,
+                            onFinish = { blockType, score, darts ->
+                                scope.launch {
+                                    trainingRepository.insertExerciseResult(
+                                        ExerciseResult(
+                                            sessionId = trainingSessionId,
+                                            blockType = blockType,
+                                            exerciseId = current.id,
+                                            score = score,
+                                            dartsThrown = darts,
+                                            timestamp = System.currentTimeMillis(),
+                                            detailsJson = ""
+                                        )
+                                    )
+                                }
                                 exerciseStatuses = exerciseStatuses.toMutableMap().apply {
                                     put(currentExerciseIndex, SummaryStatus.DONE)
                                 }
@@ -630,89 +631,23 @@ fun DartsTrainerApp() {
                 "training_extra_game" -> {
                     val gameId = extraGameId
                     if (gameId == null) screen = "training_summary"
-                    else when (gameId) {
-                        "aroundclock_doubles" -> AroundClockGameScreen(
-                            target = AroundClockTarget.DOUBLE,
-                            order = AroundClockOrder.ORDERED,
-                            hitsRequired = 1,
-                            repository = aroundClockRepository,
-                            onFinish = { totalDarts, _, _ ->
+                    else {
+                        val recommendedIds = recommendedGameIds(currentWeakness)
+                        MainExerciseRunner(
+                            exerciseId = gameId,
+                            aroundClockRepository = aroundClockRepository,
+                            sectorRepository = sectorRepository,
+                            scoreSetRepository = scoreSetRepository,
+                            bigRoundRepository = bigRoundRepository,
+                            onFinish = { blockType, score, darts ->
                                 scope.launch {
                                     trainingRepository.insertExerciseResult(
                                         ExerciseResult(
                                             sessionId = trainingSessionId,
-                                            blockType = BlockType.DOUBLES,
+                                            blockType = blockType,
                                             exerciseId = "extra_" + gameId,
-                                            score = totalDarts,
-                                            dartsThrown = totalDarts,
-                                            timestamp = System.currentTimeMillis(),
-                                            detailsJson = ""
-                                        )
-                                    )
-                                }
-                                extraGameId = null
-                                screen = "training_summary"
-                            },
-                            onBack = { extraGameId = null; screen = "training_summary" }
-                        )
-                        "aroundclock_sectors" -> AroundClockGameScreen(
-                            target = AroundClockTarget.SINGLE,
-                            order = AroundClockOrder.ORDERED,
-                            hitsRequired = 1,
-                            repository = aroundClockRepository,
-                            onFinish = { totalDarts, _, _ ->
-                                scope.launch {
-                                    trainingRepository.insertExerciseResult(
-                                        ExerciseResult(
-                                            sessionId = trainingSessionId,
-                                            blockType = BlockType.SECTOR,
-                                            exerciseId = "extra_" + gameId,
-                                            score = totalDarts,
-                                            dartsThrown = totalDarts,
-                                            timestamp = System.currentTimeMillis(),
-                                            detailsJson = ""
-                                        )
-                                    )
-                                }
-                                extraGameId = null; screen = "training_summary"
-                            },
-                            onBack = { extraGameId = null; screen = "training_summary" }
-                        )
-                        "aroundclock_trebles" -> AroundClockGameScreen(
-                            target = AroundClockTarget.TRIPLE,
-                            order = AroundClockOrder.ORDERED,
-                            hitsRequired = 1,
-                            repository = aroundClockRepository,
-                            onFinish = { totalDarts, _, _ ->
-                                scope.launch {
-                                    trainingRepository.insertExerciseResult(
-                                        ExerciseResult(
-                                            sessionId = trainingSessionId,
-                                            blockType = BlockType.TREBLES,
-                                            exerciseId = "extra_" + gameId,
-                                            score = totalDarts,
-                                            dartsThrown = totalDarts,
-                                            timestamp = System.currentTimeMillis(),
-                                            detailsJson = ""
-                                        )
-                                    )
-                                }
-                                extraGameId = null; screen = "training_summary"
-                            },
-                            onBack = { extraGameId = null; screen = "training_summary" }
-                        )
-                        "sector20" -> SectorGameScreen(
-                            sector = 20,
-                            repository = sectorRepository,
-                            onFinish = { score ->
-                                scope.launch {
-                                    trainingRepository.insertExerciseResult(
-                                        ExerciseResult(
-                                            sessionId = trainingSessionId,
-                                            blockType = BlockType.SCORE,
-                                            exerciseId = "extra_sector20",
                                             score = score,
-                                            dartsThrown = 30,
+                                            dartsThrown = darts,
                                             timestamp = System.currentTimeMillis(),
                                             detailsJson = ""
                                         )
@@ -721,55 +656,6 @@ fun DartsTrainerApp() {
                                 extraGameId = null
                                 screen = "training_summary"
                             },
-                            onBack = { extraGameId = null; screen = "training_summary" }
-                        )
-                        "scoreset" -> ScoreSetGameScreen(
-                            repository = scoreSetRepository,
-                            onFinish = { totalScore, _ ->
-                                scope.launch {
-                                    trainingRepository.insertExerciseResult(
-                                        ExerciseResult(
-                                            sessionId = trainingSessionId,
-                                            blockType = BlockType.SCORE,
-                                            exerciseId = "extra_scoreset",
-                                            score = totalScore,
-                                            dartsThrown = 30,
-                                            timestamp = System.currentTimeMillis(),
-                                            detailsJson = ""
-                                        )
-                                    )
-                                }
-                                extraGameId = null
-                                screen = "training_summary"
-                            },
-                            onBack = { extraGameId = null; screen = "training_summary" }
-                        )
-                        "biground" -> BigRoundGameScreen(
-                            category = BigRoundCategory.MALE,
-                            repository = bigRoundRepository,
-                            onFinish = { score ->
-                                scope.launch {
-                                    trainingRepository.insertExerciseResult(
-                                        ExerciseResult(
-                                            sessionId = trainingSessionId,
-                                            blockType = BlockType.SECTOR,
-                                            exerciseId = "extra_biground",
-                                            score = score,
-                                            dartsThrown = 63,
-                                            timestamp = System.currentTimeMillis(),
-                                            detailsJson = ""
-                                        )
-                                    )
-                                }
-                                extraGameId = null
-                                screen = "training_summary"
-                            },
-                            onBack = { extraGameId = null; screen = "training_summary" }
-                        )
-                        else -> TrainingExercisePlaceholder(
-                            title = "Игра",
-                            description = "",
-                            onDone = { extraGameId = null; screen = "training_summary" },
                             onBack = { extraGameId = null; screen = "training_summary" }
                         )
                     }
@@ -971,6 +857,72 @@ fun DartsTrainerApp() {
             dismissButton = { TextButton(onClick = {
                 showTimeUpDialog = false; trainingMinutes += 20
             }) { Text("Продолжить +20 мин", color = GoldAccent, fontWeight = FontWeight.Bold) } }
+        )
+    }
+}
+
+/**
+ * Запуск конкретного упражнения основной части.
+ *
+ * Возвращает результат через onFinish(blockType, score, dartsThrown).
+ */
+@Composable
+private fun MainExerciseRunner(
+    exerciseId: String,
+    aroundClockRepository: AroundClockRepository,
+    sectorRepository: SectorRepository,
+    scoreSetRepository: ScoreSetRepository,
+    bigRoundRepository: BigRoundRepository,
+    onFinish: (BlockType, Int, Int) -> Unit,
+    onBack: () -> Unit
+) {
+    when (exerciseId) {
+        "aroundclock_doubles" -> AroundClockGameScreen(
+            target = AroundClockTarget.DOUBLE,
+            order = AroundClockOrder.ORDERED,
+            hitsRequired = 1,
+            repository = aroundClockRepository,
+            onFinish = { totalDarts, _, _ -> onFinish(BlockType.DOUBLES, totalDarts, totalDarts) },
+            onBack = onBack
+        )
+        "aroundclock_sectors" -> AroundClockGameScreen(
+            target = AroundClockTarget.SINGLE,
+            order = AroundClockOrder.ORDERED,
+            hitsRequired = 1,
+            repository = aroundClockRepository,
+            onFinish = { totalDarts, _, _ -> onFinish(BlockType.SECTOR, totalDarts, totalDarts) },
+            onBack = onBack
+        )
+        "aroundclock_trebles" -> AroundClockGameScreen(
+            target = AroundClockTarget.TRIPLE,
+            order = AroundClockOrder.ORDERED,
+            hitsRequired = 1,
+            repository = aroundClockRepository,
+            onFinish = { totalDarts, _, _ -> onFinish(BlockType.TREBLES, totalDarts, totalDarts) },
+            onBack = onBack
+        )
+        "sector20" -> SectorGameScreen(
+            sector = 20,
+            repository = sectorRepository,
+            onFinish = { score -> onFinish(BlockType.SCORE, score, 30) },
+            onBack = onBack
+        )
+        "scoreset" -> ScoreSetGameScreen(
+            repository = scoreSetRepository,
+            onFinish = { totalScore, _ -> onFinish(BlockType.SCORE, totalScore, 30) },
+            onBack = onBack
+        )
+        "biground" -> BigRoundGameScreen(
+            category = BigRoundCategory.MALE,
+            repository = bigRoundRepository,
+            onFinish = { score -> onFinish(BlockType.SECTOR, score, 63) },
+            onBack = onBack
+        )
+        else -> TrainingExercisePlaceholder(
+            title = "Упражнение",
+            description = "Это упражнение пока в разработке.",
+            onDone = { onFinish(BlockType.SCORE, 0, 0) },
+            onBack = onBack
         )
     }
 }
