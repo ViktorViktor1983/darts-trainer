@@ -57,6 +57,7 @@ import com.lodkin.dartstrainer.data.sector.SectorDatabase
 import com.lodkin.dartstrainer.data.sector.SectorRepository
 import com.lodkin.dartstrainer.data.training.BlockType
 import com.lodkin.dartstrainer.data.training.ExerciseResult
+import com.lodkin.dartstrainer.data.training.TrainingBlocksStorage
 import com.lodkin.dartstrainer.data.training.TrainingDatabase
 import com.lodkin.dartstrainer.data.training.TrainingMode
 import com.lodkin.dartstrainer.data.training.TrainingRepository
@@ -101,6 +102,7 @@ import com.lodkin.dartstrainer.ui.training.SummaryBlockType
 import com.lodkin.dartstrainer.ui.training.SummaryStatus
 import com.lodkin.dartstrainer.ui.training.TrainingBlockScreen
 import com.lodkin.dartstrainer.ui.training.TrainingMenuScreen
+import com.lodkin.dartstrainer.ui.training.TrainingSettingsScreen
 import com.lodkin.dartstrainer.ui.training.TrainingSummaryScreen
 import com.lodkin.dartstrainer.ui.training.TrainingTimerOverlay
 import com.lodkin.dartstrainer.ui.training.TrainingWarmupScreen
@@ -119,6 +121,7 @@ private val PARENT_SCREEN: Map<String, String> = mapOf(
     "stats_501" to "stats_menu",
     "settings" to "main",
     "training" to "main",
+    "training_settings" to "training",
     "training_warmup" to "training",
     "training_block" to "training",
     "training_exercise" to "training_block",
@@ -234,9 +237,7 @@ fun DartsTrainerApp() {
     var exerciseStatuses by remember { mutableStateOf<Map<Int, SummaryStatus>>(emptyMap()) }
     var currentWeakness by remember { mutableStateOf<WeaknessType?>(null) }
 
-    // Для "Остаться здесь" — id выбранного упражнения блока
     var blockExerciseId by remember { mutableStateOf<String?>(null) }
-    // Для "Ещё поиграть" — id выбранной игры
     var extraGameId by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(isTrainingActive, trainingPaused, screen) {
@@ -267,6 +268,16 @@ fun DartsTrainerApp() {
         extraGameId = null
     }
 
+    /** Активные фазы тренировки (с учётом настроек блоков). */
+    fun activePhases(): List<TrainingBlockPhase> {
+        val list = mutableListOf<TrainingBlockPhase>()
+        if (TrainingBlocksStorage.isWarmupEnabled(context)) list.add(TrainingBlockPhase.WARMUP)
+        list.add(TrainingBlockPhase.MAIN)
+        if (TrainingBlocksStorage.isPsychologyEnabled(context)) list.add(TrainingBlockPhase.PSYCHOLOGY)
+        if (TrainingBlocksStorage.isStrengthEnabled(context)) list.add(TrainingBlockPhase.STRENGTH)
+        return list
+    }
+
     fun exercisesForPhase(phase: TrainingBlockPhase): List<PlannedExercise> = when (phase) {
         TrainingBlockPhase.MAIN -> mainExercises
         TrainingBlockPhase.PSYCHOLOGY -> psychologyExercises
@@ -274,12 +285,25 @@ fun DartsTrainerApp() {
         else -> emptyList()
     }
 
-    fun nextPhaseAfter(phase: TrainingBlockPhase): TrainingBlockPhase = when (phase) {
-        TrainingBlockPhase.WARMUP -> TrainingBlockPhase.MAIN
-        TrainingBlockPhase.MAIN -> TrainingBlockPhase.PSYCHOLOGY
-        TrainingBlockPhase.PSYCHOLOGY -> TrainingBlockPhase.STRENGTH
-        TrainingBlockPhase.STRENGTH -> TrainingBlockPhase.FINISHED
-        TrainingBlockPhase.FINISHED -> TrainingBlockPhase.FINISHED
+    fun nextPhaseAfter(phase: TrainingBlockPhase): TrainingBlockPhase {
+        val phases = activePhases()
+        val idx = phases.indexOf(phase)
+        return if (idx >= 0 && idx < phases.lastIndex) phases[idx + 1] else TrainingBlockPhase.FINISHED
+    }
+
+    fun nextPhaseTitle(phase: TrainingBlockPhase): String? {
+        val next = nextPhaseAfter(phase)
+        return when (next) {
+            TrainingBlockPhase.MAIN -> "Основная часть"
+            TrainingBlockPhase.PSYCHOLOGY -> "Психология"
+            TrainingBlockPhase.STRENGTH -> "Силовая"
+            else -> null
+        }
+    }
+
+    fun isLastActivePhase(phase: TrainingBlockPhase): Boolean {
+        val phases = activePhases()
+        return phases.isNotEmpty() && phases.last() == phase
     }
 
     fun goToNextPhase() {
@@ -424,28 +448,44 @@ fun DartsTrainerApp() {
                             trainingElapsedSeconds = 0
                             trainingPaused = false
                             showTimeUpDialog = false
+
                             mainExercises = defaultMainExercises()
-                            psychologyExercises = defaultPsychologyExercises()
-                            strengthExercises = defaultStrengthExercises()
-                            currentPhase = TrainingBlockPhase.WARMUP
+                            psychologyExercises = if (TrainingBlocksStorage.isPsychologyEnabled(context))
+                                defaultPsychologyExercises() else emptyList()
+                            strengthExercises = if (TrainingBlocksStorage.isStrengthEnabled(context))
+                                defaultStrengthExercises() else emptyList()
+
+                            val first = activePhases().firstOrNull() ?: TrainingBlockPhase.MAIN
+                            currentPhase = first
                             currentExerciseIndex = 0
                             exerciseStatuses = emptyMap()
                             blockExerciseId = null
                             extraGameId = null
                             isTrainingActive = true
-                            screen = "training_warmup"
+
+                            screen = if (first == TrainingBlockPhase.WARMUP) "training_warmup" else "training_block"
                         }
                     },
+                    onOpenSettings = { screen = "training_settings" },
                     onBack = { resetTrainingState(); autoOpenTimeDialog = true; screen = "main" }
+                )
+
+                "training_settings" -> TrainingSettingsScreen(
+                    onBack = { screen = "training" }
                 )
 
                 "training_warmup" -> TrainingWarmupScreen(
                     longWarmup = trainingMinutes >= 100,
                     onFinish = {
-                        currentPhase = TrainingBlockPhase.MAIN
+                        val next = nextPhaseAfter(TrainingBlockPhase.WARMUP)
+                        currentPhase = next
                         currentExerciseIndex = 0
                         exerciseStatuses = emptyMap()
-                        screen = "training_block"
+                        if (next == TrainingBlockPhase.FINISHED) {
+                            screen = "training_summary"
+                        } else {
+                            screen = "training_block"
+                        }
                     },
                     onBack = { resetTrainingState(); autoOpenTimeDialog = false; screen = "training" }
                 )
@@ -528,7 +568,7 @@ fun DartsTrainerApp() {
                         )
                     }
                     val recommendedIds = recommendedGameIds(currentWeakness)
-                    val isLast = currentPhase == TrainingBlockPhase.STRENGTH
+                    val isLast = isLastActivePhase(currentPhase)
 
                     TrainingSummaryScreen(
                         playerName = SettingsStorage.getPlayerName(context),
@@ -541,7 +581,6 @@ fun DartsTrainerApp() {
                         recommendedIds = recommendedIds,
                         onContinue = {
                             if (isLast) {
-                                // не должно вызываться на последнем блоке
                                 resetTrainingState(); autoOpenTimeDialog = false; screen = "main"
                             } else {
                                 goToNextPhase()
@@ -563,13 +602,11 @@ fun DartsTrainerApp() {
                     )
                 }
 
-                // Упражнение, выбранное из «Остаться здесь» (внутри текущего блока)
                 "training_block_exercise" -> {
                     val id = blockExerciseId
                     if (id == null) {
                         screen = "training_summary"
                     } else {
-                        // Просто запускаем заглушку с этим названием — детальные реализации добавим позже
                         val title = blockItemsForPhase(currentPhase, recommendedGameIds(currentWeakness))
                             .firstOrNull { it.id == id }?.title ?: "Упражнение"
                         TrainingExercisePlaceholder(
@@ -587,7 +624,6 @@ fun DartsTrainerApp() {
                     }
                 }
 
-                // Игра, выбранная из «Ещё поиграть» (после завершения тренировки)
                 "training_extra_game" -> {
                     val gameId = extraGameId
                     if (gameId == null) screen = "training_summary"
