@@ -268,7 +268,6 @@ fun DartsTrainerApp() {
         extraGameId = null
     }
 
-    /** Активные фазы тренировки (с учётом настроек блоков). */
     fun activePhases(): List<TrainingBlockPhase> {
         val list = mutableListOf<TrainingBlockPhase>()
         if (TrainingBlocksStorage.isWarmupEnabled(context)) list.add(TrainingBlockPhase.WARMUP)
@@ -466,7 +465,11 @@ fun DartsTrainerApp() {
                             screen = if (first == TrainingBlockPhase.WARMUP) "training_warmup" else "training_block"
                         }
                     },
-                    onOpenSettings = { screen = "training_settings" },
+                    onOpenSettings = {
+                        // После захода в настройки тренировки не показываем диалог времени при возврате
+                        autoOpenTimeDialog = false
+                        screen = "training_settings"
+                    },
                     onBack = { resetTrainingState(); autoOpenTimeDialog = true; screen = "main" }
                 )
 
