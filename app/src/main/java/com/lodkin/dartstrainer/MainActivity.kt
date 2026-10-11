@@ -6,9 +6,12 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
@@ -152,9 +155,6 @@ private val TRAINING_SCREENS: Set<String> = setOf(
     "training_extra_game"
 )
 
-/**
- * Какой блок сейчас активен в тренировке.
- */
 private enum class TrainingBlockPhase {
     WARMUP,
     MAIN,
@@ -221,7 +221,6 @@ fun DartsTrainerApp() {
     var showTimeUpDialog by remember { mutableStateOf(false) }
     var autoOpenTimeDialog by remember { mutableStateOf(true) }
 
-    // ── Текущий блок и упражнения ──
     var currentPhase by remember { mutableStateOf(TrainingBlockPhase.WARMUP) }
     var mainExercises by remember { mutableStateOf<List<PlannedExercise>>(emptyList()) }
     var psychologyExercises by remember { mutableStateOf<List<PlannedExercise>>(emptyList()) }
@@ -258,7 +257,6 @@ fun DartsTrainerApp() {
         extraGameId = null
     }
 
-    /** Список упражнений текущего блока */
     fun exercisesForPhase(phase: TrainingBlockPhase): List<PlannedExercise> = when (phase) {
         TrainingBlockPhase.MAIN -> mainExercises
         TrainingBlockPhase.PSYCHOLOGY -> psychologyExercises
@@ -266,16 +264,6 @@ fun DartsTrainerApp() {
         else -> emptyList()
     }
 
-    /** Название текущего блока (для итогов) */
-    fun phaseTitle(phase: TrainingBlockPhase): String = when (phase) {
-        TrainingBlockPhase.MAIN -> "Основная часть"
-        TrainingBlockPhase.PSYCHOLOGY -> "Психология"
-        TrainingBlockPhase.STRENGTH -> "Силовая"
-        TrainingBlockPhase.WARMUP -> "Разминка"
-        TrainingBlockPhase.FINISHED -> "Тренировка"
-    }
-
-    /** Какой блок идёт следующим */
     fun nextPhaseAfter(phase: TrainingBlockPhase): TrainingBlockPhase = when (phase) {
         TrainingBlockPhase.WARMUP -> TrainingBlockPhase.MAIN
         TrainingBlockPhase.MAIN -> TrainingBlockPhase.PSYCHOLOGY
@@ -284,7 +272,6 @@ fun DartsTrainerApp() {
         TrainingBlockPhase.FINISHED -> TrainingBlockPhase.FINISHED
     }
 
-    /** Название следующего блока для кнопки — или null, если это финал */
     fun nextPhaseTitle(phase: TrainingBlockPhase): String? = when (phase) {
         TrainingBlockPhase.WARMUP -> "Основная часть"
         TrainingBlockPhase.MAIN -> "Психология"
@@ -455,10 +442,7 @@ fun DartsTrainerApp() {
                                 put(currentExerciseIndex, SummaryStatus.SKIPPED)
                             }
                             if (currentExerciseIndex + 1 < list.size) currentExerciseIndex += 1
-                            else {
-                                // Блок закончен — на итоги блока
-                                screen = "training_summary"
-                            }
+                            else screen = "training_summary"
                         },
                         onBack = { resetTrainingState(); autoOpenTimeDialog = false; screen = "training" }
                     )
@@ -470,8 +454,6 @@ fun DartsTrainerApp() {
                     if (current == null) {
                         screen = "training_block"
                     } else {
-                        // Для реальных игр основной части — реальный экран.
-                        // Для психологии и силовой — заглушка (позже заменим).
                         if (currentPhase == TrainingBlockPhase.MAIN && current.id == "aroundclock_doubles") {
                             AroundClockGameScreen(
                                 target = AroundClockTarget.DOUBLE,
@@ -892,9 +874,6 @@ fun DartsTrainerApp() {
     }
 }
 
-/**
- * Какие игры рекомендуем, исходя из слабого места.
- */
 private fun recommendedGameIds(weakness: WeaknessType?): Set<String> = when (weakness) {
     WeaknessType.DOUBLES -> setOf("aroundclock_doubles", "game501")
     WeaknessType.SCORE -> setOf("sector20", "scoreset")
@@ -924,22 +903,22 @@ private fun TrainingExercisePlaceholder(
                 ) {
                     Text(title, color = GoldAccent, fontSize = 24.sp, fontWeight = FontWeight.Bold)
                     if (description.isNotBlank()) {
-                        Spacer(Modifier.padding(top = 12.dp))
+                        Spacer(Modifier.height(12.dp))
                         Text(
                             description,
                             color = Color.White.copy(alpha = 0.85f),
-                            fontSize = 14.sp,
-                            modifier = Modifier.padding(top = 12.dp)
+                            fontSize = 14.sp
                         )
                     }
+                    Spacer(Modifier.height(16.dp))
                     Text(
                         "Упражнение в разработке",
                         color = Color.White.copy(alpha = 0.5f),
-                        fontSize = 12.sp,
-                        modifier = Modifier.padding(top = 16.dp)
+                        fontSize = 12.sp
                     )
+                    Spacer(Modifier.height(24.dp))
                     Box(
-                        modifier = Modifier.padding(top = 24.dp).clip(RoundedCornerShape(14.dp))
+                        modifier = Modifier.clip(RoundedCornerShape(14.dp))
                             .background(Accent).clickable { onDone() }
                             .padding(horizontal = 32.dp, vertical = 14.dp)
                     ) { Text("Готово", color = Color(0xFF121212), fontSize = 15.sp, fontWeight = FontWeight.Bold) }
