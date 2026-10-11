@@ -1,6 +1,7 @@
 package com.lodkin.dartstrainer.ui.training
 
 import android.content.Context
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
@@ -15,7 +16,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -47,6 +47,7 @@ private const val KEY_Y = "timer_offset_y"
  *
  * Позиция и видимость сохраняются в SharedPreferences (training_prefs).
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun TrainingTimerOverlay(
     secondsLeft: Int,
@@ -73,7 +74,7 @@ fun TrainingTimerOverlay(
     var posX by remember { mutableStateOf(0f) }
     var posY by remember { mutableStateOf(0f) }
 
-    // Инициализация позиции: центр сверху или сохранённое значение
+    // Инициализация позиции
     LaunchedEffect(containerWidth, containerHeight, barWidth, barHeight, isVisible) {
         if (containerWidth > 0 && barWidth > 0) {
             val maxX = (containerWidth - barWidth).coerceAtLeast(0f)
@@ -168,7 +169,6 @@ fun TrainingTimerOverlay(
             },
             confirmButton = {
                 TextButton(onClick = {
-                    // Сбросить позицию
                     prefs.edit()
                         .remove(KEY_X)
                         .remove(KEY_Y)
