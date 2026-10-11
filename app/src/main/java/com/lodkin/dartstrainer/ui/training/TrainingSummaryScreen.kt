@@ -27,7 +27,7 @@ import com.lodkin.dartstrainer.theme.TileBgDark
 enum class SummaryStatus {
     DONE,       // Пройдено
     SKIPPED,    // Пропущено
-    NOT_DONE    // Не дошли (например, тренировка прервана)
+    NOT_DONE    // Не дошли
 }
 
 /**
@@ -41,12 +41,6 @@ data class ExerciseSummary(
 
 /**
  * Экран итогов тренировки.
- *
- * Показывает:
- *   • Поздравление.
- *   • Время: план / факт.
- *   • Список всех упражнений со статусами.
- *   • Кнопки: «Ещё тренировку» / «В меню».
  */
 @Composable
 fun TrainingSummaryScreen(
@@ -171,7 +165,7 @@ fun TrainingSummaryScreen(
                     .clip(RoundedCornerShape(12.dp))
                     .background(TileBgDark.copy(alpha = 0.6f))
                     .padding(14.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
                     "Пройдено: $doneCount из $totalCount",
