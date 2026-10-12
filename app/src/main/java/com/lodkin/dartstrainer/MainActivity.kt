@@ -62,6 +62,7 @@ import com.lodkin.dartstrainer.data.training.TrainingDatabase
 import com.lodkin.dartstrainer.data.training.TrainingMode
 import com.lodkin.dartstrainer.data.training.TrainingRepository
 import com.lodkin.dartstrainer.data.training.TrainingSession
+import com.lodkin.dartstrainer.data.training.TrainingStateStorage
 import com.lodkin.dartstrainer.data.training.WeaknessType
 import com.lodkin.dartstrainer.theme.Accent
 import com.lodkin.dartstrainer.theme.DarkBg
@@ -240,6 +241,25 @@ fun DartsTrainerApp() {
     var blockExerciseId by remember { mutableStateOf<String?>(null) }
     var extraGameId by remember { mutableStateOf<String?>(null) }
 
+    // ── Восстановление незавершённой тренировки ──
+    var showResumeDialog by remember { mutableStateOf(false) }
+    var pendingResume by remember { mutableStateOf<TrainingStateStorage.Snapshot?>(null) }
+
+    // Вспомогательная: сохранить текущее состояние тренировки
+    fun saveCurrentTrainingState() {
+        if (trainingSessionId <= 0L) return
+        if (currentPhase == TrainingBlockPhase.FINISHED) return
+        TrainingStateStorage.save(
+            context = context,
+            sessionId = trainingSessionId,
+            minutes = trainingMinutes,
+            elapsedSeconds = trainingElapsedSeconds,
+            phaseName = currentPhase.name,
+            exerciseIndex = currentExerciseIndex,
+            statuses = exerciseStatuses.mapValues { it.value.name }
+        )
+    }
+
     LaunchedEffect(isTrainingActive, trainingPaused, screen) {
         if (!isTrainingActive || trainingPaused || screen !in TRAINING_SCREENS) return@LaunchedEffect
         while (true) {
@@ -252,6 +272,22 @@ fun DartsTrainerApp() {
         }
     }
     val trainingSecondsLeft = (trainingMinutes * 60 - trainingElapsedSeconds).coerceAtLeast(0)
+
+    // Автосохранение при изменениях в цепочке тренировки
+    LaunchedEffect(trainingSessionId, currentPhase, currentExerciseIndex, exerciseStatuses) {
+        if (isTrainingActive && trainingSessionId > 0L) {
+            saveCurrentTrainingState()
+        }
+    }
+
+    // Периодическое сохранение (каждые 30 сек) для обновления elapsedSeconds
+    LaunchedEffect(isTrainingActive, screen) {
+        if (!isTrainingActive || screen !in TRAINING_SCREENS) return@LaunchedEffect
+        while (true) {
+            delay(30_000L)
+            saveCurrentTrainingState()
+        }
+    }
 
     fun resetTrainingState() {
         isTrainingActive = false
@@ -290,16 +326,6 @@ fun DartsTrainerApp() {
         return if (idx >= 0 && idx < phases.lastIndex) phases[idx + 1] else TrainingBlockPhase.FINISHED
     }
 
-    fun nextPhaseTitle(phase: TrainingBlockPhase): String? {
-        val next = nextPhaseAfter(phase)
-        return when (next) {
-            TrainingBlockPhase.MAIN -> "Основная часть"
-            TrainingBlockPhase.PSYCHOLOGY -> "Психология"
-            TrainingBlockPhase.STRENGTH -> "Силовая"
-            else -> null
-        }
-    }
-
     fun isLastActivePhase(phase: TrainingBlockPhase): Boolean {
         val phases = activePhases()
         return phases.isNotEmpty() && phases.last() == phase
@@ -336,10 +362,11 @@ fun DartsTrainerApp() {
     BackHandler(enabled = stage == "main" && screen != "main") {
         PARENT_SCREEN[screen]?.let { parent ->
             if (parent == "stats_menu") statsMenuKey++
-            if (parent == "main") { resetTrainingState(); autoOpenTimeDialog = true }
+            if (parent == "main") { resetTrainingState(); TrainingStateStorage.clear(context); autoOpenTimeDialog = true }
             if (screen == "training_summary") return@BackHandler
             if (screen in TRAINING_SCREENS && parent == "training") {
-                resetTrainingState(); autoOpenTimeDialog = false
+                // Просто выходим на главный экран тренировки, состояние сохраняем
+                autoOpenTimeDialog = false
             }
             screen = parent
         }
@@ -364,7 +391,17 @@ fun DartsTrainerApp() {
 
             "main" -> when (screen) {
                 "main" -> MainMenuScreen(
-                    onTraining = { autoOpenTimeDialog = true; screen = "training" },
+                    onTraining = {
+                        val snap = TrainingStateStorage.load(context)
+                        if (snap != null && snap.sessionId > 0L) {
+                            pendingResume = snap
+                            showResumeDialog = true
+                            autoOpenTimeDialog = false
+                        } else {
+                            autoOpenTimeDialog = true
+                        }
+                        screen = "training"
+                    },
                     onFreePlay = { screen = "game_select" },
                     onStatsClick = { statsMenuKey++; screen = "stats_menu" },
                     onSettingsClick = { screen = "settings" }
@@ -462,6 +499,17 @@ fun DartsTrainerApp() {
                             extraGameId = null
                             isTrainingActive = true
 
+                            // Первичное сохранение
+                            TrainingStateStorage.save(
+                                context = context,
+                                sessionId = trainingSessionId,
+                                minutes = trainingMinutes,
+                                elapsedSeconds = 0,
+                                phaseName = first.name,
+                                exerciseIndex = 0,
+                                statuses = emptyMap()
+                            )
+
                             screen = if (first == TrainingBlockPhase.WARMUP) "training_warmup" else "training_block"
                         }
                     },
@@ -469,7 +517,12 @@ fun DartsTrainerApp() {
                         autoOpenTimeDialog = false
                         screen = "training_settings"
                     },
-                    onBack = { resetTrainingState(); autoOpenTimeDialog = true; screen = "main" }
+                    onBack = {
+                        resetTrainingState()
+                        TrainingStateStorage.clear(context)
+                        autoOpenTimeDialog = true
+                        screen = "main"
+                    }
                 )
 
                 "training_settings" -> TrainingSettingsScreen(
@@ -489,7 +542,7 @@ fun DartsTrainerApp() {
                             screen = "training_block"
                         }
                     },
-                    onBack = { resetTrainingState(); autoOpenTimeDialog = false; screen = "training" }
+                    onBack = { screen = "training" }
                 )
 
                 "training_block" -> {
@@ -505,7 +558,7 @@ fun DartsTrainerApp() {
                             if (currentExerciseIndex + 1 < list.size) currentExerciseIndex += 1
                             else screen = "training_summary"
                         },
-                        onBack = { resetTrainingState(); autoOpenTimeDialog = false; screen = "training" }
+                        onBack = { screen = "training" }
                     )
                 }
 
@@ -529,7 +582,6 @@ fun DartsTrainerApp() {
                             onBack = { screen = "training_block" }
                         )
                     } else {
-                        // Основная часть — все 6 упражнений реальные
                         MainExerciseRunner(
                             exerciseId = current.id,
                             aroundClockRepository = aroundClockRepository,
@@ -585,7 +637,10 @@ fun DartsTrainerApp() {
                         recommendedIds = recommendedIds,
                         onContinue = {
                             if (isLast) {
-                                resetTrainingState(); autoOpenTimeDialog = false; screen = "main"
+                                resetTrainingState()
+                                TrainingStateStorage.clear(context)
+                                autoOpenTimeDialog = false
+                                screen = "main"
                             } else {
                                 goToNextPhase()
                             }
@@ -600,6 +655,7 @@ fun DartsTrainerApp() {
                         },
                         onFinishTraining = {
                             resetTrainingState()
+                            TrainingStateStorage.clear(context)
                             autoOpenTimeDialog = false
                             screen = "main"
                         }
@@ -632,7 +688,6 @@ fun DartsTrainerApp() {
                     val gameId = extraGameId
                     if (gameId == null) screen = "training_summary"
                     else {
-                        val recommendedIds = recommendedGameIds(currentWeakness)
                         MainExerciseRunner(
                             exerciseId = gameId,
                             aroundClockRepository = aroundClockRepository,
@@ -842,6 +897,100 @@ fun DartsTrainerApp() {
         }
     }
 
+    // ── Диалог «Продолжить / Начать заново» ──
+    if (showResumeDialog && pendingResume != null) {
+        val snap = pendingResume!!
+        val minutesAgo = TrainingStateStorage.minutesSinceLastUpdate(context)
+        AlertDialog(
+            onDismissRequest = { },
+            containerColor = TileBgDark,
+            title = {
+                Text(
+                    "Незавершённая тренировка",
+                    color = GoldAccent,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Column {
+                    Text(
+                        "У тебя есть незавершённая тренировка. " +
+                                if (minutesAgo > 0) "Прошло $minutesAgo мин." else "Только что прервана.",
+                        color = Color.White.copy(alpha = 0.85f),
+                        fontSize = 14.sp,
+                        lineHeight = 20.sp
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    Text(
+                        "Продолжить с того места, где остановился, или начать заново?",
+                        color = Color.White.copy(alpha = 0.7f),
+                        fontSize = 13.sp
+                    )
+                }
+            },
+            confirmButton = {
+                Text(
+                    "Продолжить",
+                    color = Color(0xFF121212),
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(Accent)
+                        .clickable {
+                            // Восстанавливаем состояние
+                            trainingSessionId = snap.sessionId
+                            trainingMinutes = snap.minutes
+                            trainingElapsedSeconds = snap.elapsedSeconds
+                            currentPhase = runCatching {
+                                TrainingBlockPhase.valueOf(snap.phaseName)
+                            }.getOrDefault(TrainingBlockPhase.MAIN)
+                            currentExerciseIndex = snap.exerciseIndex
+                            exerciseStatuses = snap.statuses.mapNotNull { (k, v) ->
+                                runCatching { k to SummaryStatus.valueOf(v) }.getOrNull()
+                            }.toMap()
+
+                            mainExercises = defaultMainExercises()
+                            psychologyExercises = if (TrainingBlocksStorage.isPsychologyEnabled(context))
+                                defaultPsychologyExercises() else emptyList()
+                            strengthExercises = if (TrainingBlocksStorage.isStrengthEnabled(context))
+                                defaultStrengthExercises() else emptyList()
+
+                            trainingPaused = false
+                            isTrainingActive = true
+                            autoOpenTimeDialog = false
+                            showResumeDialog = false
+
+                            screen = when (currentPhase) {
+                                TrainingBlockPhase.WARMUP -> "training_warmup"
+                                else -> "training_block"
+                            }
+                            pendingResume = null
+                        }
+                        .padding(horizontal = 16.dp, vertical = 10.dp)
+                )
+            },
+            dismissButton = {
+                Text(
+                    "Начать заново",
+                    color = Color.White.copy(alpha = 0.75f),
+                    fontSize = 14.sp,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(10.dp))
+                        .clickable {
+                            TrainingStateStorage.clear(context)
+                            resetTrainingState()
+                            autoOpenTimeDialog = true
+                            showResumeDialog = false
+                            pendingResume = null
+                        }
+                        .padding(horizontal = 14.dp, vertical = 10.dp)
+                )
+            }
+        )
+    }
+
     if (showTimeUpDialog) {
         AlertDialog(
             onDismissRequest = { },
@@ -852,7 +1001,11 @@ fun DartsTrainerApp() {
                 color = Color.White.copy(alpha = 0.85f), fontSize = 14.sp
             ) } },
             confirmButton = { TextButton(onClick = {
-                showTimeUpDialog = false; resetTrainingState(); autoOpenTimeDialog = false; screen = "training"
+                showTimeUpDialog = false
+                resetTrainingState()
+                TrainingStateStorage.clear(context)
+                autoOpenTimeDialog = false
+                screen = "training"
             }) { Text("Закончить", color = ErrorColor, fontWeight = FontWeight.Bold) } },
             dismissButton = { TextButton(onClick = {
                 showTimeUpDialog = false; trainingMinutes += 20
@@ -861,11 +1014,6 @@ fun DartsTrainerApp() {
     }
 }
 
-/**
- * Запуск конкретного упражнения основной части.
- *
- * Возвращает результат через onFinish(blockType, score, dartsThrown).
- */
 @Composable
 private fun MainExerciseRunner(
     exerciseId: String,
