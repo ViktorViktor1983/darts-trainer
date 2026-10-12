@@ -12,7 +12,6 @@ import kotlin.math.roundToInt
  *   3. Правило: не более 50% времени основной части на слабое место.
  *
  * Программа НЕ зависит от желаний игрока. Игрок идёт по плану тренера.
- * Хочет «просто поиграть» — идёт в раздел «Просто поиграть».
  */
 object TrainingPlanner {
 
@@ -61,16 +60,13 @@ object TrainingPlanner {
         val postponedDoubles: List<Int>
     )
 
-    /**
-     * Динамически выбранное упражнение основной части.
-     */
     data class PlannedDynamicExercise(
         val id: String,
         val minutes: Int
     )
 
     // ─────────────────────────────────────────────
-    // ГЛАВНАЯ ФУНКЦИЯ (пока не используется в UI)
+    // ГЛАВНАЯ ФУНКЦИЯ
     // ─────────────────────────────────────────────
 
     fun buildPlan(
@@ -160,15 +156,22 @@ object TrainingPlanner {
      * Подобрать упражнения основной части на день.
      *
      * Логика:
-     *   1. Первым идёт упражнение на слабое место (из анализа).
-     *   2. Дальше — остальные 5 упражнений в порядке полезности.
-     *   3. Учитываем бюджет времени и реальный темп игрока (avgMinutesByExercise).
-     *   4. Правило «не более 50% на слабое место»: одно упражнение на слабое —
-     *      это максимум 1 из 3-4, то есть ≤50%.
+     *   1. Для каждого типа слабости — свой порядок предпочтения упражнений.
+     *      Первое — главное на слабое место. Дальше — остальные по полезности.
+     *   2. Учитывается реальный темп игрока (avgMinutesByExercise).
+     *   3. Правило «не более 50% на слабое место»: обычно 1–2 упражнения
+     *      из 3–5 попадают в зону слабости.
+     *   4. Учитывается бюджет времени — набираем упражнения, пока хватает.
      *
-     * @param analysis  результат TrainingStatsAnalyzer.analyze()
-     * @param budgetMinutes  сколько минут доступно на основную часть
-     * @return список id + минуты, в порядке прохождения
+     * Карта «упражнение → какие параметры тренирует»:
+     *   aroundclock_doubles    → DOUBLES
+     *   aroundclock_sectors    → ACCURACY
+     *   aroundclock_trebles    → TREBLES
+     *   sector20               → SCORE
+     *   scoreset               → SCORE
+     *   biground               → ACCURACY + TREBLES
+     *   game501                → SCORE + DOUBLES
+     *   cricket                → ACCURACY + TREBLES
      */
     fun buildDynamicMainExerciseIds(
         analysis: TrainingStatsAnalyzer.TrainingAnalysis,
@@ -176,17 +179,60 @@ object TrainingPlanner {
     ): List<PlannedDynamicExercise> {
         if (budgetMinutes <= 0) return emptyList()
 
-        // Все 6 упражнений основной части (в порядке приоритета показа)
-        val allIds = listOf(
-            "aroundclock_doubles",
-            "sector20",
-            "aroundclock_sectors",
-            "scoreset",
-            "biground",
-            "aroundclock_trebles"
-        )
+        // Порядок предпочтения по слабому месту
+        val preferenceOrder: List<String> = when (analysis.weakestType) {
+            WeaknessType.DOUBLES -> listOf(
+                "aroundclock_doubles",
+                "game501",
+                "biground",
+                "sector20",
+                "scoreset",
+                "aroundclock_sectors",
+                "aroundclock_trebles",
+                "cricket"
+            )
+            WeaknessType.SCORE -> listOf(
+                "sector20",
+                "game501",
+                "scoreset",
+                "biground",
+                "aroundclock_doubles",
+                "aroundclock_sectors",
+                "aroundclock_trebles",
+                "cricket"
+            )
+            WeaknessType.ACCURACY -> listOf(
+                "aroundclock_sectors",
+                "cricket",
+                "biground",
+                "sector20",
+                "aroundclock_trebles",
+                "scoreset",
+                "aroundclock_doubles",
+                "game501"
+            )
+            WeaknessType.TREBLES -> listOf(
+                "aroundclock_trebles",
+                "cricket",
+                "biground",
+                "aroundclock_sectors",
+                "sector20",
+                "scoreset",
+                "aroundclock_doubles",
+                "game501"
+            )
+            null -> listOf(
+                "aroundclock_doubles",
+                "sector20",
+                "aroundclock_sectors",
+                "scoreset",
+                "biground",
+                "aroundclock_trebles",
+                "game501",
+                "cricket"
+            )
+        }
 
-        // Стандартные минуты — если темпа ещё нет
         fun fallbackMinutes(id: String): Int = when (id) {
             "aroundclock_doubles" -> 14
             "aroundclock_sectors" -> 12
@@ -194,34 +240,20 @@ object TrainingPlanner {
             "sector20" -> 8
             "scoreset" -> 6
             "biground" -> 12
+            "game501" -> 18
+            "cricket" -> 12
             else -> 10
         }
 
-        // Реальные минуты с учётом темпа
         fun minutesFor(id: String): Int {
             val tempo = analysis.avgMinutesByExercise[id]
             val value = if (tempo != null && tempo > 0f) tempo.roundToInt() else fallbackMinutes(id)
             return value.coerceAtLeast(3)
         }
 
-        // Главное упражнение — на слабое место
-        val mainFocusId = when (analysis.weakestType) {
-            WeaknessType.DOUBLES -> "aroundclock_doubles"
-            WeaknessType.SCORE -> "sector20"
-            WeaknessType.ACCURACY -> "aroundclock_sectors"
-            WeaknessType.TREBLES -> "aroundclock_trebles"
-            null -> "aroundclock_doubles"
-        }
-
-        // Упорядоченный список: сначала главное, потом остальные
-        val orderedIds = mutableListOf<String>()
-        orderedIds.add(mainFocusId)
-        allIds.forEach { if (it != mainFocusId) orderedIds.add(it) }
-
-        // Набираем по бюджету
         var remaining = budgetMinutes
         val result = mutableListOf<PlannedDynamicExercise>()
-        for (id in orderedIds) {
+        for (id in preferenceOrder) {
             val m = minutesFor(id)
             if (m <= remaining) {
                 result.add(PlannedDynamicExercise(id, m))
