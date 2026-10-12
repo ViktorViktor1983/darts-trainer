@@ -17,12 +17,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
  * База данных тренировочного раздела.
  *
  * Версия 2 (12.10.2026) — добавлена колонка duration_seconds в exercise_results.
- * Миграция 1 → 2 сохраняет старые данные.
  */
-
-// ============================================================
-// ENTITY — ТАБЛИЦЫ
-// ============================================================
 
 @Entity(tableName = "training_sessions")
 data class TrainingSessionEntity(
@@ -98,7 +93,7 @@ data class ControlMatchEntity(
 )
 
 // ============================================================
-// DAO — ЗАПРОСЫ К ТАБЛИЦАМ
+// DAO
 // ============================================================
 
 @Dao
@@ -123,6 +118,9 @@ interface TrainingSessionDao {
 
     @Query("SELECT * FROM training_sessions ORDER BY dateMillis DESC")
     suspend fun getAll(): List<TrainingSessionEntity>
+
+    @Query("DELETE FROM training_sessions")
+    suspend fun clearAll()
 }
 
 @Dao
@@ -138,6 +136,9 @@ interface ExerciseResultDao {
 
     @Query("DELETE FROM exercise_results WHERE sessionId = :sessionId")
     suspend fun deleteBySession(sessionId: Long)
+
+    @Query("DELETE FROM exercise_results")
+    suspend fun clearAll()
 }
 
 @Dao
@@ -156,6 +157,9 @@ interface PostponedDoubleDao {
 
     @Query("SELECT * FROM postponed_doubles ORDER BY lastPostponedAt DESC")
     suspend fun getAll(): List<PostponedDoubleEntity>
+
+    @Query("DELETE FROM postponed_doubles")
+    suspend fun clearAll()
 }
 
 @Dao
@@ -168,6 +172,9 @@ interface WeaknessSnapshotDao {
 
     @Query("SELECT * FROM weakness_snapshots ORDER BY id DESC LIMIT :limit")
     suspend fun getLatest(limit: Int): List<WeaknessSnapshotEntity>
+
+    @Query("DELETE FROM weakness_snapshots")
+    suspend fun clearAll()
 }
 
 @Dao
@@ -180,6 +187,9 @@ interface PotentialSnapshotDao {
 
     @Query("SELECT * FROM potential_snapshots ORDER BY timestamp DESC LIMIT :limit")
     suspend fun getLatest(limit: Int): List<PotentialSnapshotEntity>
+
+    @Query("DELETE FROM potential_snapshots")
+    suspend fun clearAll()
 }
 
 @Dao
@@ -192,6 +202,9 @@ interface ControlMatchDao {
 
     @Query("SELECT * FROM control_matches ORDER BY timestamp DESC")
     suspend fun getAll(): List<ControlMatchEntity>
+
+    @Query("DELETE FROM control_matches")
+    suspend fun clearAll()
 }
 
 // ============================================================
@@ -222,7 +235,6 @@ abstract class TrainingDatabase : RoomDatabase() {
         @Volatile
         private var INSTANCE: TrainingDatabase? = null
 
-        // Миграция 1 → 2: добавлена колонка duration_seconds.
         private val MIGRATION_1_2 = object : Migration(1, 2) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL(
@@ -347,10 +359,22 @@ class TrainingRepository(private val db: TrainingDatabase) {
     suspend fun getAllControlMatches(): List<ControlMatch> {
         return db.controlDao().getAll().map { it.toModel() }
     }
+
+    // ---------- Полный сброс ----------
+
+    /** Удалить все данные тренировочного раздела. */
+    suspend fun clearAllTrainingData() {
+        db.exerciseDao().clearAll()
+        db.sessionDao().clearAll()
+        db.postponedDao().clearAll()
+        db.weaknessDao().clearAll()
+        db.potentialDao().clearAll()
+        db.controlDao().clearAll()
+    }
 }
 
 // ============================================================
-// КОНВЕРТЕРЫ Entity <-> Model
+// КОНВЕРТЕРЫ
 // ============================================================
 
 private fun TrainingSession.toEntity() = TrainingSessionEntity(
