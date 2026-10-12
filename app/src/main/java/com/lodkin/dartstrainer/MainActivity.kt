@@ -60,9 +60,11 @@ import com.lodkin.dartstrainer.data.training.ExerciseResult
 import com.lodkin.dartstrainer.data.training.TrainingBlocksStorage
 import com.lodkin.dartstrainer.data.training.TrainingDatabase
 import com.lodkin.dartstrainer.data.training.TrainingMode
+import com.lodkin.dartstrainer.data.training.TrainingPlanner
 import com.lodkin.dartstrainer.data.training.TrainingRepository
 import com.lodkin.dartstrainer.data.training.TrainingSession
 import com.lodkin.dartstrainer.data.training.TrainingStateStorage
+import com.lodkin.dartstrainer.data.training.TrainingStatsAnalyzer
 import com.lodkin.dartstrainer.data.training.WeaknessType
 import com.lodkin.dartstrainer.theme.Accent
 import com.lodkin.dartstrainer.theme.DarkBg
@@ -241,7 +243,6 @@ fun DartsTrainerApp() {
     var blockExerciseId by remember { mutableStateOf<String?>(null) }
     var extraGameId by remember { mutableStateOf<String?>(null) }
 
-    // Время старта текущего упражнения
     var exerciseStartMillis by remember { mutableStateOf(0L) }
 
     var showResumeDialog by remember { mutableStateOf(false) }
@@ -467,15 +468,17 @@ fun DartsTrainerApp() {
                             .getSharedPreferences("training_prefs", android.content.Context.MODE_PRIVATE)
                             .getInt("session_minutes", SettingsStorage.getTrainingMinutes(context))
                         scope.launch {
-                            val snap = trainingRepository.getLastPotential()
-                            currentWeakness = snap?.weakestType
+                            // ── Мозги: анализ накопленных данных ──
+                            val analysis = TrainingStatsAnalyzer.analyze(trainingRepository)
+                            currentWeakness = analysis.weakestType
+
                             val session = TrainingSession(
                                 dateMillis = System.currentTimeMillis(),
                                 plannedMinutes = trainingMinutes,
                                 actualMinutes = 0,
-                                levelAtStart = snap?.level ?: 1,
+                                levelAtStart = analysis.level,
                                 mode = TrainingMode.FLEXIBLE,
-                                focus = snap?.weakestType,
+                                focus = analysis.weakestType,
                                 isControl = false,
                                 isCompleted = false
                             )
@@ -484,7 +487,21 @@ fun DartsTrainerApp() {
                             trainingPaused = false
                             showTimeUpDialog = false
 
-                            mainExercises = defaultMainExercises()
+                            // ── Динамический выбор упражнений основной части ──
+                            mainExercises = if (analysis.hasEnoughData) {
+                                val budgetMain = (trainingMinutes * 0.75).toInt().coerceAtLeast(15)
+                                val dynamicIds = TrainingPlanner.buildDynamicMainExerciseIds(
+                                    analysis = analysis,
+                                    budgetMinutes = budgetMain
+                                )
+                                val baseMap = defaultMainExercises().associateBy { it.id }
+                                dynamicIds
+                                    .mapNotNull { d -> baseMap[d.id]?.copy(minutes = d.minutes) }
+                                    .ifEmpty { defaultMainExercises() }
+                            } else {
+                                defaultMainExercises()
+                            }
+
                             psychologyExercises = if (TrainingBlocksStorage.isPsychologyEnabled(context))
                                 defaultPsychologyExercises() else emptyList()
                             strengthExercises = if (TrainingBlocksStorage.isStrengthEnabled(context))
