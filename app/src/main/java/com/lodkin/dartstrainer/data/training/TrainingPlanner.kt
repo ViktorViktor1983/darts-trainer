@@ -1,14 +1,15 @@
 package com.lodkin.dartstrainer.data.training
 
+import kotlin.math.roundToInt
+
 /**
  * Генератор программы тренировки на день.
  *
- * Логика:
- *   1. Берёт слабости из WeaknessDetector.
- *   2. Строит структуру: разминка → блок 1 → блок 2 → блок 3 → силовые.
- *   3. Распределяет время по минутам в зависимости от выбранной длительности.
- *   4. Учитывает отложенные даблы (возвращаются в начале тренировки).
- *   5. Учитывает контрольную тренировку (каждая 10-я).
+ * Основные задачи:
+ *   1. Динамический выбор упражнений основной части на основе анализа данных
+ *      (слабое место + реальный темп игрока).
+ *   2. Разминка и вспомогательные блоки — по фиксированной логике.
+ *   3. Правило: не более 50% времени основной части на слабое место.
  *
  * Программа НЕ зависит от желаний игрока. Игрок идёт по плану тренера.
  * Хочет «просто поиграть» — идёт в раздел «Просто поиграть».
@@ -19,37 +20,31 @@ object TrainingPlanner {
     // МОДЕЛИ ПЛАНА
     // ─────────────────────────────────────────────
 
-    /**
-     * Что за упражнение в блоке.
-     */
     enum class ExerciseKind {
-        WARMUP_MUSCLES,       // Разминка: мышцы
-        WARMUP_TRAJECTORY,    // Разминка: траектория
-        WARMUP_ACCURACY,      // Разминка: кучность
-        WARMUP_AIM,           // Разминка: прицеливание
+        WARMUP_MUSCLES,
+        WARMUP_TRAJECTORY,
+        WARMUP_ACCURACY,
+        WARMUP_AIM,
 
-        DOUBLES_ROUNDS,       // Раунды на удвоения (D1..D20 + Bull)
-        DOUBLES_TARGETED,     // Точечная тренировка 2-3 слабых даблов
-        DOUBLES_POSTPONED,    // Возврат отложенных даблов
+        DOUBLES_ROUNDS,
+        DOUBLES_TARGETED,
+        DOUBLES_POSTPONED,
 
-        SECTOR_20,            // Сектор 20 (30 дротиков)
-        SECTOR_19,            // Сектор 19 (30 дротиков)
-        SCORE_SET,            // Набор очков (10 подходов × 3)
+        SECTOR_20,
+        SECTOR_19,
+        SCORE_SET,
 
-        AROUND_CLOCK_SECTORS, // Кругосветка: Сектора
-        AROUND_CLOCK_DOUBLES, // Кругосветка: Удвоения
-        AROUND_CLOCK_TREBLES, // Кругосветка: Утроения
+        AROUND_CLOCK_SECTORS,
+        AROUND_CLOCK_DOUBLES,
+        AROUND_CLOCK_TREBLES,
 
-        GAME_501,             // Партия 501
-        GAME_CRICKET,         // Партия Крикет
-        GAME_ANY,             // Игрок выбирает из 6 игр
+        GAME_501,
+        GAME_CRICKET,
+        GAME_ANY,
 
-        STRENGTH              // Силовые упражнения
+        STRENGTH
     }
 
-    /**
-     * Один блок в тренировке.
-     */
     data class TrainingBlock(
         val kind: ExerciseKind,
         val title: String,
@@ -58,29 +53,26 @@ object TrainingPlanner {
         val isMainFocus: Boolean = false
     )
 
-    /**
-     * Готовый план тренировки.
-     */
     data class TrainingPlan(
         val blocks: List<TrainingBlock>,
         val totalMinutes: Int,
-        val focus: WeaknessType?,       // Главное слабое место
-        val isControl: Boolean,         // Это контрольная тренировка?
-        val postponedDoubles: List<Int> // Какие даблы вернуть
+        val focus: WeaknessType?,
+        val isControl: Boolean,
+        val postponedDoubles: List<Int>
+    )
+
+    /**
+     * Динамически выбранное упражнение основной части.
+     */
+    data class PlannedDynamicExercise(
+        val id: String,
+        val minutes: Int
     )
 
     // ─────────────────────────────────────────────
-    // ГЛАВНАЯ ФУНКЦИЯ
+    // ГЛАВНАЯ ФУНКЦИЯ (пока не используется в UI)
     // ─────────────────────────────────────────────
 
-    /**
-     * Построить план тренировки на день.
-     *
-     * @param weaknesses     результат WeaknessDetector
-     * @param minutes        общая длительность (30 / 45 / 60 / 80 / 100 / 120)
-     * @param isControl      это контрольная тренировка?
-     * @param postponedDoubles список номеров отложенных даблов (пусто — нет)
-     */
     fun buildPlan(
         weaknesses: WeaknessDetector.WeaknessResult,
         minutes: Int,
@@ -88,7 +80,6 @@ object TrainingPlanner {
         postponedDoubles: List<Int> = emptyList()
     ): TrainingPlan {
 
-        // Контрольная — отдельная программа
         if (isControl) {
             return buildControlPlan(minutes)
         }
@@ -96,12 +87,10 @@ object TrainingPlanner {
         val blocks = mutableListOf<TrainingBlock>()
         var remaining = minutes
 
-        // ── 1. Разминка (4 фазы) ──
         val warmup = buildWarmup(minutes)
         blocks.addAll(warmup)
         remaining -= warmup.sumOf { it.minutes }
 
-        // ── 2. Отложенные даблы (если есть) ──
         if (postponedDoubles.isNotEmpty() && remaining > 0) {
             val minPostponed = minOf(remaining, postponedDoubles.size * 5)
             blocks.add(
@@ -116,7 +105,6 @@ object TrainingPlanner {
             remaining -= minPostponed
         }
 
-        // ── 3. Блок 1 — главная слабость ──
         val main = weaknesses.mainWeakness
         if (main != null && remaining > 0) {
             val timeMain = (remaining * 0.5).toInt().coerceAtLeast(10)
@@ -124,7 +112,6 @@ object TrainingPlanner {
             remaining -= timeMain
         }
 
-        // ── 4. Блок 2 — вторая слабость (если время) ──
         val second = weaknesses.weaknesses.getOrNull(1)
         if (second != null && remaining >= 15) {
             val timeSecond = (remaining * 0.5).toInt().coerceAtLeast(10)
@@ -132,7 +119,6 @@ object TrainingPlanner {
             remaining -= timeSecond
         }
 
-        // ── 5. Блок 3 — игра на разнообразие ──
         if (remaining >= 10) {
             val gameTime = minOf(remaining - 5, 30)
             if (gameTime >= 10) {
@@ -148,7 +134,6 @@ object TrainingPlanner {
             }
         }
 
-        // ── 6. Силовые (всегда) ──
         blocks.add(
             TrainingBlock(
                 kind = ExerciseKind.STRENGTH,
@@ -168,12 +153,89 @@ object TrainingPlanner {
     }
 
     // ─────────────────────────────────────────────
-    // РАЗМИНКА
+    // ДИНАМИЧЕСКИЙ ВЫБОР УПРАЖНЕНИЙ ОСНОВНОЙ ЧАСТИ
     // ─────────────────────────────────────────────
 
     /**
-     * Разминка. Разное время для коротких и длинных тренировок.
+     * Подобрать упражнения основной части на день.
+     *
+     * Логика:
+     *   1. Первым идёт упражнение на слабое место (из анализа).
+     *   2. Дальше — остальные 5 упражнений в порядке полезности.
+     *   3. Учитываем бюджет времени и реальный темп игрока (avgMinutesByExercise).
+     *   4. Правило «не более 50% на слабое место»: одно упражнение на слабое —
+     *      это максимум 1 из 3-4, то есть ≤50%.
+     *
+     * @param analysis  результат TrainingStatsAnalyzer.analyze()
+     * @param budgetMinutes  сколько минут доступно на основную часть
+     * @return список id + минуты, в порядке прохождения
      */
+    fun buildDynamicMainExerciseIds(
+        analysis: TrainingStatsAnalyzer.TrainingAnalysis,
+        budgetMinutes: Int
+    ): List<PlannedDynamicExercise> {
+        if (budgetMinutes <= 0) return emptyList()
+
+        // Все 6 упражнений основной части (в порядке приоритета показа)
+        val allIds = listOf(
+            "aroundclock_doubles",
+            "sector20",
+            "aroundclock_sectors",
+            "scoreset",
+            "biground",
+            "aroundclock_trebles"
+        )
+
+        // Стандартные минуты — если темпа ещё нет
+        fun fallbackMinutes(id: String): Int = when (id) {
+            "aroundclock_doubles" -> 14
+            "aroundclock_sectors" -> 12
+            "aroundclock_trebles" -> 12
+            "sector20" -> 8
+            "scoreset" -> 6
+            "biground" -> 12
+            else -> 10
+        }
+
+        // Реальные минуты с учётом темпа
+        fun minutesFor(id: String): Int {
+            val tempo = analysis.avgMinutesByExercise[id]
+            val value = if (tempo != null && tempo > 0f) tempo.roundToInt() else fallbackMinutes(id)
+            return value.coerceAtLeast(3)
+        }
+
+        // Главное упражнение — на слабое место
+        val mainFocusId = when (analysis.weakestType) {
+            WeaknessType.DOUBLES -> "aroundclock_doubles"
+            WeaknessType.SCORE -> "sector20"
+            WeaknessType.ACCURACY -> "aroundclock_sectors"
+            WeaknessType.TREBLES -> "aroundclock_trebles"
+            null -> "aroundclock_doubles"
+        }
+
+        // Упорядоченный список: сначала главное, потом остальные
+        val orderedIds = mutableListOf<String>()
+        orderedIds.add(mainFocusId)
+        allIds.forEach { if (it != mainFocusId) orderedIds.add(it) }
+
+        // Набираем по бюджету
+        var remaining = budgetMinutes
+        val result = mutableListOf<PlannedDynamicExercise>()
+        for (id in orderedIds) {
+            val m = minutesFor(id)
+            if (m <= remaining) {
+                result.add(PlannedDynamicExercise(id, m))
+                remaining -= m
+            }
+        }
+
+        return result
+    }
+
+    // ─────────────────────────────────────────────
+    // РАЗМИНКА
+    // ─────────────────────────────────────────────
+
     private fun buildWarmup(totalMinutes: Int): List<TrainingBlock> {
         val long = totalMinutes >= 100
         val traj = if (long) 2 else 1
@@ -208,7 +270,7 @@ object TrainingPlanner {
     }
 
     // ─────────────────────────────────────────────
-    // БЛОК 1 — ГЛАВНАЯ СЛАБОСТЬ
+    // БЛОКИ
     // ─────────────────────────────────────────────
 
     private fun buildMainBlock(type: WeaknessType, minutes: Int): TrainingBlock {
@@ -244,10 +306,6 @@ object TrainingPlanner {
         }
     }
 
-    // ─────────────────────────────────────────────
-    // БЛОК 2 — ВТОРАЯ СЛАБОСТЬ
-    // ─────────────────────────────────────────────
-
     private fun buildSecondBlock(type: WeaknessType, minutes: Int): TrainingBlock {
         return when (type) {
             WeaknessType.DOUBLES -> TrainingBlock(
@@ -277,10 +335,6 @@ object TrainingPlanner {
         }
     }
 
-    // ─────────────────────────────────────────────
-    // ОПИСАНИЕ ИГРОВОГО БЛОКА
-    // ─────────────────────────────────────────────
-
     private fun buildGameDescription(focus: WeaknessType?): String {
         return when (focus) {
             WeaknessType.DOUBLES ->
@@ -300,10 +354,6 @@ object TrainingPlanner {
     // КОНТРОЛЬНАЯ ТРЕНИРОВКА
     // ─────────────────────────────────────────────
 
-    /**
-     * Контрольная тренировка — отдельная программа.
-     * 5 упражнений: Большой раунд, Сектор 20, Набор очков, 501, Крикет.
-     */
     private fun buildControlPlan(minutes: Int): TrainingPlan {
         val blocks = mutableListOf<TrainingBlock>()
 
@@ -377,17 +427,11 @@ object TrainingPlanner {
     // ХЕЛПЕРЫ
     // ─────────────────────────────────────────────
 
-    /**
-     * Каждые 10 тренировок — контрольная.
-     */
     fun isControlSession(completedCount: Int): Boolean {
         if (completedCount <= 0) return false
         return completedCount % 10 == 0
     }
 
-    /**
-     * Определить, сколько тренировок осталось до контрольной.
-     */
     fun sessionsUntilControl(completedCount: Int): Int {
         val remainder = completedCount % 10
         return if (remainder == 0) 10 else 10 - remainder
