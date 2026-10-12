@@ -10,14 +10,14 @@ import androidx.room.Query
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.Update
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 
 /**
  * База данных тренировочного раздела.
  *
- * Здесь: Entity (таблицы) + Dao (запросы) + Database + Repository.
- * Всё в одном файле — как принято в проекте.
- *
- * Версия 1. Если понадобится менять структуру — версия +1 и миграция.
+ * Версия 2 (12.10.2026) — добавлена колонка duration_seconds в exercise_results.
+ * Миграция 1 → 2 сохраняет старые данные.
  */
 
 // ============================================================
@@ -31,8 +31,8 @@ data class TrainingSessionEntity(
     val plannedMinutes: Int,
     val actualMinutes: Int,
     val levelAtStart: Int,
-    val mode: String,               // TrainingMode.name
-    val focus: String?,             // WeaknessType.name, может быть null
+    val mode: String,
+    val focus: String?,
     val isControl: Boolean,
     val isCompleted: Boolean
 )
@@ -41,11 +41,12 @@ data class TrainingSessionEntity(
 data class ExerciseResultEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0L,
     val sessionId: Long,
-    val blockType: String,          // BlockType.name
+    val blockType: String,
     val exerciseId: String,
     val score: Int,
     val dartsThrown: Int,
     val timestamp: Long,
+    val durationSeconds: Int = 0,
     val detailsJson: String = ""
 )
 
@@ -53,7 +54,7 @@ data class ExerciseResultEntity(
 data class PostponedDoubleEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0L,
     val sessionId: Long,
-    val doubleNumber: Int,          // 1..20, 21 = Bull
+    val doubleNumber: Int,
     val postponedCount: Int,
     val lastPostponedAt: Long,
     val isResolved: Boolean
@@ -63,7 +64,7 @@ data class PostponedDoubleEntity(
 data class WeaknessSnapshotEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0L,
     val sessionId: Long,
-    val type: String,               // WeaknessType.name
+    val type: String,
     val currentValue: Float,
     val normValue: Float,
     val priority: Int
@@ -75,7 +76,7 @@ data class PotentialSnapshotEntity(
     val sessionId: Long,
     val level: Int,
     val potential: Int,
-    val weakestType: String,        // WeaknessType.name
+    val weakestType: String,
     val scoreValue: Float,
     val doublesValue: Float,
     val accuracyValue: Float,
@@ -87,7 +88,7 @@ data class PotentialSnapshotEntity(
 data class ControlMatchEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0L,
     val sessionId: Long,
-    val gameType: String,           // ControlGameType.name
+    val gameType: String,
     val botLevel: Int,
     val playerWon: Boolean,
     val playerScore: Float,
@@ -206,7 +207,7 @@ interface ControlMatchDao {
         PotentialSnapshotEntity::class,
         ControlMatchEntity::class
     ],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 abstract class TrainingDatabase : RoomDatabase() {
@@ -221,28 +222,34 @@ abstract class TrainingDatabase : RoomDatabase() {
         @Volatile
         private var INSTANCE: TrainingDatabase? = null
 
+        // Миграция 1 → 2: добавлена колонка duration_seconds.
+        private val MIGRATION_1_2 = object : Migration(1, 2) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "ALTER TABLE exercise_results ADD COLUMN durationSeconds INTEGER NOT NULL DEFAULT 0"
+                )
+            }
+        }
+
         fun getInstance(context: Context): TrainingDatabase {
             return INSTANCE ?: synchronized(this) {
                 INSTANCE ?: Room.databaseBuilder(
                     context.applicationContext,
                     TrainingDatabase::class.java,
                     "training_database"
-                ).build().also { INSTANCE = it }
+                )
+                    .addMigrations(MIGRATION_1_2)
+                    .build()
+                    .also { INSTANCE = it }
             }
         }
     }
 }
 
 // ============================================================
-// REPOSITORY — УДОБНАЯ ОБЁРТКА НАД DAO
+// REPOSITORY
 // ============================================================
 
-/**
- * Репозиторий работает с доменными моделями (TrainingSession, ExerciseResult и т.д.),
- * а внутри конвертирует их в Entity и обратно.
- *
- * Это значит, что экраны и логика работают с чистыми моделями, а не с таблицами.
- */
 class TrainingRepository(private val db: TrainingDatabase) {
 
     // ---------- Тренировочные сессии ----------
@@ -378,6 +385,7 @@ private fun ExerciseResult.toEntity() = ExerciseResultEntity(
     score = score,
     dartsThrown = dartsThrown,
     timestamp = timestamp,
+    durationSeconds = durationSeconds,
     detailsJson = detailsJson
 )
 
@@ -389,6 +397,7 @@ private fun ExerciseResultEntity.toModel() = ExerciseResult(
     score = score,
     dartsThrown = dartsThrown,
     timestamp = timestamp,
+    durationSeconds = durationSeconds,
     detailsJson = detailsJson
 )
 
