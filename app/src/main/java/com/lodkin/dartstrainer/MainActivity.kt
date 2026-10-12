@@ -249,7 +249,6 @@ fun DartsTrainerApp() {
 
     var exerciseStartMillis by remember { mutableStateOf(0L) }
 
-    // Флаги «мы запустили 501/Крикет из тренировки» — чтобы после партии вернуться в тренировку
     var isTraining501 by remember { mutableStateOf(false) }
     var isTrainingCricket by remember { mutableStateOf(false) }
 
@@ -370,7 +369,6 @@ fun DartsTrainerApp() {
         TrainingBlockPhase.FINISHED -> defaultMainBlockItems(recommendedIds)
     }
 
-    /** Закончить текущее упражнение основной части и перейти к следующему */
     fun finishCurrentMainExercise() {
         exerciseStatuses = exerciseStatuses.toMutableMap().apply {
             put(currentExerciseIndex, SummaryStatus.DONE)
@@ -606,7 +604,6 @@ fun DartsTrainerApp() {
                             if (currentPhase == TrainingBlockPhase.MAIN && current != null) {
                                 when (current.id) {
                                     "game501" -> {
-                                        // Запускаем 501 против бота
                                         val playerName = SettingsStorage.getPlayerName(context)
                                             .ifBlank { "Игрок" }
                                         val botLevel = TrainingBotLevelStorage.getLevel501(context, currentLevel)
@@ -945,10 +942,9 @@ fun DartsTrainerApp() {
                         repository = cricketRepository, initialGame = g, existingId = cricketExistingId,
                         onGameFinish = { f, id ->
                             if (isTrainingCricket) {
-                                // Результат — в тренировочную БД, не в игровую
                                 val playerWon = f.winnerIndex == 0
                                 val player = f.players.getOrNull(0)
-                                val ppr = player?.let { p ->
+                                val mpr = player?.let { p ->
                                     if (p.matchDartsThrown > 0) {
                                         val marks = p.matchHits.values.sum().toFloat()
                                         marks / (p.matchDartsThrown / 3f)
@@ -966,7 +962,7 @@ fun DartsTrainerApp() {
                                             sessionId = trainingSessionId,
                                             blockType = BlockType.CRICKET,
                                             exerciseId = "cricket",
-                                            score = ppr.toInt(),
+                                            score = mpr.toInt(),
                                             dartsThrown = player?.matchDartsThrown ?: 0,
                                             timestamp = System.currentTimeMillis(),
                                             durationSeconds = dur,
@@ -1036,7 +1032,7 @@ fun DartsTrainerApp() {
                                             blockType = BlockType.GAME_501,
                                             exerciseId = "game501",
                                             score = ppr.toInt(),
-                                            dartsThrown = player?.matchDartsThrown ?: 0,
+                                            dartsThrown = player?.matchDarts ?: 0,
                                             timestamp = System.currentTimeMillis(),
                                             durationSeconds = dur,
                                             detailsJson = "won=$playerWon"
