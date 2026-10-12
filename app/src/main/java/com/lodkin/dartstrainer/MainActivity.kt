@@ -58,6 +58,7 @@ import com.lodkin.dartstrainer.data.sector.SectorRepository
 import com.lodkin.dartstrainer.data.training.BlockType
 import com.lodkin.dartstrainer.data.training.ExerciseResult
 import com.lodkin.dartstrainer.data.training.TrainingBlocksStorage
+import com.lodkin.dartstrainer.data.training.TrainingBotLevelStorage
 import com.lodkin.dartstrainer.data.training.TrainingDatabase
 import com.lodkin.dartstrainer.data.training.TrainingMode
 import com.lodkin.dartstrainer.data.training.TrainingPlanner
@@ -241,11 +242,16 @@ fun DartsTrainerApp() {
     var currentExerciseIndex by remember { mutableStateOf(0) }
     var exerciseStatuses by remember { mutableStateOf<Map<Int, SummaryStatus>>(emptyMap()) }
     var currentWeakness by remember { mutableStateOf<WeaknessType?>(null) }
+    var currentLevel by remember { mutableStateOf(1) }
 
     var blockExerciseId by remember { mutableStateOf<String?>(null) }
     var extraGameId by remember { mutableStateOf<String?>(null) }
 
     var exerciseStartMillis by remember { mutableStateOf(0L) }
+
+    // Флаги «мы запустили 501/Крикет из тренировки» — чтобы после партии вернуться в тренировку
+    var isTraining501 by remember { mutableStateOf(false) }
+    var isTrainingCricket by remember { mutableStateOf(false) }
 
     var showResumeDialog by remember { mutableStateOf(false) }
     var pendingResume by remember { mutableStateOf<TrainingStateStorage.Snapshot?>(null) }
@@ -305,6 +311,8 @@ fun DartsTrainerApp() {
         blockExerciseId = null
         extraGameId = null
         exerciseStartMillis = 0L
+        isTraining501 = false
+        isTrainingCricket = false
     }
 
     fun activePhases(): List<TrainingBlockPhase> {
@@ -360,6 +368,20 @@ fun DartsTrainerApp() {
         TrainingBlockPhase.PSYCHOLOGY -> psychologyExercises.map { BlockExerciseItem(it.id, it.title) }
         TrainingBlockPhase.STRENGTH -> strengthExercises.map { BlockExerciseItem(it.id, it.title) }
         TrainingBlockPhase.FINISHED -> defaultMainBlockItems(recommendedIds)
+    }
+
+    /** Закончить текущее упражнение основной части и перейти к следующему */
+    fun finishCurrentMainExercise() {
+        exerciseStatuses = exerciseStatuses.toMutableMap().apply {
+            put(currentExerciseIndex, SummaryStatus.DONE)
+        }
+        val list = exercisesForPhase(TrainingBlockPhase.MAIN)
+        if (currentExerciseIndex + 1 < list.size) {
+            currentExerciseIndex += 1
+            screen = "training_block"
+        } else {
+            screen = "training_summary"
+        }
     }
 
     BackHandler(enabled = stage == "main" && screen != "main") {
@@ -472,6 +494,7 @@ fun DartsTrainerApp() {
                         scope.launch {
                             val analysis = TrainingStatsAnalyzer.analyze(trainingRepository)
                             currentWeakness = analysis.weakestType
+                            currentLevel = analysis.level
 
                             val session = TrainingSession(
                                 dateMillis = System.currentTimeMillis(),
@@ -514,6 +537,8 @@ fun DartsTrainerApp() {
                             blockExerciseId = null
                             extraGameId = null
                             exerciseStartMillis = 0L
+                            isTraining501 = false
+                            isTrainingCricket = false
                             isTrainingActive = true
 
                             TrainingStateStorage.save(
@@ -577,7 +602,62 @@ fun DartsTrainerApp() {
                         currentIndex = currentExerciseIndex,
                         onStartCurrent = {
                             exerciseStartMillis = System.currentTimeMillis()
-                            screen = "training_exercise"
+                            val current = list.getOrNull(currentExerciseIndex)
+                            if (currentPhase == TrainingBlockPhase.MAIN && current != null) {
+                                when (current.id) {
+                                    "game501" -> {
+                                        // Запускаем 501 против бота
+                                        val playerName = SettingsStorage.getPlayerName(context)
+                                            .ifBlank { "Игрок" }
+                                        val botLevel = TrainingBotLevelStorage.getLevel501(context, currentLevel)
+                                        val players = listOf(
+                                            Player501(name = playerName, isBot = false, botLevel = 0, teamIndex = 0),
+                                            Player501(name = "Бот $botLevel", isBot = true, botLevel = botLevel, teamIndex = 1)
+                                        )
+                                        game501 = Game501Logic.newGame(
+                                            gameType = GameType.X501,
+                                            outMode = OutMode.DOUBLE_OUT,
+                                            players = players,
+                                            legsPerSet = 1,
+                                            setsPerMatch = 1,
+                                            isPairGame = false,
+                                            startingTeamIndex = 0,
+                                            autoOkSeconds = 0,
+                                            sessionStartTime = sessionStartTime,
+                                            sessionForm = sessionForm
+                                        )
+                                        game501ExistingId = 0L
+                                        isTraining501 = true
+                                        screen = "game501_game"
+                                    }
+                                    "cricket" -> {
+                                        val playerName = SettingsStorage.getPlayerName(context)
+                                            .ifBlank { "Игрок" }
+                                        val botLevel = TrainingBotLevelStorage.getLevelCricket(context, currentLevel)
+                                        val players = listOf(
+                                            CricketPlayer(name = playerName, isBot = false, botLevel = 0, teamIndex = 0),
+                                            CricketPlayer(name = "Бот $botLevel", isBot = true, botLevel = botLevel, teamIndex = 1)
+                                        )
+                                        cricketGame = CricketLogic.newGame(
+                                            type = CricketType.AMERICAN,
+                                            players = players,
+                                            legsPerSet = 1,
+                                            setsPerMatch = 1,
+                                            isPairGame = false,
+                                            startingTeamIndex = 0,
+                                            autoOkSeconds = 0,
+                                            sessionStartTime = sessionStartTime,
+                                            sessionForm = sessionForm
+                                        )
+                                        cricketExistingId = 0L
+                                        isTrainingCricket = true
+                                        screen = "cricket_game"
+                                    }
+                                    else -> screen = "training_exercise"
+                                }
+                            } else {
+                                screen = "training_exercise"
+                            }
                         },
                         onSkipCurrent = {
                             exerciseStatuses = exerciseStatuses.toMutableMap().apply {
@@ -702,9 +782,58 @@ fun DartsTrainerApp() {
                             }
                         },
                         onPlayExercise = { id ->
-                            blockExerciseId = id
-                            exerciseStartMillis = System.currentTimeMillis()
-                            screen = "training_block_exercise"
+                            if (id == "game501") {
+                                val playerName = SettingsStorage.getPlayerName(context)
+                                    .ifBlank { "Игрок" }
+                                val botLevel = TrainingBotLevelStorage.getLevel501(context, currentLevel)
+                                val players = listOf(
+                                    Player501(name = playerName, isBot = false, botLevel = 0, teamIndex = 0),
+                                    Player501(name = "Бот $botLevel", isBot = true, botLevel = botLevel, teamIndex = 1)
+                                )
+                                game501 = Game501Logic.newGame(
+                                    gameType = GameType.X501,
+                                    outMode = OutMode.DOUBLE_OUT,
+                                    players = players,
+                                    legsPerSet = 1,
+                                    setsPerMatch = 1,
+                                    isPairGame = false,
+                                    startingTeamIndex = 0,
+                                    autoOkSeconds = 0,
+                                    sessionStartTime = sessionStartTime,
+                                    sessionForm = sessionForm
+                                )
+                                game501ExistingId = 0L
+                                isTraining501 = true
+                                exerciseStartMillis = System.currentTimeMillis()
+                                screen = "game501_game"
+                            } else if (id == "cricket") {
+                                val playerName = SettingsStorage.getPlayerName(context)
+                                    .ifBlank { "Игрок" }
+                                val botLevel = TrainingBotLevelStorage.getLevelCricket(context, currentLevel)
+                                val players = listOf(
+                                    CricketPlayer(name = playerName, isBot = false, botLevel = 0, teamIndex = 0),
+                                    CricketPlayer(name = "Бот $botLevel", isBot = true, botLevel = botLevel, teamIndex = 1)
+                                )
+                                cricketGame = CricketLogic.newGame(
+                                    type = CricketType.AMERICAN,
+                                    players = players,
+                                    legsPerSet = 1,
+                                    setsPerMatch = 1,
+                                    isPairGame = false,
+                                    startingTeamIndex = 0,
+                                    autoOkSeconds = 0,
+                                    sessionStartTime = sessionStartTime,
+                                    sessionForm = sessionForm
+                                )
+                                cricketExistingId = 0L
+                                isTrainingCricket = true
+                                exerciseStartMillis = System.currentTimeMillis()
+                                screen = "cricket_game"
+                            } else {
+                                blockExerciseId = id
+                                exerciseStartMillis = System.currentTimeMillis()
+                                screen = "training_block_exercise"
+                            }
                         },
                         onPlayGame = { id ->
                             extraGameId = id
@@ -803,7 +932,9 @@ fun DartsTrainerApp() {
                             type, players, legsPerSet, setsPerMatch, isPairGame,
                             startingTeam, autoOkSeconds, sessionStartTime, sessionForm
                         )
-                        cricketExistingId = 0L; screen = "cricket_game"
+                        cricketExistingId = 0L
+                        isTrainingCricket = false
+                        screen = "cricket_game"
                     },
                     onBack = { screen = "game_select" }
                 )
@@ -813,10 +944,50 @@ fun DartsTrainerApp() {
                     if (g != null) CricketGameScreen(
                         repository = cricketRepository, initialGame = g, existingId = cricketExistingId,
                         onGameFinish = { f, id ->
-                            scope.launch { cricketRepository.saveGame(f, existingId = id) }
-                            cricketGame = f; cricketExistingId = 0L; screen = "cricket_stats"
+                            if (isTrainingCricket) {
+                                // Результат — в тренировочную БД, не в игровую
+                                val playerWon = f.winnerIndex == 0
+                                val player = f.players.getOrNull(0)
+                                val ppr = player?.let { p ->
+                                    if (p.matchDartsThrown > 0) {
+                                        val marks = p.matchHits.values.sum().toFloat()
+                                        marks / (p.matchDartsThrown / 3f)
+                                    } else 0f
+                                } ?: 0f
+                                val dur = if (exerciseStartMillis > 0L)
+                                    ((System.currentTimeMillis() - exerciseStartMillis) / 1000L).toInt()
+                                else 0
+                                exerciseStartMillis = 0L
+                                val botLevel = g.players.getOrNull(1)?.botLevel ?: 1
+                                TrainingBotLevelStorage.updateLevelCricket(context, botLevel, playerWon)
+                                scope.launch {
+                                    trainingRepository.insertExerciseResult(
+                                        ExerciseResult(
+                                            sessionId = trainingSessionId,
+                                            blockType = BlockType.CRICKET,
+                                            exerciseId = "cricket",
+                                            score = ppr.toInt(),
+                                            dartsThrown = player?.matchDartsThrown ?: 0,
+                                            timestamp = System.currentTimeMillis(),
+                                            durationSeconds = dur,
+                                            detailsJson = "won=$playerWon"
+                                        )
+                                    )
+                                }
+                                isTrainingCricket = false
+                                cricketGame = null
+                                cricketExistingId = 0L
+                                finishCurrentMainExercise()
+                            } else {
+                                scope.launch { cricketRepository.saveGame(f, existingId = id) }
+                                cricketGame = f; cricketExistingId = 0L; screen = "cricket_stats"
+                            }
                         },
-                        onBack = { cricketGame = null; cricketExistingId = 0L; screen = "game_select" }
+                        onBack = {
+                            isTrainingCricket = false
+                            cricketGame = null; cricketExistingId = 0L
+                            screen = "game_select"
+                        }
                     ) else screen = "cricket_setup"
                 }
 
@@ -836,7 +1007,9 @@ fun DartsTrainerApp() {
                             gameType, outMode, players, legsPerSet, setsPerMatch, isPairGame,
                             startingTeam, autoOkSeconds, sessionStartTime, sessionForm
                         )
-                        game501ExistingId = 0L; screen = "game501_game"
+                        game501ExistingId = 0L
+                        isTraining501 = false
+                        screen = "game501_game"
                     },
                     onBack = { screen = "game_select" }
                 )
@@ -846,10 +1019,44 @@ fun DartsTrainerApp() {
                     if (g != null) Game501Screen(
                         repository = game501Repository, initialGame = g, existingId = game501ExistingId,
                         onGameFinish = { f, id ->
-                            scope.launch { game501Repository.saveGame(f, existingId = id) }
-                            game501 = f; game501ExistingId = 0L; screen = "game501_stats"
+                            if (isTraining501) {
+                                val playerWon = f.winnerIndex == 0
+                                val player = f.players.getOrNull(0)
+                                val ppr = player?.let { p -> Game501Logic.matchPpr(p) } ?: 0.0
+                                val dur = if (exerciseStartMillis > 0L)
+                                    ((System.currentTimeMillis() - exerciseStartMillis) / 1000L).toInt()
+                                else 0
+                                exerciseStartMillis = 0L
+                                val botLevel = g.players.getOrNull(1)?.botLevel ?: 1
+                                TrainingBotLevelStorage.updateLevel501(context, botLevel, playerWon)
+                                scope.launch {
+                                    trainingRepository.insertExerciseResult(
+                                        ExerciseResult(
+                                            sessionId = trainingSessionId,
+                                            blockType = BlockType.GAME_501,
+                                            exerciseId = "game501",
+                                            score = ppr.toInt(),
+                                            dartsThrown = player?.matchDartsThrown ?: 0,
+                                            timestamp = System.currentTimeMillis(),
+                                            durationSeconds = dur,
+                                            detailsJson = "won=$playerWon"
+                                        )
+                                    )
+                                }
+                                isTraining501 = false
+                                game501 = null
+                                game501ExistingId = 0L
+                                finishCurrentMainExercise()
+                            } else {
+                                scope.launch { game501Repository.saveGame(f, existingId = id) }
+                                game501 = f; game501ExistingId = 0L; screen = "game501_stats"
+                            }
                         },
-                        onBack = { game501 = null; game501ExistingId = 0L; screen = "game_select" }
+                        onBack = {
+                            isTraining501 = false
+                            game501 = null; game501ExistingId = 0L
+                            screen = "game_select"
+                        }
                     ) else screen = "game501_setup"
                 }
 
@@ -1030,6 +1237,8 @@ fun DartsTrainerApp() {
                             autoOpenTimeDialog = false
                             showResumeDialog = false
                             exerciseStartMillis = 0L
+                            isTraining501 = false
+                            isTrainingCricket = false
 
                             screen = when (currentPhase) {
                                 TrainingBlockPhase.WARMUP -> "training_warmup"
