@@ -41,6 +41,7 @@ fun TrainingMenuScreen(
     autoOpenTimeDialog: Boolean,
     onStartTraining: () -> Unit,
     onOpenSettings: () -> Unit,
+    onOpenProgress: () -> Unit,
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
@@ -54,12 +55,10 @@ fun TrainingMenuScreen(
     var selectedMinutes by remember { mutableStateOf(defaultMinutes) }
     var openedSection by remember { mutableStateOf<TrainingSection?>(null) }
 
-    // Флаги блоков — перечитываются каждый раз при возврате на экран
     var warmupOn by remember { mutableStateOf(TrainingBlocksStorage.isWarmupEnabled(context)) }
     var psychologyOn by remember { mutableStateOf(TrainingBlocksStorage.isPsychologyEnabled(context)) }
     var strengthOn by remember { mutableStateOf(TrainingBlocksStorage.isStrengthEnabled(context)) }
 
-    // Перечитываем флаги при каждом возврате на экран (key можно увеличивать извне)
     LaunchedEffect(Unit) {
         warmupOn = TrainingBlocksStorage.isWarmupEnabled(context)
         psychologyOn = TrainingBlocksStorage.isPsychologyEnabled(context)
@@ -96,7 +95,7 @@ fun TrainingMenuScreen(
             .verticalScroll(rememberScrollState())
             .padding(16.dp)
     ) {
-        // ── Верхняя панель ──
+        // ── Верхняя панель: ← Назад + Тренировка + 📊 + ⚙ ──
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
@@ -118,7 +117,19 @@ fun TrainingMenuScreen(
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.weight(1f)
             )
-            // Кнопка настроек тренировки — акцентная
+            // Кнопка прогресса
+            Box(
+                modifier = Modifier
+                    .size(42.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(Accent.copy(alpha = 0.18f))
+                    .clickable { onOpenProgress() },
+                contentAlignment = Alignment.Center
+            ) {
+                Text("📊", fontSize = 20.sp)
+            }
+            Spacer(Modifier.width(8.dp))
+            // Кнопка настроек тренировки
             Box(
                 modifier = Modifier
                     .size(42.dp)
