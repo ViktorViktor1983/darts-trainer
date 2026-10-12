@@ -105,6 +105,7 @@ import com.lodkin.dartstrainer.ui.training.SummaryBlockType
 import com.lodkin.dartstrainer.ui.training.SummaryStatus
 import com.lodkin.dartstrainer.ui.training.TrainingBlockScreen
 import com.lodkin.dartstrainer.ui.training.TrainingMenuScreen
+import com.lodkin.dartstrainer.ui.training.TrainingProgressScreen
 import com.lodkin.dartstrainer.ui.training.TrainingSettingsScreen
 import com.lodkin.dartstrainer.ui.training.TrainingSummaryScreen
 import com.lodkin.dartstrainer.ui.training.TrainingTimerOverlay
@@ -125,6 +126,7 @@ private val PARENT_SCREEN: Map<String, String> = mapOf(
     "settings" to "main",
     "training" to "main",
     "training_settings" to "training",
+    "training_progress" to "training",
     "training_warmup" to "training",
     "training_block" to "training",
     "training_exercise" to "training_block",
@@ -468,7 +470,6 @@ fun DartsTrainerApp() {
                             .getSharedPreferences("training_prefs", android.content.Context.MODE_PRIVATE)
                             .getInt("session_minutes", SettingsStorage.getTrainingMinutes(context))
                         scope.launch {
-                            // ── Мозги: анализ накопленных данных ──
                             val analysis = TrainingStatsAnalyzer.analyze(trainingRepository)
                             currentWeakness = analysis.weakestType
 
@@ -487,7 +488,6 @@ fun DartsTrainerApp() {
                             trainingPaused = false
                             showTimeUpDialog = false
 
-                            // ── Динамический выбор упражнений основной части ──
                             mainExercises = if (analysis.hasEnoughData) {
                                 val budgetMain = (trainingMinutes * 0.75).toInt().coerceAtLeast(15)
                                 val dynamicIds = TrainingPlanner.buildDynamicMainExerciseIds(
@@ -533,6 +533,10 @@ fun DartsTrainerApp() {
                         autoOpenTimeDialog = false
                         screen = "training_settings"
                     },
+                    onOpenProgress = {
+                        autoOpenTimeDialog = false
+                        screen = "training_progress"
+                    },
                     onBack = {
                         resetTrainingState()
                         TrainingStateStorage.clear(context)
@@ -542,6 +546,11 @@ fun DartsTrainerApp() {
                 )
 
                 "training_settings" -> TrainingSettingsScreen(
+                    onBack = { screen = "training" }
+                )
+
+                "training_progress" -> TrainingProgressScreen(
+                    repository = trainingRepository,
                     onBack = { screen = "training" }
                 )
 
