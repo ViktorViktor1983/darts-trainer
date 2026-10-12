@@ -569,6 +569,7 @@ fun DartsTrainerApp() {
                 )
 
                 "training_settings" -> TrainingSettingsScreen(
+                    repository = trainingRepository,
                     onBack = { screen = "training" }
                 )
 
