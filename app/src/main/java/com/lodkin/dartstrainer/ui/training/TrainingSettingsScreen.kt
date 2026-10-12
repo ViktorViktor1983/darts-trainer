@@ -6,9 +6,11 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -19,10 +21,15 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.lodkin.dartstrainer.data.training.TrainingBlocksStorage
+import com.lodkin.dartstrainer.data.training.TrainingBotLevelStorage
+import com.lodkin.dartstrainer.data.training.TrainingRepository
+import com.lodkin.dartstrainer.data.training.TrainingStateStorage
 import com.lodkin.dartstrainer.theme.Accent
+import com.lodkin.dartstrainer.theme.ErrorColor
 import com.lodkin.dartstrainer.theme.GoldAccent
 import com.lodkin.dartstrainer.theme.TileBg
 import com.lodkin.dartstrainer.theme.TileBgDark
+import kotlinx.coroutines.launch
 
 /**
  * Настройки тренировочного раздела.
@@ -32,13 +39,19 @@ import com.lodkin.dartstrainer.theme.TileBgDark
  */
 @Composable
 fun TrainingSettingsScreen(
-    onBack: () -> Unit
+    repository: TrainingRepository,
+    onBack: () -> Unit,
+    onAfterReset: () -> Unit = {}
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
 
     var warmupOn by remember { mutableStateOf(TrainingBlocksStorage.isWarmupEnabled(context)) }
     var psychologyOn by remember { mutableStateOf(TrainingBlocksStorage.isPsychologyEnabled(context)) }
     var strengthOn by remember { mutableStateOf(TrainingBlocksStorage.isStrengthEnabled(context)) }
+
+    var showResetDialog by remember { mutableStateOf(false) }
+    var resetDone by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
@@ -138,17 +151,135 @@ fun TrainingSettingsScreen(
                 }
             )
 
+            Spacer(Modifier.height(28.dp))
+
+            // ── Раздел «Сброс данных тренировки» ──
+            Text(
+                "СБРОС ДАННЫХ ТРЕНИРОВКИ",
+                color = Accent,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 2.sp
+            )
+            Spacer(Modifier.height(6.dp))
+            Text(
+                "Начать тренировочный прогресс с чистого листа. " +
+                        "Игры и статистика «Просто поиграть» не тронутся.",
+                color = Color.White.copy(alpha = 0.6f),
+                fontSize = 12.sp
+            )
+            Spacer(Modifier.height(12.dp))
+
+            if (resetDone) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(Accent.copy(alpha = 0.12f))
+                        .padding(16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        "✅ Данные тренировок сброшены",
+                        color = Accent,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        "Уровень, слабые места, темп — всё начнётся заново.",
+                        color = Color.White.copy(alpha = 0.7f),
+                        fontSize = 12.sp
+                    )
+                }
+            } else {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(TileBgDark)
+                        .clickable { showResetDialog = true }
+                        .padding(vertical = 16.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            "Сбросить тренировочные данные",
+                            color = ErrorColor,
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            "Уровень, слабое место, темп — начнётся заново",
+                            color = Color.White.copy(alpha = 0.5f),
+                            fontSize = 11.sp
+                        )
+                    }
+                }
+            }
+
             Spacer(Modifier.height(24.dp))
 
             Text(
-                "Скоро появятся: настройка сложности ботов, выбор приоритетных упражнений, режим " +
-                        "«только основная часть».",
+                "Скоро появятся: настройка сложности ботов, выбор приоритетных упражнений, " +
+                        "режим «только основная часть».",
                 color = Color.White.copy(alpha = 0.4f),
                 fontSize = 11.sp
             )
 
             Spacer(Modifier.height(24.dp))
         }
+    }
+
+    // ── Диалог подтверждения сброса ──
+    if (showResetDialog) {
+        AlertDialog(
+            onDismissRequest = { showResetDialog = false },
+            containerColor = TileBgDark,
+            title = {
+                Text(
+                    "Сбросить данные тренировки?",
+                    color = GoldAccent,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Text(
+                    "Будут удалены:\n" +
+                            "• все тренировочные сессии\n" +
+                            "• результаты всех упражнений\n" +
+                            "• снимки уровня и потенциала\n" +
+                            "• отложенные даблы\n" +
+                            "• уровень ботов в тренировке\n\n" +
+                            "Игровая статистика («Просто поиграть») останется. " +
+                            "Настройки блоков — тоже.",
+                    color = Color.White,
+                    fontSize = 13.sp,
+                    lineHeight = 19.sp
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showResetDialog = false
+                    scope.launch {
+                        repository.clearAllTrainingData()
+                        TrainingStateStorage.clear(context)
+                        TrainingBotLevelStorage.clear(context)
+                        resetDone = true
+                        onAfterReset()
+                    }
+                }) {
+                    Text("СБРОСИТЬ", color = ErrorColor, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showResetDialog = false }) {
+                    Text("Отмена", color = Accent)
+                }
+            }
+        )
     }
 }
 
@@ -205,7 +336,6 @@ private fun BlockToggleRow(
                 )
             )
         } else {
-            // Заблокированный переключатель
             Box(
                 modifier = Modifier
                     .width(52.dp)
