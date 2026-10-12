@@ -241,11 +241,12 @@ fun DartsTrainerApp() {
     var blockExerciseId by remember { mutableStateOf<String?>(null) }
     var extraGameId by remember { mutableStateOf<String?>(null) }
 
-    // ── Восстановление незавершённой тренировки ──
+    // Время старта текущего упражнения
+    var exerciseStartMillis by remember { mutableStateOf(0L) }
+
     var showResumeDialog by remember { mutableStateOf(false) }
     var pendingResume by remember { mutableStateOf<TrainingStateStorage.Snapshot?>(null) }
 
-    // Вспомогательная: сохранить текущее состояние тренировки
     fun saveCurrentTrainingState() {
         if (trainingSessionId <= 0L) return
         if (currentPhase == TrainingBlockPhase.FINISHED) return
@@ -273,14 +274,12 @@ fun DartsTrainerApp() {
     }
     val trainingSecondsLeft = (trainingMinutes * 60 - trainingElapsedSeconds).coerceAtLeast(0)
 
-    // Автосохранение при изменениях в цепочке тренировки
     LaunchedEffect(trainingSessionId, currentPhase, currentExerciseIndex, exerciseStatuses) {
         if (isTrainingActive && trainingSessionId > 0L) {
             saveCurrentTrainingState()
         }
     }
 
-    // Периодическое сохранение (каждые 30 сек) для обновления elapsedSeconds
     LaunchedEffect(isTrainingActive, screen) {
         if (!isTrainingActive || screen !in TRAINING_SCREENS) return@LaunchedEffect
         while (true) {
@@ -302,6 +301,7 @@ fun DartsTrainerApp() {
         exerciseStatuses = emptyMap()
         blockExerciseId = null
         extraGameId = null
+        exerciseStartMillis = 0L
     }
 
     fun activePhases(): List<TrainingBlockPhase> {
@@ -365,7 +365,6 @@ fun DartsTrainerApp() {
             if (parent == "main") { resetTrainingState(); TrainingStateStorage.clear(context); autoOpenTimeDialog = true }
             if (screen == "training_summary") return@BackHandler
             if (screen in TRAINING_SCREENS && parent == "training") {
-                // Просто выходим на главный экран тренировки, состояние сохраняем
                 autoOpenTimeDialog = false
             }
             screen = parent
@@ -497,9 +496,9 @@ fun DartsTrainerApp() {
                             exerciseStatuses = emptyMap()
                             blockExerciseId = null
                             extraGameId = null
+                            exerciseStartMillis = 0L
                             isTrainingActive = true
 
-                            // Первичное сохранение
                             TrainingStateStorage.save(
                                 context = context,
                                 sessionId = trainingSessionId,
@@ -550,7 +549,10 @@ fun DartsTrainerApp() {
                     TrainingBlockScreen(
                         exercises = list,
                         currentIndex = currentExerciseIndex,
-                        onStartCurrent = { screen = "training_exercise" },
+                        onStartCurrent = {
+                            exerciseStartMillis = System.currentTimeMillis()
+                            screen = "training_exercise"
+                        },
                         onSkipCurrent = {
                             exerciseStatuses = exerciseStatuses.toMutableMap().apply {
                                 put(currentExerciseIndex, SummaryStatus.SKIPPED)
@@ -572,6 +574,28 @@ fun DartsTrainerApp() {
                             title = current.title,
                             description = current.whyImportant,
                             onDone = {
+                                val duration = if (exerciseStartMillis > 0L)
+                                    ((System.currentTimeMillis() - exerciseStartMillis) / 1000L).toInt()
+                                else 0
+                                exerciseStartMillis = 0L
+
+                                if (currentPhase == TrainingBlockPhase.PSYCHOLOGY) {
+                                    scope.launch {
+                                        trainingRepository.insertExerciseResult(
+                                            ExerciseResult(
+                                                sessionId = trainingSessionId,
+                                                blockType = BlockType.WARMUP,
+                                                exerciseId = current.id,
+                                                score = 0,
+                                                dartsThrown = 0,
+                                                timestamp = System.currentTimeMillis(),
+                                                durationSeconds = duration,
+                                                detailsJson = ""
+                                            )
+                                        )
+                                    }
+                                }
+
                                 exerciseStatuses = exerciseStatuses.toMutableMap().apply {
                                     put(currentExerciseIndex, SummaryStatus.DONE)
                                 }
@@ -589,6 +613,11 @@ fun DartsTrainerApp() {
                             scoreSetRepository = scoreSetRepository,
                             bigRoundRepository = bigRoundRepository,
                             onFinish = { blockType, score, darts ->
+                                val duration = if (exerciseStartMillis > 0L)
+                                    ((System.currentTimeMillis() - exerciseStartMillis) / 1000L).toInt()
+                                else 0
+                                exerciseStartMillis = 0L
+
                                 scope.launch {
                                     trainingRepository.insertExerciseResult(
                                         ExerciseResult(
@@ -598,6 +627,7 @@ fun DartsTrainerApp() {
                                             score = score,
                                             dartsThrown = darts,
                                             timestamp = System.currentTimeMillis(),
+                                            durationSeconds = duration,
                                             detailsJson = ""
                                         )
                                     )
@@ -647,10 +677,12 @@ fun DartsTrainerApp() {
                         },
                         onPlayExercise = { id ->
                             blockExerciseId = id
+                            exerciseStartMillis = System.currentTimeMillis()
                             screen = "training_block_exercise"
                         },
                         onPlayGame = { id ->
                             extraGameId = id
+                            exerciseStartMillis = System.currentTimeMillis()
                             screen = "training_extra_game"
                         },
                         onFinishTraining = {
@@ -673,10 +705,12 @@ fun DartsTrainerApp() {
                             title = title,
                             description = "",
                             onDone = {
+                                exerciseStartMillis = 0L
                                 blockExerciseId = null
                                 screen = "training_summary"
                             },
                             onBack = {
+                                exerciseStartMillis = 0L
                                 blockExerciseId = null
                                 screen = "training_summary"
                             }
@@ -695,6 +729,11 @@ fun DartsTrainerApp() {
                             scoreSetRepository = scoreSetRepository,
                             bigRoundRepository = bigRoundRepository,
                             onFinish = { blockType, score, darts ->
+                                val duration = if (exerciseStartMillis > 0L)
+                                    ((System.currentTimeMillis() - exerciseStartMillis) / 1000L).toInt()
+                                else 0
+                                exerciseStartMillis = 0L
+
                                 scope.launch {
                                     trainingRepository.insertExerciseResult(
                                         ExerciseResult(
@@ -704,6 +743,7 @@ fun DartsTrainerApp() {
                                             score = score,
                                             dartsThrown = darts,
                                             timestamp = System.currentTimeMillis(),
+                                            durationSeconds = duration,
                                             detailsJson = ""
                                         )
                                     )
@@ -711,7 +751,11 @@ fun DartsTrainerApp() {
                                 extraGameId = null
                                 screen = "training_summary"
                             },
-                            onBack = { extraGameId = null; screen = "training_summary" }
+                            onBack = {
+                                exerciseStartMillis = 0L
+                                extraGameId = null
+                                screen = "training_summary"
+                            }
                         )
                     }
                 }
@@ -897,7 +941,6 @@ fun DartsTrainerApp() {
         }
     }
 
-    // ── Диалог «Продолжить / Начать заново» ──
     if (showResumeDialog && pendingResume != null) {
         val snap = pendingResume!!
         val minutesAgo = TrainingStateStorage.minutesSinceLastUpdate(context)
@@ -939,7 +982,6 @@ fun DartsTrainerApp() {
                         .clip(RoundedCornerShape(10.dp))
                         .background(Accent)
                         .clickable {
-                            // Восстанавливаем состояние
                             trainingSessionId = snap.sessionId
                             trainingMinutes = snap.minutes
                             trainingElapsedSeconds = snap.elapsedSeconds
@@ -961,6 +1003,7 @@ fun DartsTrainerApp() {
                             isTrainingActive = true
                             autoOpenTimeDialog = false
                             showResumeDialog = false
+                            exerciseStartMillis = 0L
 
                             screen = when (currentPhase) {
                                 TrainingBlockPhase.WARMUP -> "training_warmup"
