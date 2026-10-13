@@ -5,9 +5,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -30,6 +28,7 @@ import com.lodkin.dartstrainer.theme.ErrorColor
 import com.lodkin.dartstrainer.theme.GoldAccent
 import com.lodkin.dartstrainer.theme.TileBg
 import com.lodkin.dartstrainer.theme.TileBgDark
+import com.lodkin.dartstrainer.ui.common.CelebrationOverlay
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -61,11 +60,6 @@ private val NORMS_YOUTH: List<BigRoundNorm> = listOf(
     BigRoundNorm("I юношеский", 390)
 )
 
-/**
- * @param isTrainingMode      true — игра запущена из тренировки.
- * @param trainingRepository  для чтения/обновления рекорда в тренировочной БД.
- * @param trainingRecordKey   ключ рекорда в training_records (обычно "biground").
- */
 @Composable
 fun BigRoundGameScreen(
     category: BigRoundCategory,
@@ -104,7 +98,6 @@ fun BigRoundGameScreen(
     }
     val totalHits = approaches.sum()
 
-    // Чтение рекорда при старте
     LaunchedEffect(category, isTrainingMode) {
         if (isTrainingMode && trainingRepository != null && !trainingRecordKey.isNullOrBlank()) {
             val rec = withContext(Dispatchers.IO) {
@@ -433,174 +426,169 @@ fun BigRoundGameScreen(
         )
     }
 
+    val score = totalScore
+    val norms = if (category == BigRoundCategory.MALE) NORMS_MALE else NORMS_YOUTH
+
+    val prevRecord = bestRecord
+    val isFirstEver = recordsCount == 0
+
+    val isNewRecord = !isFirstEver && prevRecord != null && score > prevRecord
+    val isAlmostRecord = !isFirstEver && !isNewRecord && prevRecord != null && prevRecord > 0 &&
+            abs(prevRecord - score).toFloat() / prevRecord <= 0.10f
+    val missingPoints = if (prevRecord != null) prevRecord - score else 0
+
+    val recordScale by animateFloatAsState(
+        targetValue = if (isNewRecord) 1f else 0.85f,
+        animationSpec = tween(durationMillis = 500),
+        label = "record_scale"
+    )
+
     if (showFinishDialog) {
-        val score = totalScore
-        val norms = if (category == BigRoundCategory.MALE) NORMS_MALE else NORMS_YOUTH
-
-        val prevRecord = bestRecord
-        val isFirstEver = recordsCount == 0
-
-        val isNewRecord = !isFirstEver && prevRecord != null && score > prevRecord
-        val isAlmostRecord = !isFirstEver && !isNewRecord && prevRecord != null && prevRecord > 0 &&
-                abs(prevRecord - score).toFloat() / prevRecord <= 0.10f
-        val missingPoints = if (prevRecord != null) prevRecord - score else 0
-
-        val recordScale by animateFloatAsState(
-            targetValue = if (isNewRecord) 1f else 0.85f,
-            animationSpec = tween(durationMillis = 500),
-            label = "record_scale"
-        )
-
         val achievedIdx = norms.indices.reversed()
             .firstOrNull { score >= norms[it].points }
         val achieved = if (achievedIdx != null) norms[achievedIdx] else null
         val next = if (achievedIdx != null && achievedIdx < norms.size - 1)
             norms[achievedIdx + 1] else null
 
-        AlertDialog(
-            onDismissRequest = { },
-            containerColor = TileBgDark,
-            confirmButton = {
-                TextButton(onClick = {
-                    showFinishDialog = false
-                    if (!isTrainingMode) {
-                        scope.launch {
-                            repository.saveGame(
-                                category = category,
-                                totalScore = totalScore,
-                                totalHits = totalHits,
-                                approaches = approaches.toList()
-                            )
-                        }
-                    }
-                    onFinish(score)
-                }) { Text("Продолжить", color = Accent) }
-            },
-            dismissButton = {
-                TextButton(onClick = {
-                    showFinishDialog = false
-                    undoApproach()
-                }) { Text("↶ Отменить подход", color = ErrorColor) }
-            },
-            title = {
-                Text("ИГРА ЗАВЕРШЕНА", color = Accent, fontSize = 20.sp, fontWeight = FontWeight.Bold)
-            },
-            text = {
-                Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
-                    if (isNewRecord && prevRecord != null) {
-                        BigRoundCelebrationBlock(
-                            title = "🏆 НОВЫЙ РЕКОРД!",
-                            value = "$score очков",
-                            prevValue = "$prevRecord очков",
-                            scale = recordScale
-                        )
-                        Spacer(Modifier.height(14.dp))
-                    } else if (isAlmostRecord && prevRecord != null) {
-                        BigRoundAlmostRecordBlock(
-                            text = "До нового рекорда не хватило $missingPoints очков",
-                            bestValue = "$prevRecord очков"
-                        )
-                        Spacer(Modifier.height(14.dp))
-                    } else if (isFirstEver) {
-                        BigRoundFirstResultBlock()
-                        Spacer(Modifier.height(14.dp))
-                    }
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text("Попаданий:", color = Color.White, fontSize = 15.sp)
-                        Text(
-                            "$totalHits",
-                            color = Color.White,
-                            fontSize = 18.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                    Spacer(Modifier.height(4.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text("Всего очков:", color = Color.White, fontSize = 15.sp)
-                        Text(
-                            "$score",
-                            color = GoldAccent,
-                            fontSize = 24.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-
-                    Spacer(Modifier.height(14.dp))
-                    Text(
-                        "НОРМАТИВ",
-                        color = Accent,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 2.sp
-                    )
-                    Spacer(Modifier.height(6.dp))
-
-                    if (achieved != null) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(10.dp))
-                                .background(TileBg)
-                                .padding(10.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                achieved.name,
-                                color = GoldAccent,
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Text(
-                                "${achieved.points}+",
-                                color = GoldAccent,
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                        if (next != null) {
-                            Spacer(Modifier.height(6.dp))
-                            Text(
-                                "До норматива «${next.name}» не хватило ${next.points - score} очков",
-                                color = Color.White.copy(alpha = 0.6f),
-                                fontSize = 12.sp
-                            )
-                        } else {
-                            Spacer(Modifier.height(6.dp))
-                            Text(
-                                "Максимальный норматив достигнут!",
-                                color = GoldAccent.copy(alpha = 0.85f),
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                    } else {
-                        val lowest = norms.first()
-                        Text(
-                            "Пока без разряда. До «${lowest.name}» не хватило ${lowest.points - score} очков.",
-                            color = Color.White.copy(alpha = 0.6f),
-                            fontSize = 12.sp
+        CelebrationOverlay(
+            visible = true,
+            isNewRecord = isNewRecord,
+            onConfirm = {
+                showFinishDialog = false
+                if (!isTrainingMode) {
+                    scope.launch {
+                        repository.saveGame(
+                            category = category,
+                            totalScore = totalScore,
+                            totalHits = totalHits,
+                            approaches = approaches.toList()
                         )
                     }
                 }
+                onFinish(score)
+            },
+            onUndo = {
+                showFinishDialog = false
+                undoApproach()
             }
-        )
+        ) {
+            Text(
+                "ИГРА ЗАВЕРШЕНА",
+                color = Accent,
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 1.sp
+            )
+            Spacer(Modifier.height(12.dp))
+
+            if (isNewRecord && prevRecord != null) {
+                CelebrationRecordBlock(
+                    title = "🏆 НОВЫЙ РЕКОРД!",
+                    value = "$score очков",
+                    prevValue = "$prevRecord очков",
+                    scale = recordScale
+                )
+                Spacer(Modifier.height(14.dp))
+            } else if (isAlmostRecord && prevRecord != null) {
+                AlmostRecordBlock(
+                    text = "До нового рекорда не хватило $missingPoints очков",
+                    bestValue = "$prevRecord очков"
+                )
+                Spacer(Modifier.height(14.dp))
+            } else if (isFirstEver) {
+                FirstResultBlock()
+                Spacer(Modifier.height(14.dp))
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text("Попаданий:", color = Color.White, fontSize = 15.sp)
+                Text(
+                    "$totalHits",
+                    color = Color.White,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+            Spacer(Modifier.height(4.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text("Всего очков:", color = Color.White, fontSize = 15.sp)
+                Text(
+                    "$score",
+                    color = GoldAccent,
+                    fontSize = 24.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+
+            Spacer(Modifier.height(14.dp))
+            Text(
+                "НОРМАТИВ",
+                color = Accent,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 2.sp
+            )
+            Spacer(Modifier.height(6.dp))
+
+            if (achieved != null) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(TileBg)
+                        .padding(10.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        achieved.name,
+                        color = GoldAccent,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        "${achieved.points}+",
+                        color = GoldAccent,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+                if (next != null) {
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        "До норматива «${next.name}» не хватило ${next.points - score} очков",
+                        color = Color.White.copy(alpha = 0.6f),
+                        fontSize = 12.sp
+                    )
+                } else {
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        "Максимальный норматив достигнут!",
+                        color = GoldAccent.copy(alpha = 0.85f),
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            } else {
+                val lowest = norms.first()
+                Text(
+                    "Пока без разряда. До «${lowest.name}» не хватило ${lowest.points - score} очков.",
+                    color = Color.White.copy(alpha = 0.6f),
+                    fontSize = 12.sp
+                )
+            }
+        }
     }
 }
 
-// ─────────────────────────────────────────────
-// Праздничные блоки
-// ─────────────────────────────────────────────
-
 @Composable
-private fun BigRoundCelebrationBlock(
+private fun CelebrationRecordBlock(
     title: String,
     value: String,
     prevValue: String,
@@ -644,7 +632,7 @@ private fun BigRoundCelebrationBlock(
 }
 
 @Composable
-private fun BigRoundAlmostRecordBlock(text: String, bestValue: String) {
+private fun AlmostRecordBlock(text: String, bestValue: String) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -678,7 +666,7 @@ private fun BigRoundAlmostRecordBlock(text: String, bestValue: String) {
 }
 
 @Composable
-private fun BigRoundFirstResultBlock() {
+private fun FirstResultBlock() {
     Column(
         modifier = Modifier
             .fillMaxWidth()
