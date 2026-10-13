@@ -49,6 +49,9 @@ interface FreePlayRecordDao {
     @Query("SELECT * FROM free_records")
     suspend fun getAll(): List<FreePlayRecordEntity>
 
+    @Query("DELETE FROM free_records WHERE recordKey = :key")
+    suspend fun deleteByKey(key: String)
+
     @Query("DELETE FROM free_records")
     suspend fun clearAll()
 }
@@ -81,10 +84,6 @@ abstract class FreePlayRecordsDatabase : RoomDatabase() {
  *
  * Каждый tryUpdate* возвращает true, если рекорд побит —
  * чтобы UI мог показать праздничный диалог.
- *
- * При первом результате (рекорда ещё не было) тоже возвращает true —
- * UI сам решит, показать «первый результат» тихо или как рекорд.
- * Чтобы отличить «первый» от «побитого», используйте hasRecord(key).
  */
 class FreePlayRecordsRepository(
     private val db: FreePlayRecordsDatabase
@@ -105,7 +104,20 @@ class FreePlayRecordsRepository(
 
     suspend fun getAll(): List<FreePlayRecordEntity> = db.recordDao().getAll()
 
+    /** Полный сброс всех рекордов свободной игры. */
     suspend fun clearAll() = db.recordDao().clearAll()
+
+    /** Сбросить только рекорды 501 (лег + матч). */
+    suspend fun clear501() {
+        db.recordDao().deleteByKey(KEY_501_LEG)
+        db.recordDao().deleteByKey(KEY_501_MATCH)
+    }
+
+    /** Сбросить только рекорды Крикета (лег + матч). */
+    suspend fun clearCricket() {
+        db.recordDao().deleteByKey(KEY_CRICKET_LEG)
+        db.recordDao().deleteByKey(KEY_CRICKET_MATCH)
+    }
 
     // ── 501 ──
 
