@@ -719,6 +719,7 @@ fun DartsTrainerApp() {
                             sectorRepository = sectorRepository,
                             scoreSetRepository = scoreSetRepository,
                             bigRoundRepository = bigRoundRepository,
+                            trainingRepository = trainingRepository,
                             onFinish = { blockType, score, darts ->
                                 val duration = if (exerciseStartMillis > 0L)
                                     ((System.currentTimeMillis() - exerciseStartMillis) / 1000L).toInt()
@@ -737,6 +738,14 @@ fun DartsTrainerApp() {
                                             durationSeconds = duration,
                                             detailsJson = ""
                                         )
+                                    )
+                                    // Обновляем тренировочный рекорд.
+                                    val lowerDartsBetter = current.id.startsWith("aroundclock_")
+                                    trainingRepository.updateTrainingRecordIfBetter(
+                                        exerciseId = current.id,
+                                        score = score,
+                                        darts = darts,
+                                        lowerDartsBetter = lowerDartsBetter
                                     )
                                 }
                                 exerciseStatuses = exerciseStatuses.toMutableMap().apply {
@@ -885,6 +894,7 @@ fun DartsTrainerApp() {
                             sectorRepository = sectorRepository,
                             scoreSetRepository = scoreSetRepository,
                             bigRoundRepository = bigRoundRepository,
+                            trainingRepository = trainingRepository,
                             onFinish = { blockType, score, darts ->
                                 val duration = if (exerciseStartMillis > 0L)
                                     ((System.currentTimeMillis() - exerciseStartMillis) / 1000L).toInt()
@@ -903,6 +913,14 @@ fun DartsTrainerApp() {
                                             durationSeconds = duration,
                                             detailsJson = ""
                                         )
+                                    )
+                                    // Обновляем рекорд с тем же ключом, что и основное упражнение.
+                                    val lowerDartsBetter = gameId.startsWith("aroundclock_")
+                                    trainingRepository.updateTrainingRecordIfBetter(
+                                        exerciseId = gameId,
+                                        score = score,
+                                        darts = darts,
+                                        lowerDartsBetter = lowerDartsBetter
                                     )
                                 }
                                 extraGameId = null
@@ -1081,6 +1099,7 @@ fun DartsTrainerApp() {
                     val s = sectorToPlay
                     if (s != null) SectorGameScreen(
                         sector = s, repository = sectorRepository,
+                        isTrainingMode = false,
                         onFinish = { _ -> sectorToPlay = null; screen = "game_select" },
                         onBack = { screen = "game_select" }
                     ) else screen = "sector_setup"
@@ -1132,6 +1151,7 @@ fun DartsTrainerApp() {
                     val c = bigRoundCategory
                     if (c != null) BigRoundGameScreen(
                         category = c, repository = bigRoundRepository,
+                        isTrainingMode = false,
                         onFinish = { _ -> bigRoundCategory = null; screen = "game_select" },
                         onBack = { screen = "game_select" }
                     ) else screen = "biground_setup"
@@ -1301,9 +1321,12 @@ private fun MainExerciseRunner(
     sectorRepository: SectorRepository,
     scoreSetRepository: ScoreSetRepository,
     bigRoundRepository: BigRoundRepository,
+    trainingRepository: TrainingRepository?,
     onFinish: (BlockType, Int, Int) -> Unit,
     onBack: () -> Unit
 ) {
+    val isTraining = trainingRepository != null
+
     when (exerciseId) {
         "aroundclock_doubles" -> AroundClockGameScreen(
             target = AroundClockTarget.DOUBLE,
@@ -1311,6 +1334,8 @@ private fun MainExerciseRunner(
             hitsRequired = 1,
             repository = aroundClockRepository,
             sectorStart = 1,
+            trainingRepository = trainingRepository,
+            trainingRecordKey = if (isTraining) "aroundclock_doubles" else null,
             onFinish = { totalDarts, _, _ -> onFinish(BlockType.DOUBLES, totalDarts, totalDarts) },
             onBack = onBack
         )
@@ -1320,6 +1345,8 @@ private fun MainExerciseRunner(
             hitsRequired = 1,
             repository = aroundClockRepository,
             sectorStart = 1,
+            trainingRepository = trainingRepository,
+            trainingRecordKey = if (isTraining) "aroundclock_sectors" else null,
             onFinish = { totalDarts, _, _ -> onFinish(BlockType.SECTOR, totalDarts, totalDarts) },
             onBack = onBack
         )
@@ -1331,6 +1358,8 @@ private fun MainExerciseRunner(
                 hitsRequired = 1,
                 repository = aroundClockRepository,
                 sectorStart = sectorStart,
+                trainingRepository = trainingRepository,
+                trainingRecordKey = if (isTraining) "aroundclock_trebles" else null,
                 onFinish = { totalDarts, _, _ -> onFinish(BlockType.TREBLES, totalDarts, totalDarts) },
                 onBack = onBack
             )
@@ -1338,6 +1367,7 @@ private fun MainExerciseRunner(
         "sector20" -> SectorGameScreen(
             sector = 20,
             repository = sectorRepository,
+            isTrainingMode = isTraining,
             onFinish = { score -> onFinish(BlockType.SCORE, score, 30) },
             onBack = onBack
         )
@@ -1349,6 +1379,7 @@ private fun MainExerciseRunner(
         "biground" -> BigRoundGameScreen(
             category = BigRoundCategory.MALE,
             repository = bigRoundRepository,
+            isTrainingMode = isTraining,
             onFinish = { score -> onFinish(BlockType.SECTOR, score, 63) },
             onBack = onBack
         )
