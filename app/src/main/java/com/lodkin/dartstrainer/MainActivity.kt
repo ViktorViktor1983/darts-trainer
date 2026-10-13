@@ -43,6 +43,8 @@ import com.lodkin.dartstrainer.data.cricket.CricketPlayer
 import com.lodkin.dartstrainer.data.cricket.CricketRepository
 import com.lodkin.dartstrainer.data.cricket.CricketSerializer
 import com.lodkin.dartstrainer.data.cricket.CricketType
+import com.lodkin.dartstrainer.data.freerecords.FreePlayRecordsDatabase
+import com.lodkin.dartstrainer.data.freerecords.FreePlayRecordsRepository
 import com.lodkin.dartstrainer.data.game501.Game501
 import com.lodkin.dartstrainer.data.game501.Game501Database
 import com.lodkin.dartstrainer.data.game501.Game501Logic
@@ -202,6 +204,9 @@ fun DartsTrainerApp() {
     val bigRoundRepository = remember { BigRoundRepository(BigRoundDatabase.get(context).bigRoundDao()) }
     val scoreSetRepository = remember { ScoreSetRepository(ScoreSetDatabase.get(context).scoreSetDao()) }
     val trainingRepository = remember { TrainingRepository(TrainingDatabase.getInstance(context)) }
+    val freePlayRecordsRepository = remember {
+        FreePlayRecordsRepository(FreePlayRecordsDatabase.get(context))
+    }
 
     val sessionStartTime = remember { System.currentTimeMillis() }
     val sessionForm = remember { 0.85 + Random.nextDouble() * 0.30 }
@@ -1036,7 +1041,12 @@ fun DartsTrainerApp() {
                 "game501_game" -> {
                     val g = game501
                     if (g != null) Game501Screen(
-                        repository = game501Repository, initialGame = g, existingId = game501ExistingId,
+                        repository = game501Repository,
+                        freePlayRecordsRepository = freePlayRecordsRepository,
+                        initialGame = g,
+                        existingId = game501ExistingId,
+                        isTrainingMode = isTraining501,
+                        trainingRepository = trainingRepository,
                         onGameFinish = { f, id ->
                             if (isTraining501) {
                                 val playerWon = f.winnerIndex == 0
