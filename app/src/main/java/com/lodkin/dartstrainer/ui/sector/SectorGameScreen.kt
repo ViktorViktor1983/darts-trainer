@@ -44,10 +44,17 @@ private const val AUTO_OK_SECONDS = 3
 private const val MAX_HITS_SECTOR = 9
 private const val MAX_HITS_BULL = 6
 
+/**
+ * @param isTrainingMode  true — игра запущена из тренировки.
+ *                        Результат НЕ сохраняется в игровую БД,
+ *                        а уходит наружу через onFinish. Сохранение в тренировочную
+ *                        БД делает MainActivity.
+ */
 @Composable
 fun SectorGameScreen(
     sector: Int,
     repository: SectorRepository,
+    isTrainingMode: Boolean = false,
     onFinish: (Int) -> Unit,
     onBack: () -> Unit
 ) {
@@ -143,7 +150,7 @@ fun SectorGameScreen(
             )
         }
 
-        // ── Счёт (увеличен ×2) ──
+        // ── Счёт ──
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -395,13 +402,16 @@ fun SectorGameScreen(
             confirmButton = {
                 TextButton(onClick = {
                     showFinishDialog = false
-                    scope.launch {
-                        repository.saveGame(
-                            sector = sector,
-                            totalScore = totalScore,
-                            totalHits = totalHits,
-                            approaches = approaches.toList()
-                        )
+                    // Сохраняем в игровую БД только если это НЕ тренировка.
+                    if (!isTrainingMode) {
+                        scope.launch {
+                            repository.saveGame(
+                                sector = sector,
+                                totalScore = totalScore,
+                                totalHits = totalHits,
+                                approaches = approaches.toList()
+                            )
+                        }
                     }
                     onFinish(score)
                 }) { Text("Продолжить", color = Accent) }
