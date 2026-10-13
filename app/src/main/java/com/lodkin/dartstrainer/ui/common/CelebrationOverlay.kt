@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -14,29 +15,24 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.lodkin.dartstrainer.theme.Accent
 import com.lodkin.dartstrainer.theme.ErrorColor
 import com.lodkin.dartstrainer.theme.TileBg
 import com.lodkin.dartstrainer.theme.TileBgDark
+import kotlin.math.cos
+import kotlin.math.sin
 import kotlin.random.Random
 
 /**
  * Диалог с праздничной анимацией поверх содержимого.
  *
- * Всё в одном окне Dialog:
- *   1. Полупрозрачный фон.
- *   2. Карточка с контентом (по центру).
- *   3. Анимация (конфетти + салют) ПОВЕРХ карточки — если побит рекорд.
- *
  * @param visible      показывать ли диалог
  * @param isNewRecord  побит ли рекорд → включает анимацию
- * @param onConfirm    кнопка «Продолжить»
- * @param onUndo       кнопка «Отменить подход»
- * @param content      содержимое карточки (статистика, нормативы и т.п.)
  */
 @Composable
 fun CelebrationOverlay(
@@ -90,9 +86,11 @@ fun CelebrationOverlay(
                             .padding(vertical = 14.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text2(
-                            text = "↶ Отменить",
-                            color = ErrorColor
+                        Text(
+                            "↶ Отменить",
+                            color = ErrorColor,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold
                         )
                     }
                     Box(
@@ -104,9 +102,11 @@ fun CelebrationOverlay(
                             .padding(vertical = 14.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text2(
-                            text = "Продолжить",
-                            color = Color(0xFF121212)
+                        Text(
+                            "Продолжить",
+                            color = Color(0xFF121212),
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold
                         )
                     }
                 }
@@ -121,7 +121,7 @@ fun CelebrationOverlay(
 }
 
 // ─────────────────────────────────────────────
-// Canvas с анимацией: конфетти + салют
+// Canvas: конфетти + салют (ракеты + взрывы)
 // ─────────────────────────────────────────────
 
 @Composable
@@ -129,8 +129,8 @@ private fun CelebrationCanvas() {
     var elapsedMs by remember { mutableStateOf(0L) }
     var running by remember { mutableStateOf(true) }
 
-    val confetti = remember { List(70) { ConfettiParticle.newRandom() } }
-    val fireworks = remember { List(10) { FireworkParticle.newRandom() } }
+    val confetti = remember { List(60) { ConfettiParticle.newRandom() } }
+    val rockets = remember { List(6) { RocketParticle.newRandom() } }
 
     LaunchedEffect(Unit) {
         val start = withFrameNanos { it }
@@ -138,16 +138,16 @@ private fun CelebrationCanvas() {
             withFrameNanos { now ->
                 val ms = (now - start) / 1_000_000L
                 elapsedMs = ms
-                if (ms >= 3500L) running = false
+                if (ms >= 4000L) running = false
             }
         }
     }
 
     Canvas(modifier = Modifier.fillMaxSize()) {
         val t = elapsedMs / 1000f
-        val totalSec = 3.5f
+        val totalSec = 4.0f
 
-        // ── Конфетти (крупнее, ярче) ──
+        // ── Конфетти ──
         confetti.forEach { c ->
             val x = c.startX * size.width + c.vx * t * 150f
             val y = c.startY * size.height + c.vy * t * 150f + 0.5f * 450f * t * t
@@ -162,43 +162,81 @@ private fun CelebrationCanvas() {
             }
         }
 
-        // ── Салют (толще, ярче, поверх) ──
-        fireworks.forEach { f ->
-            val local = (t - f.delaySec).coerceAtLeast(0f)
-            if (local in 0.01f..1.8f) {
-                val progress = local / 1.8f
-                val radius = 50f + progress * 320f
-                val fade = (1f - progress).coerceIn(0f, 1f)
-                val center = Offset(f.x * size.width, f.y * size.height)
+        // ── Салют: ракеты + взрывы ──
+        rockets.forEach { r ->
+            val local = t - r.delaySec
+            if (local <= 0f) return@forEach
 
-                // Внешнее кольцо
+            val startX = r.startX * size.width
+            val startY = size.height + 40f
+            val targetY = r.targetY * size.height
+
+            // Фаза 1: взлёт (riseDuration секунд)
+            if (local < r.riseDuration) {
+                val riseProgress = local / r.riseDuration
+                val curY = startY + (targetY - startY) * riseProgress
+                // Голова ракеты
                 drawCircle(
-                    color = f.color.copy(alpha = fade),
-                    radius = radius,
-                    center = center,
-                    style = Stroke(width = 10f)
+                    color = Color.White.copy(alpha = 0.95f),
+                    radius = 5f,
+                    center = Offset(startX, curY)
                 )
-                // Среднее яркое кольцо
+                // Хвост
                 drawCircle(
-                    color = Color.White.copy(alpha = fade * 0.8f),
-                    radius = radius * 0.75f,
-                    center = center,
-                    style = Stroke(width = 5f)
+                    color = r.color.copy(alpha = 0.6f),
+                    radius = 3f,
+                    center = Offset(startX, curY + 20f)
                 )
-                // Внутреннее цветное
                 drawCircle(
-                    color = f.color.copy(alpha = fade * 0.5f),
-                    radius = radius * 0.45f,
-                    center = center,
-                    style = Stroke(width = 3f)
+                    color = r.color.copy(alpha = 0.3f),
+                    radius = 2f,
+                    center = Offset(startX, curY + 40f)
                 )
+            } else {
+                // Фаза 2: взрыв
+                val explosionLocal = local - r.riseDuration
+                val explosionDuration = 1.6f
+                if (explosionLocal <= explosionDuration) {
+                    val progress = explosionLocal / explosionDuration
+                    val fade = (1f - progress).coerceIn(0f, 1f)
+                    val maxRadius = 180f + r.size * 60f
+                    val radius = maxRadius * progress
+
+                    val center = Offset(startX, targetY)
+
+                    // Лучи в разные стороны
+                    val rayCount = 16
+                    for (i in 0 until rayCount) {
+                        val angle = (i.toFloat() / rayCount) * 2f * Math.PI.toFloat()
+                        val dx = cos(angle) * radius
+                        val dy = sin(angle) * radius
+                        val dotX = center.x + dx
+                        val dotY = center.y + dy
+
+                        drawCircle(
+                            color = r.color.copy(alpha = fade),
+                            radius = 4f + (1f - progress) * 3f,
+                            center = Offset(dotX, dotY)
+                        )
+                    }
+
+                    // Яркая центральная вспышка
+                    if (progress < 0.4f) {
+                        val centerFade = (1f - progress / 0.4f).coerceIn(0f, 1f)
+                        drawCircle(
+                            color = Color.White.copy(alpha = centerFade * 0.9f),
+                            radius = 25f + progress * 60f,
+                            center = center
+                        )
+                    }
+                }
             }
         }
     }
 }
 
 // ─────────────────────────────────────────────
-// Частицы
+// Модели частиц
 // ─────────────────────────────────────────────
 
 private data class ConfettiParticle(
@@ -231,10 +269,12 @@ private data class ConfettiParticle(
     }
 }
 
-private data class FireworkParticle(
-    val x: Float,
-    val y: Float,
-    val delaySec: Float,
+private data class RocketParticle(
+    val startX: Float,        // 0..1 — где стартует ракета по X
+    val targetY: Float,       // 0..1 — где взрывается (по Y, от верха)
+    val delaySec: Float,      // задержка перед стартом
+    val riseDuration: Float,  // сколько летит вверх
+    val size: Float,          // базовый радиус взрыва
     val color: Color
 ) {
     companion object {
@@ -247,22 +287,13 @@ private data class FireworkParticle(
             Color(0xFFBA68C8)
         )
 
-        fun newRandom() = FireworkParticle(
-            x = 0.15f + Random.nextFloat() * 0.7f,
-            y = 0.15f + Random.nextFloat() * 0.5f,
-            delaySec = Random.nextFloat() * 1.8f,
+        fun newRandom() = RocketParticle(
+            startX = 0.1f + Random.nextFloat() * 0.8f,
+            targetY = 0.12f + Random.nextFloat() * 0.35f,
+            delaySec = Random.nextFloat() * 2.0f,
+            riseDuration = 0.6f + Random.nextFloat() * 0.5f,
+            size = 0.8f + Random.nextFloat() * 1.0f,
             color = COLORS.random()
         )
     }
-}
-
-// Небольшая обёртка над Text, чтобы не тащить лишние импорты наверх
-@Composable
-private fun Text2(text: String, color: Color) {
-    androidx.compose.material3.Text(
-        text = text,
-        color = color,
-        fontSize = androidx.compose.ui.unit.TextUnit(14f, androidx.compose.ui.unit.TextUnitType.Sp),
-        fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
-    )
 }
