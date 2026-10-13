@@ -29,6 +29,7 @@ import com.lodkin.dartstrainer.theme.GoldAccent
 import com.lodkin.dartstrainer.theme.TileBg
 import com.lodkin.dartstrainer.theme.TileBgDark
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import kotlin.random.Random
 
@@ -65,6 +66,9 @@ fun AroundClockGameScreen(
     var showFinishDialog by remember { mutableStateOf(false) }
     var bestRecord by remember { mutableStateOf<Int?>(null) }
 
+    // Визуальный отклик «Все мимо» — на время подсветки блокируем ввод и показываем промахи
+    var flashMiss by remember { mutableStateOf(false) }
+
     LaunchedEffect(Unit) {
         val games = withContext(Dispatchers.IO) {
             repository.getAllGames()
@@ -92,22 +96,38 @@ fun AroundClockGameScreen(
 
     val throwsInCurrentApproach = allThrows.size % 3
 
+    // ── Визуальный отклик при нажатии «Все мимо» ──
+    // При нажатии сначала показываем три промаха ярким цветом,
+    // через 700 мс добавляем их в историю.
+    LaunchedEffect(flashMiss) {
+        if (flashMiss) {
+            delay(700L)
+            if (!isFinished) {
+                val remaining = 3 - throwsInCurrentApproach
+                repeat(remaining) {
+                    if (!isFinished) {
+                        val cs = currentSectorOrNull ?: return@repeat
+                        allThrows.add(ThrowInApproach(sector = cs, hit = false))
+                    }
+                }
+            }
+            flashMiss = false
+        }
+    }
+
     fun addThrow(hit: Boolean) {
-        if (isFinished) return
+        if (isFinished || flashMiss) return
         val cs = currentSectorOrNull ?: return
         allThrows.add(ThrowInApproach(sector = cs, hit = hit))
     }
 
     fun missAllRemaining() {
-        if (isFinished) return
-        val remaining = 3 - throwsInCurrentApproach
-        repeat(remaining) {
-            if (!isFinished) addThrow(hit = false)
-        }
+        if (isFinished || flashMiss) return
+        flashMiss = true
     }
 
     fun undo() {
-        if (allThrows.isEmpty()) return
+        if (allThrows.isEmpty() || flashMiss) return
         allThrows.removeAt(allThrows.lastIndex)
         showFinishDialog = false
     }
@@ -117,7 +137,7 @@ fun AroundClockGameScreen(
             .fillMaxSize()
             .background(DarkBg)
     ) {
-        // ── Шапка (Кругосветка ×1.5 и по центру) ──
+        // ── Шапка ──
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -162,7 +182,7 @@ fun AroundClockGameScreen(
                 Spacer(Modifier.height(4.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     for (i in 0..2) {
-                        val filled = i < throwsInCurrentApproach
+                        val filled = i < throwsInCurrentApproach || flashMiss
                         Box(
                             modifier = Modifier
                                 .size(8.dp)
@@ -181,7 +201,7 @@ fun AroundClockGameScreen(
             isFinished = isFinished
         )
 
-        // ── Текущая цель (S1 ×2) ──
+        // ── Текущая цель ──
         if (!isFinished && currentSectorOrNull != null) {
             val cs = currentSectorOrNull
             Column(
@@ -266,11 +286,15 @@ fun AroundClockGameScreen(
 
                 val rowSector: Int? = existing?.sector ?: currentSectorOrNull
 
+                // Если flashMiss активен — показываем ячейки от текущей позиции как «промах»
+                val previewMiss = flashMiss && existing == null && i >= throwsInCurrentApproach
+
                 ApproachRow(
                     sector = rowSector,
                     target = target,
                     result = existing?.let { if (it.hit) RowResult.HIT else RowResult.MISS },
-                    enabled = !isFinished && existing == null && i == throwsInCurrentApproach,
+                    enabled = !isFinished && !flashMiss && existing == null && i == throwsInCurrentApproach,
+                    previewMiss = previewMiss,
                     onHit = { addThrow(hit = true) },
                     onMiss = { addThrow(hit = false) }
                 )
@@ -279,7 +303,7 @@ fun AroundClockGameScreen(
 
         Spacer(Modifier.height(8.dp))
 
-        // ── Кнопки (крупнее) ──
+        // ── Кнопки ──
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -291,7 +315,7 @@ fun AroundClockGameScreen(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                val canMissAll = !isFinished
+                val canMissAll = !isFinished && !flashMiss
                 Box(
                     modifier = Modifier
                         .weight(1f)
@@ -309,7 +333,7 @@ fun AroundClockGameScreen(
                     )
                 }
 
-                val canUndo = allThrows.isNotEmpty() && !showFinishDialog
+                val canUndo = allThrows.isNotEmpty() && !showFinishDialog && !flashMiss
                 Box(
                     modifier = Modifier
                         .weight(1f)
@@ -521,14 +545,17 @@ private fun ApproachRow(
     target: AroundClockTarget,
     result: RowResult?,
     enabled: Boolean,
+    previewMiss: Boolean = false,
     onHit: () -> Unit,
     onMiss: () -> Unit
 ) {
     val currentResult = result ?: RowResult.EMPTY
-    val missBg = when (currentResult) {
-        RowResult.MISS -> MissRed
-        RowResult.HIT -> TileBg.copy(alpha = 0.5f)
-        RowResult.EMPTY -> TileBg
+
+    val missBg = when {
+        previewMiss -> MissRed
+        currentResult == RowResult.MISS -> MissRed
+        currentResult == RowResult.HIT -> TileBg.copy(alpha = 0.5f)
+        else -> TileBg
     }
     val hitBg = when (currentResult) {
         RowResult.HIT -> HitGreen
@@ -547,14 +574,17 @@ private fun ApproachRow(
                 .weight(1f)
                 .height(66.dp)
                 .clip(RoundedCornerShape(10.dp))
-                .background(if (missEnabled) missBg else missBg.copy(alpha = 0.6f))
+                .background(if (missEnabled || previewMiss) missBg else missBg.copy(alpha = 0.6f))
                 .clickable(enabled = missEnabled) { onMiss() },
             contentAlignment = Alignment.Center
         ) {
             Text(
                 "ПРОМАХ",
-                color = if (currentResult == RowResult.MISS) Color.White
-                else Color.White.copy(alpha = if (missEnabled) 0.9f else 0.4f),
+                color = when {
+                    previewMiss -> Color.White
+                    currentResult == RowResult.MISS -> Color.White
+                    else -> Color.White.copy(alpha = if (missEnabled) 0.9f else 0.4f)
+                },
                 fontSize = 20.sp,
                 fontWeight = FontWeight.Bold
             )
