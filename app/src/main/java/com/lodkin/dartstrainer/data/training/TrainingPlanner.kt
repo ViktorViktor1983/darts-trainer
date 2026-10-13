@@ -5,13 +5,24 @@ import kotlin.math.roundToInt
 /**
  * Генератор программы тренировки на день.
  *
- * Основные задачи:
- *   1. Динамический выбор упражнений основной части на основе анализа данных
- *      (слабое место + реальный темп игрока).
- *   2. Разминка и вспомогательные блоки — по фиксированной логике.
- *   3. Правило: не более 50% времени основной части на слабое место.
+ * Правила (согласованы с автором):
+ *   1. Максимум 1 тяжёлое упражнение за тренировку.
+ *   2. Первые 5 тренировок — вводный режим: больше лёгких и игр, тяжёлое — в конце.
+ *   3. Учитывается слабое место (первое упражнение — на слабое).
+ *   4. Учитывается реальный темп игрока (avgMinutesByExercise).
+ *   5. Не более 50% времени на слабое место.
  *
- * Программа НЕ зависит от желаний игрока. Игрок идёт по плану тренера.
+ * Шкала тяжести (от лёгкого к тяжёлому, 1 = самое лёгкое):
+ *   1 — Крикет
+ *   2 — 501
+ *   3 — Кругосветка: Сектора
+ *   4 — Набор очков
+ *   5 — Сектор 20
+ *   6 — Большой раунд
+ *   7 — Кругосветка: Удвоения
+ *   8 — Кругосветка: Утроения
+ *
+ * Порог «тяжёлое»: difficulty >= 7.
  */
 object TrainingPlanner {
 
@@ -64,6 +75,27 @@ object TrainingPlanner {
         val id: String,
         val minutes: Int
     )
+
+    /** Пороговое количество тренировок для вводного режима. */
+    private const val INTRO_TRAININGS_COUNT = 5
+
+    /** Порог, с которого упражнение считается тяжёлым. */
+    private const val HARD_DIFFICULTY = 7
+
+    /**
+     * Шкала тяжести: чем больше число — тем тяжелее упражнение.
+     */
+    private fun difficultyOf(id: String): Int = when (id) {
+        "cricket" -> 1
+        "game501" -> 2
+        "aroundclock_sectors" -> 3
+        "scoreset" -> 4
+        "sector20" -> 5
+        "biground" -> 6
+        "aroundclock_doubles" -> 7
+        "aroundclock_trebles" -> 8
+        else -> 4
+    }
 
     // ─────────────────────────────────────────────
     // ГЛАВНАЯ ФУНКЦИЯ
@@ -155,29 +187,18 @@ object TrainingPlanner {
     /**
      * Подобрать упражнения основной части на день.
      *
-     * Логика:
-     *   1. Для каждого типа слабости — свой порядок предпочтения упражнений.
-     *      Первое — главное на слабое место. Дальше — остальные по полезности.
-     *   2. Учитывается реальный темп игрока (avgMinutesByExercise).
-     *   3. Правило «не более 50% на слабое место»: обычно 1–2 упражнения
-     *      из 3–5 попадают в зону слабости.
-     *   4. Учитывается бюджет времени — набираем упражнения, пока хватает.
-     *
-     * Карта «упражнение → какие параметры тренирует»:
-     *   aroundclock_doubles    → DOUBLES
-     *   aroundclock_sectors    → ACCURACY
-     *   aroundclock_trebles    → TREBLES
-     *   sector20               → SCORE
-     *   scoreset               → SCORE
-     *   biground               → ACCURACY + TREBLES
-     *   game501                → SCORE + DOUBLES
-     *   cricket                → ACCURACY + TREBLES
+     * @param analysis               результат анализа данных
+     * @param budgetMinutes          сколько минут доступно на основную часть
+     * @param completedTrainingCount сколько тренировок уже завершено (для вводного режима)
      */
     fun buildDynamicMainExerciseIds(
         analysis: TrainingStatsAnalyzer.TrainingAnalysis,
-        budgetMinutes: Int
+        budgetMinutes: Int,
+        completedTrainingCount: Int = Int.MAX_VALUE
     ): List<PlannedDynamicExercise> {
         if (budgetMinutes <= 0) return emptyList()
+
+        val isIntroductory = completedTrainingCount < INTRO_TRAININGS_COUNT
 
         // Порядок предпочтения по слабому месту
         val preferenceOrder: List<String> = when (analysis.weakestType) {
@@ -233,6 +254,13 @@ object TrainingPlanner {
             )
         }
 
+        // Вводный режим — сначала лёгкие и игры, тяжёлое уходит в конец
+        val orderedIds = if (isIntroductory) {
+            preferenceOrder.sortedBy { difficultyOf(it) }
+        } else {
+            preferenceOrder
+        }
+
         fun fallbackMinutes(id: String): Int = when (id) {
             "aroundclock_doubles" -> 14
             "aroundclock_sectors" -> 12
@@ -251,13 +279,22 @@ object TrainingPlanner {
             return value.coerceAtLeast(3)
         }
 
+        // ── Набор с правилами ──
         var remaining = budgetMinutes
         val result = mutableListOf<PlannedDynamicExercise>()
-        for (id in preferenceOrder) {
+        var hardCount = 0
+
+        for (id in orderedIds) {
+            val isHard = difficultyOf(id) >= HARD_DIFFICULTY
+
+            // Правило: максимум 1 тяжёлое за тренировку
+            if (isHard && hardCount >= 1) continue
+
             val m = minutesFor(id)
             if (m <= remaining) {
                 result.add(PlannedDynamicExercise(id, m))
                 remaining -= m
+                if (isHard) hardCount++
             }
         }
 
