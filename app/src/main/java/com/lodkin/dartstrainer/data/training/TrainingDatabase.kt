@@ -19,6 +19,10 @@ import androidx.sqlite.db.SupportSQLiteDatabase
  * Версия 3 (13.10.2026) — добавлена таблица training_records
  * для хранения отдельного рекорда упражнений в тренировке.
  *
+ * Версия 4 (13.10.2026) — в training_records добавлены поля
+ * bestFloat и extraInt для рекордов 501 и Крикета
+ * (PPR/MPR — дробные, % удвоений — справочно).
+ *
  * Рекорды в игровых БД (AroundClockDatabase и др.) остаются
  * для режима «Просто поиграть». Они не пересекаются.
  */
@@ -98,17 +102,24 @@ data class ControlMatchEntity(
 
 /**
  * Рекорд упражнения в тренировке.
- * Ключ — exerciseId (например, "aroundclock_doubles").
+ * Ключ — exerciseId (например, "aroundclock_doubles", "game501_leg").
  *
- * bestScore и bestDarts — что именно сравнивается, зависит от упражнения:
- *   • Кругосветки — bestDarts (меньше = лучше).
- *   • Сектор 20 / Набор очков / Большой раунд — bestScore (больше = лучше).
+ * Что именно сравнивается, зависит от упражнения:
+ *   • Кругосветки          — bestDarts (меньше = лучше).
+ *   • Сектор 20 / Набор / Большой раунд — bestScore (больше = лучше).
+ *   • 501 лучший лег       — bestDarts (меньше = лучше), bestFloat = PPR лега.
+ *   • 501 лучший матч      — bestFloat (PPR матча, больше = лучше),
+ *                            extraInt = % удвоений справочно.
+ *   • Крикет лучший лег    — bestFloat (MPR лега, больше = лучше).
+ *   • Крикет лучший матч   — bestFloat (MPR матча, больше = лучше).
  */
 @Entity(tableName = "training_records")
 data class TrainingRecordEntity(
     @PrimaryKey val exerciseId: String,
     val bestScore: Int,
     val bestDarts: Int,
+    val bestFloat: Float = 0f,
+    val extraInt: Int = 0,
     val achievedAt: Long
 )
 
@@ -259,7 +270,7 @@ interface TrainingRecordDao {
         ControlMatchEntity::class,
         TrainingRecordEntity::class
     ],
-    version = 3,
+    version = 4,
     exportSchema = false
 )
 abstract class TrainingDatabase : RoomDatabase() {
@@ -295,6 +306,17 @@ abstract class TrainingDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "ALTER TABLE training_records ADD COLUMN bestFloat REAL NOT NULL DEFAULT 0"
+                )
+                db.execSQL(
+                    "ALTER TABLE training_records ADD COLUMN extraInt INTEGER NOT NULL DEFAULT 0"
+                )
+            }
+        }
+
         fun getInstance(context: Context): TrainingDatabase {
             return INSTANCE ?: synchronized(this) {
                 INSTANCE ?: Room.databaseBuilder(
@@ -302,7 +324,7 @@ abstract class TrainingDatabase : RoomDatabase() {
                     TrainingDatabase::class.java,
                     "training_database"
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
                     .build()
                     .also { INSTANCE = it }
             }
@@ -412,7 +434,7 @@ class TrainingRepository(private val db: TrainingDatabase) {
         return db.controlDao().getAll().map { it.toModel() }
     }
 
-    // ---------- Рекорды тренировки ----------
+    // ---------- Рекорды тренировки (общие) ----------
 
     /** Получить рекорд упражнения в тренировке. null — если рекорда ещё нет. */
     suspend fun getTrainingRecord(exerciseId: String): TrainingRecordEntity? {
@@ -421,6 +443,8 @@ class TrainingRepository(private val db: TrainingDatabase) {
 
     /**
      * Обновить рекорд, если новый результат лучше.
+     * Для Кругосветки / Сектора 20 / Большого раунда / Набора очков.
+     *
      * @param exerciseId       id упражнения
      * @param score            очки
      * @param darts            дротики
@@ -460,6 +484,148 @@ class TrainingRepository(private val db: TrainingDatabase) {
                 )
             )
         }
+    }
+
+    // ---------- Рекорды 501 в тренировке ----------
+
+    /**
+     * 501 — лучший лег. Сравниваем по минимуму дротиков.
+     * @return true, если рекорд побит (нужно показать салют).
+     */
+    suspend fun update501LegRecord(darts: Int, ppr: Float): Boolean {
+        val key = "game501_leg"
+        val existing = db.recordDao().getById(key)
+        val now = System.currentTimeMillis()
+
+        if (existing == null || existing.bestDarts <= 0 || darts < existing.bestDarts) {
+            if (existing == null) {
+                db.recordDao().insert(
+                    TrainingRecordEntity(
+                        exerciseId = key,
+                        bestScore = 0,
+                        bestDarts = darts,
+                        bestFloat = ppr,
+                        extraInt = 0,
+                        achievedAt = now
+                    )
+                )
+            } else {
+                db.recordDao().update(
+                    existing.copy(
+                        bestDarts = darts,
+                        bestFloat = ppr,
+                        achievedAt = now
+                    )
+                )
+            }
+            return true
+        }
+        return false
+    }
+
+    /**
+     * 501 — лучший матч. Сравниваем по максимуму PPR матча.
+     * @return true, если рекорд побит.
+     */
+    suspend fun update501MatchRecord(ppr: Float, doublesPercent: Int): Boolean {
+        val key = "game501_match"
+        val existing = db.recordDao().getById(key)
+        val now = System.currentTimeMillis()
+
+        if (existing == null || ppr > existing.bestFloat) {
+            if (existing == null) {
+                db.recordDao().insert(
+                    TrainingRecordEntity(
+                        exerciseId = key,
+                        bestScore = 0,
+                        bestDarts = 0,
+                        bestFloat = ppr,
+                        extraInt = doublesPercent,
+                        achievedAt = now
+                    )
+                )
+            } else {
+                db.recordDao().update(
+                    existing.copy(
+                        bestFloat = ppr,
+                        extraInt = doublesPercent,
+                        achievedAt = now
+                    )
+                )
+            }
+            return true
+        }
+        return false
+    }
+
+    // ---------- Рекорды Крикета в тренировке ----------
+
+    /**
+     * Крикет — лучший лег. Сравниваем по максимуму MPR лега.
+     * @return true, если рекорд побит.
+     */
+    suspend fun updateCricketLegRecord(mpr: Float): Boolean {
+        val key = "cricket_leg"
+        val existing = db.recordDao().getById(key)
+        val now = System.currentTimeMillis()
+
+        if (existing == null || mpr > existing.bestFloat) {
+            if (existing == null) {
+                db.recordDao().insert(
+                    TrainingRecordEntity(
+                        exerciseId = key,
+                        bestScore = 0,
+                        bestDarts = 0,
+                        bestFloat = mpr,
+                        extraInt = 0,
+                        achievedAt = now
+                    )
+                )
+            } else {
+                db.recordDao().update(
+                    existing.copy(
+                        bestFloat = mpr,
+                        achievedAt = now
+                    )
+                )
+            }
+            return true
+        }
+        return false
+    }
+
+    /**
+     * Крикет — лучший матч. Сравниваем по максимуму MPR матча.
+     * @return true, если рекорд побит.
+     */
+    suspend fun updateCricketMatchRecord(mpr: Float): Boolean {
+        val key = "cricket_match"
+        val existing = db.recordDao().getById(key)
+        val now = System.currentTimeMillis()
+
+        if (existing == null || mpr > existing.bestFloat) {
+            if (existing == null) {
+                db.recordDao().insert(
+                    TrainingRecordEntity(
+                        exerciseId = key,
+                        bestScore = 0,
+                        bestDarts = 0,
+                        bestFloat = mpr,
+                        extraInt = 0,
+                        achievedAt = now
+                    )
+                )
+            } else {
+                db.recordDao().update(
+                    existing.copy(
+                        bestFloat = mpr,
+                        achievedAt = now
+                    )
+                )
+            }
+            return true
+        }
+        return false
     }
 
     // ---------- Полный сброс ----------
