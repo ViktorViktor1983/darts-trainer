@@ -1,5 +1,7 @@
 package com.lodkin.dartstrainer.ui.cricket
 
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -12,21 +14,49 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.lodkin.dartstrainer.data.SettingsStorage
 import com.lodkin.dartstrainer.data.cricket.*
+import com.lodkin.dartstrainer.data.freerecords.FreePlayRecordsRepository
+import com.lodkin.dartstrainer.data.training.TrainingRepository
 import com.lodkin.dartstrainer.theme.Accent
 import com.lodkin.dartstrainer.theme.ErrorColor
 import com.lodkin.dartstrainer.theme.GoldAccent
 import com.lodkin.dartstrainer.theme.TileBg
 import com.lodkin.dartstrainer.theme.TileBgDark
+import com.lodkin.dartstrainer.ui.common.CelebrationOverlay
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.util.Locale
+import kotlin.math.abs
+
+private const val RECORD_KEY_LEG = "cricket_leg"
+private const val RECORD_KEY_MATCH = "cricket_match"
+
+// Данные ожидающего салюта за рекорд лега.
+private data class PendingLegRecord(
+    val isFirst: Boolean,
+    val isBetter: Boolean,
+    val mpr: Float,
+    val prevMpr: Float?
+)
+
+// Данные ожидающего салюта за рекорд матча.
+private data class PendingMatchRecord(
+    val isFirst: Boolean,
+    val isBetter: Boolean,
+    val mpr: Float,
+    val prevMpr: Float?
+)
 
 // ─────────────────────────────────────────────
 // Нормативы американского крикета
@@ -46,11 +76,15 @@ private val AMERICAN_CRICKET_NORMS: List<CricketNorm> = listOf(
 @Composable
 fun CricketGameScreen(
     repository: CricketRepository,
+    freePlayRecordsRepository: FreePlayRecordsRepository? = null,
     initialGame: CricketGame,
     existingId: Long = 0L,
+    isTrainingMode: Boolean = false,
+    trainingRepository: TrainingRepository? = null,
     onGameFinish: (CricketGame, Long) -> Unit,
     onBack: () -> Unit
 ) {
+    val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var game by remember { mutableStateOf(initialGame) }
     var currentId by remember { mutableStateOf(existingId) }
@@ -65,6 +99,12 @@ fun CricketGameScreen(
 
     // Флаг блокировки ОК после автоперехода хода
     var okBlocked by remember { mutableStateOf(false) }
+
+    // ── Рекорды ──
+    var pendingLegRecord by remember { mutableStateOf<PendingLegRecord?>(null) }
+    var pendingMatchRecord by remember { mutableStateOf<PendingMatchRecord?>(null) }
+    var showLegRecordCelebration by remember { mutableStateOf(false) }
+    var showMatchRecordCelebration by remember { mutableStateOf(false) }
 
     val history = remember { mutableStateListOf<CricketGame>() }
 
@@ -103,6 +143,119 @@ fun CricketGameScreen(
         return g.copy(players = updated, legHistory = newHistory)
     }
 
+    // ── Проверка рекорда лега ──
+    suspend fun checkLegRecord(g: CricketGame): PendingLegRecord? {
+        if (g.isPairGame) return null
+        val myName = SettingsStorage.getPlayerName(context)
+        if (myName.isBlank()) return null
+        val snapshot = g.legHistory.lastOrNull() ?: return null
+        val mySnap = snapshot.players.firstOrNull { it.name == myName && !it.isBot } ?: return null
+        if (mySnap.teamIndex != snapshot.winningTeam) return null
+        val darts = mySnap.darts
+        if (darts < 3) return null
+        val mpr = mySnap.legMarks.toFloat() / (darts / 3f)
+
+        val prevMpr: Float?
+        val isFirst: Boolean
+        if (isTrainingMode && trainingRepository != null) {
+            val prev = withContext(Dispatchers.IO) {
+                trainingRepository.getTrainingRecord(RECORD_KEY_LEG)
+            }
+            prevMpr = prev?.bestFloat?.takeIf { it > 0f }
+            isFirst = prev == null
+        } else if (freePlayRecordsRepository != null) {
+            val prev = withContext(Dispatchers.IO) {
+                freePlayRecordsRepository.get(FreePlayRecordsRepository.KEY_CRICKET_LEG)
+            }
+            prevMpr = prev?.bestFloat?.takeIf { it > 0f }
+            isFirst = prev == null
+        } else {
+            return null
+        }
+
+        val isBetter = prevMpr == null || mpr > prevMpr
+        val isAlmost = !isBetter && !isFirst && prevMpr != null && prevMpr > 0f &&
+                (prevMpr - mpr) / prevMpr <= 0.10f
+        if (!isBetter && !isAlmost) return null
+
+        if (isBetter) {
+            if (isTrainingMode && trainingRepository != null) {
+                withContext(Dispatchers.IO) {
+                    trainingRepository.updateCricketLegRecord(mpr)
+                }
+            } else if (freePlayRecordsRepository != null) {
+                withContext(Dispatchers.IO) {
+                    freePlayRecordsRepository.tryUpdateCricketLeg(mpr)
+                }
+            }
+        }
+
+        return PendingLegRecord(
+            isFirst = isFirst,
+            isBetter = isBetter,
+            mpr = mpr,
+            prevMpr = prevMpr
+        )
+    }
+
+    // ── Проверка рекорда матча ──
+    suspend fun checkAndUpdateMatchRecord(): PendingMatchRecord? {
+        if (game.isPairGame) return null
+        val myName = SettingsStorage.getPlayerName(context)
+        if (myName.isBlank()) return null
+        val myIdx = game.players.indexOfFirst { it.name == myName && !it.isBot }
+        if (myIdx < 0) return null
+        val myPlayer = game.players[myIdx]
+        if (game.winnerIndex != myPlayer.teamIndex) return null
+        val darts = myPlayer.matchDartsThrown
+        if (darts < 3) return null
+        val marks = myPlayer.matchHits.values.sum()
+        val mpr = marks.toFloat() / (darts / 3f)
+        if (mpr <= 0f) return null
+
+        val prevMpr: Float?
+        val isFirst: Boolean
+        if (isTrainingMode && trainingRepository != null) {
+            val prev = withContext(Dispatchers.IO) {
+                trainingRepository.getTrainingRecord(RECORD_KEY_MATCH)
+            }
+            prevMpr = prev?.bestFloat?.takeIf { it > 0f }
+            isFirst = prev == null
+        } else if (freePlayRecordsRepository != null) {
+            val prev = withContext(Dispatchers.IO) {
+                freePlayRecordsRepository.get(FreePlayRecordsRepository.KEY_CRICKET_MATCH)
+            }
+            prevMpr = prev?.bestFloat?.takeIf { it > 0f }
+            isFirst = prev == null
+        } else {
+            return null
+        }
+
+        val isBetter = prevMpr == null || mpr > prevMpr
+        val isAlmost = !isBetter && !isFirst && prevMpr != null && prevMpr > 0f &&
+                (prevMpr - mpr) / prevMpr <= 0.10f
+        if (!isBetter && !isAlmost) return null
+
+        if (isBetter) {
+            if (isTrainingMode && trainingRepository != null) {
+                withContext(Dispatchers.IO) {
+                    trainingRepository.updateCricketMatchRecord(mpr)
+                }
+            } else if (freePlayRecordsRepository != null) {
+                withContext(Dispatchers.IO) {
+                    freePlayRecordsRepository.tryUpdateCricketMatch(mpr)
+                }
+            }
+        }
+
+        return PendingMatchRecord(
+            isFirst = isFirst,
+            isBetter = isBetter,
+            mpr = mpr,
+            prevMpr = prevMpr
+        )
+    }
+
     LaunchedEffect(game.currentPlayerIndex, game.isFinished, showLegWonDialog, showSetWonDialog, showWinDialog) {
         val currentPlayer = game.players.getOrNull(game.currentPlayerIndex) ?: return@LaunchedEffect
         if (game.isFinished || showLegWonDialog || showSetWonDialog || showWinDialog) return@LaunchedEffect
@@ -129,12 +282,9 @@ fun CricketGameScreen(
     }
 
     // ── Блокировка ОК после автоперехода хода ──
-    // Следим за сменой игрока: если ход перешёл (currentPlayerIndex изменился),
-    // и это произошло «само» (после 3-го дротика), блокируем ОК на 3 секунды.
     var lastCurrentPlayerIndex by remember { mutableStateOf(game.currentPlayerIndex) }
     LaunchedEffect(game.currentPlayerIndex, game.currentTurnDarts) {
         if (game.currentPlayerIndex != lastCurrentPlayerIndex) {
-            // Ход перешёл — блокируем ОК на 3 секунды
             okBlocked = true
             lastCurrentPlayerIndex = game.currentPlayerIndex
             delay(3000L)
@@ -217,8 +367,16 @@ fun CricketGameScreen(
             confirmButton = {
                 if (!needsAnswer) {
                     TextButton(onClick = {
-                        showLegWonDialog = false
-                        game = game.copy(lastLegWinnerIndex = null)
+                        // Дротики окончательно зафиксированы — можно проверять рекорд лега.
+                        scope.launch {
+                            val pending = checkLegRecord(game)
+                            showLegWonDialog = false
+                            game = game.copy(lastLegWinnerIndex = null)
+                            if (pending != null) {
+                                pendingLegRecord = pending
+                                showLegRecordCelebration = true
+                            }
+                        }
                     }) { Text("Продолжить", color = Accent) }
                 }
             },
@@ -298,9 +456,149 @@ fun CricketGameScreen(
             onUndo = { undo(); showWinDialog = false },
             onContinue = {
                 showWinDialog = false
-                onGameFinish(game, currentId)
+                scope.launch {
+                    val pending = checkAndUpdateMatchRecord()
+                    if (pending != null) {
+                        pendingMatchRecord = pending
+                        showMatchRecordCelebration = true
+                    } else {
+                        onGameFinish(game, currentId)
+                    }
+                }
             }
         )
+    }
+
+    // ── Салют за рекорд лега ──
+    if (showLegRecordCelebration && pendingLegRecord != null) {
+        val rec = pendingLegRecord!!
+        val recordScale by animateFloatAsState(
+            targetValue = if (rec.isBetter) 1f else 0.85f,
+            animationSpec = tween(durationMillis = 500),
+            label = "leg_record_scale"
+        )
+
+        CelebrationOverlay(
+            visible = true,
+            isNewRecord = rec.isBetter,
+            onConfirm = {
+                showLegRecordCelebration = false
+                pendingLegRecord = null
+            },
+            onUndo = {
+                showLegRecordCelebration = false
+                pendingLegRecord = null
+            }
+        ) {
+            Text(
+                "ЛЕГ",
+                color = Accent,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 3.sp
+            )
+            Spacer(Modifier.height(12.dp))
+
+            if (rec.isFirst) {
+                FirstResultBlockCricket()
+                Spacer(Modifier.height(14.dp))
+            } else if (rec.isBetter) {
+                CelebrationRecordBlockCricket(
+                    title = "🏆 НОВЫЙ РЕКОРД!",
+                    value = "MPR ${String.format(Locale.US, "%.1f", rec.mpr)}",
+                    prevValue = "MPR ${String.format(Locale.US, "%.1f", rec.prevMpr ?: 0f)}",
+                    scale = recordScale
+                )
+                Spacer(Modifier.height(14.dp))
+            } else {
+                val missing = ((rec.prevMpr ?: 0f) - rec.mpr)
+                AlmostRecordBlockCricket(
+                    text = "До нового рекорда не хватило ${String.format(Locale.US, "%.1f", missing)} MPR",
+                    bestValue = "MPR ${String.format(Locale.US, "%.1f", rec.prevMpr ?: 0f)}"
+                )
+                Spacer(Modifier.height(14.dp))
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text("MPR лега:", color = Color.White, fontSize = 15.sp)
+                Text(
+                    String.format(Locale.US, "%.1f", rec.mpr),
+                    color = GoldAccent,
+                    fontSize = 24.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        }
+    }
+
+    // ── Салют за рекорд матча ──
+    if (showMatchRecordCelebration && pendingMatchRecord != null) {
+        val rec = pendingMatchRecord!!
+        val recordScale by animateFloatAsState(
+            targetValue = if (rec.isBetter) 1f else 0.85f,
+            animationSpec = tween(durationMillis = 500),
+            label = "match_record_scale"
+        )
+
+        CelebrationOverlay(
+            visible = true,
+            isNewRecord = rec.isBetter,
+            onConfirm = {
+                showMatchRecordCelebration = false
+                pendingMatchRecord = null
+                onGameFinish(game, currentId)
+            },
+            onUndo = {
+                showMatchRecordCelebration = false
+                pendingMatchRecord = null
+                onGameFinish(game, currentId)
+            }
+        ) {
+            Text(
+                "МАТЧ",
+                color = Accent,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 3.sp
+            )
+            Spacer(Modifier.height(12.dp))
+
+            if (rec.isFirst) {
+                FirstResultBlockCricket()
+                Spacer(Modifier.height(14.dp))
+            } else if (rec.isBetter) {
+                CelebrationRecordBlockCricket(
+                    title = "🏆 НОВЫЙ РЕКОРД!",
+                    value = "MPR ${String.format(Locale.US, "%.1f", rec.mpr)}",
+                    prevValue = "MPR ${String.format(Locale.US, "%.1f", rec.prevMpr ?: 0f)}",
+                    scale = recordScale
+                )
+                Spacer(Modifier.height(14.dp))
+            } else {
+                val missing = ((rec.prevMpr ?: 0f) - rec.mpr)
+                AlmostRecordBlockCricket(
+                    text = "До нового рекорда не хватило ${String.format(Locale.US, "%.1f", missing)} MPR",
+                    bestValue = "MPR ${String.format(Locale.US, "%.1f", rec.prevMpr ?: 0f)}"
+                )
+                Spacer(Modifier.height(14.dp))
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text("MPR матча:", color = Color.White, fontSize = 15.sp)
+                Text(
+                    String.format(Locale.US, "%.1f", rec.mpr),
+                    color = GoldAccent,
+                    fontSize = 24.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        }
     }
 
     if (showBackConfirm) {
@@ -527,7 +825,6 @@ private fun UndoButton(enabled: Boolean, onClick: () -> Unit) {
     ) { Text("↶", color = if (enabled) Accent else Accent.copy(alpha = 0.3f), fontSize = 22.sp, fontWeight = FontWeight.Bold) }
 }
 
-// ── Увеличенная плашка разницы очков ──
 @Composable
 private fun ScoreDiffBadge(text: String, positive: Boolean) {
     Box(modifier = Modifier.clip(RoundedCornerShape(8.dp)).background(TileBgDark)
@@ -733,4 +1030,112 @@ private fun WinDialog(game: CricketGame, onUndo: () -> Unit, onContinue: () -> U
             }
         }
     )
+}
+
+// ============================================================
+// Вспомогательные блоки для салюта рекорда
+// ============================================================
+
+@Composable
+private fun CelebrationRecordBlockCricket(
+    title: String,
+    value: String,
+    prevValue: String,
+    scale: Float
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(GoldAccent.copy(alpha = 0.15f))
+            .padding(14.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text("🎉  ✨  🎊", fontSize = 22.sp, textAlign = TextAlign.Center)
+        Spacer(Modifier.height(6.dp))
+        Text(
+            title,
+            color = GoldAccent,
+            fontSize = 22.sp,
+            fontWeight = FontWeight.Bold,
+            letterSpacing = 1.sp,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.scale(scale)
+        )
+        Spacer(Modifier.height(8.dp))
+        Text(
+            value,
+            color = GoldAccent,
+            fontSize = 32.sp,
+            fontWeight = FontWeight.Bold,
+            textAlign = TextAlign.Center
+        )
+        Spacer(Modifier.height(4.dp))
+        Text(
+            "прошлый: $prevValue",
+            color = Color.White.copy(alpha = 0.55f),
+            fontSize = 12.sp,
+            textAlign = TextAlign.Center
+        )
+    }
+}
+
+@Composable
+private fun AlmostRecordBlockCricket(text: String, bestValue: String) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(Accent.copy(alpha = 0.10f))
+            .padding(14.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(
+            "💪 Почти рекорд",
+            color = Accent,
+            fontSize = 16.sp,
+            fontWeight = FontWeight.Bold,
+            textAlign = TextAlign.Center
+        )
+        Spacer(Modifier.height(4.dp))
+        Text(
+            text,
+            color = Color.White.copy(alpha = 0.85f),
+            fontSize = 13.sp,
+            textAlign = TextAlign.Center
+        )
+        Spacer(Modifier.height(4.dp))
+        Text(
+            "рекорд: $bestValue",
+            color = Color.White.copy(alpha = 0.5f),
+            fontSize = 11.sp,
+            textAlign = TextAlign.Center
+        )
+    }
+}
+
+@Composable
+private fun FirstResultBlockCricket() {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(TileBg.copy(alpha = 0.7f))
+            .padding(12.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(
+            "Твой результат сохранён",
+            color = Color.White.copy(alpha = 0.85f),
+            fontSize = 13.sp,
+            textAlign = TextAlign.Center
+        )
+        Spacer(Modifier.height(2.dp))
+        Text(
+            "Рекорд появится со следующей игры",
+            color = Color.White.copy(alpha = 0.5f),
+            fontSize = 11.sp,
+            textAlign = TextAlign.Center
+        )
+    }
 }
