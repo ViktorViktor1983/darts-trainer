@@ -1,5 +1,7 @@
 package com.lodkin.dartstrainer.ui.sector
 
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -13,19 +15,25 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.lodkin.dartstrainer.data.sector.SectorRepository
+import com.lodkin.dartstrainer.data.training.TrainingRepository
 import com.lodkin.dartstrainer.theme.Accent
 import com.lodkin.dartstrainer.theme.DarkBg
 import com.lodkin.dartstrainer.theme.ErrorColor
 import com.lodkin.dartstrainer.theme.GoldAccent
 import com.lodkin.dartstrainer.theme.TileBg
 import com.lodkin.dartstrainer.theme.TileBgDark
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlin.math.abs
 
 private val PaleYellow = Color(0xFFFFE082)
 private val PaleYellowText = Color(0xFF3E2723)
@@ -45,16 +53,17 @@ private const val MAX_HITS_SECTOR = 9
 private const val MAX_HITS_BULL = 6
 
 /**
- * @param isTrainingMode  true — игра запущена из тренировки.
- *                        Результат НЕ сохраняется в игровую БД,
- *                        а уходит наружу через onFinish. Сохранение в тренировочную
- *                        БД делает MainActivity.
+ * @param isTrainingMode      true — игра запущена из тренировки.
+ * @param trainingRepository  нужен для чтения/обновления рекорда в тренировочной БД.
+ * @param trainingRecordKey   ключ рекорда в training_records (например "sector20").
  */
 @Composable
 fun SectorGameScreen(
     sector: Int,
     repository: SectorRepository,
     isTrainingMode: Boolean = false,
+    trainingRepository: TrainingRepository? = null,
+    trainingRecordKey: String? = null,
     onFinish: (Int) -> Unit,
     onBack: () -> Unit
 ) {
@@ -67,6 +76,10 @@ fun SectorGameScreen(
     var showBackConfirm by remember { mutableStateOf(false) }
     var showFinishDialog by remember { mutableStateOf(false) }
 
+    // Рекорд (bestScore). null = рекорда ещё не было.
+    var bestRecord by remember { mutableStateOf<Int?>(null) }
+    var recordsCount by remember { mutableStateOf(0) }
+
     val isBull = sector == 25
     val sectorLabel = if (isBull) "BULL" else "S$sector"
     val pointsPerHit = if (isBull) 25 else sector
@@ -76,6 +89,23 @@ fun SectorGameScreen(
     val totalHits = approaches.sum()
     val totalScore = totalHits * pointsPerHit
     val isFinished = approaches.size >= TOTAL_APPROACHES
+
+    // Чтение рекорда при старте
+    LaunchedEffect(sector, isTrainingMode) {
+        if (isTrainingMode && trainingRepository != null && !trainingRecordKey.isNullOrBlank()) {
+            val rec = withContext(Dispatchers.IO) {
+                trainingRepository.getTrainingRecord(trainingRecordKey)
+            }
+            bestRecord = rec?.bestScore
+            recordsCount = if (rec == null) 0 else 1
+        } else {
+            val games = withContext(Dispatchers.IO) {
+                repository.getGamesBySector(sector)
+            }
+            recordsCount = games.size
+            bestRecord = games.maxOfOrNull { it.totalScore }
+        }
+    }
 
     fun isInputValid(text: String): Boolean {
         if (text.isBlank()) return false
@@ -373,6 +403,7 @@ fun SectorGameScreen(
     if (showBackConfirm) {
         AlertDialog(
             onDismissRequest = { showBackConfirm = false },
+            containerColor = TileBgDark,
             confirmButton = {
                 TextButton(onClick = {
                     showBackConfirm = false
@@ -391,6 +422,22 @@ fun SectorGameScreen(
 
     if (showFinishDialog) {
         val score = totalScore
+        val prevRecord = bestRecord
+        val isFirstEver = recordsCount == 0
+
+        val isNewRecord = !isFirstEver && prevRecord != null && score > prevRecord
+        val isAlmostRecord = !isFirstEver && !isNewRecord && prevRecord != null && prevRecord > 0 &&
+                abs(prevRecord - score).toFloat() / prevRecord <= 0.10f
+        val missingPoints = if (prevRecord != null) prevRecord - score else 0
+
+        // Анимация для заголовка рекорда
+        val recordScale by animateFloatAsState(
+            targetValue = if (isNewRecord) 1f else 0.85f,
+            animationSpec = tween(durationMillis = 500),
+            label = "record_scale"
+        )
+
+        // Нормативы (только для сектора 20)
         val achievedIdx = SECTOR_20_NORMS.indices.reversed()
             .firstOrNull { score >= SECTOR_20_NORMS[it].second }
         val achieved = if (achievedIdx != null) SECTOR_20_NORMS[achievedIdx] else null
@@ -399,10 +446,10 @@ fun SectorGameScreen(
 
         AlertDialog(
             onDismissRequest = { },
+            containerColor = TileBgDark,
             confirmButton = {
                 TextButton(onClick = {
                     showFinishDialog = false
-                    // Сохраняем в игровую БД только если это НЕ тренировка.
                     if (!isTrainingMode) {
                         scope.launch {
                             repository.saveGame(
@@ -423,10 +470,30 @@ fun SectorGameScreen(
                 }) { Text("↶ Отменить подход", color = ErrorColor) }
             },
             title = {
-                Text("ИГРА ЗАВЕРШЕНА", color = Accent, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                Text("ИГРА ЗАВЕРШЕНА", color = Accent, fontSize = 20.sp, fontWeight = FontWeight.Bold)
             },
             text = {
                 Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                    // ── Праздничный блок рекорда ──
+                    if (isNewRecord && prevRecord != null) {
+                        CelebrationRecordBlock(
+                            title = "🏆 НОВЫЙ РЕКОРД!",
+                            value = "$score очков",
+                            prevValue = "$prevRecord очков",
+                            scale = recordScale
+                        )
+                        Spacer(Modifier.height(14.dp))
+                    } else if (isAlmostRecord && prevRecord != null) {
+                        AlmostRecordBlock(
+                            text = "До нового рекорда не хватило $missingPoints очков",
+                            bestValue = "$prevRecord очков"
+                        )
+                        Spacer(Modifier.height(14.dp))
+                    } else if (isFirstEver) {
+                        FirstResultBlock()
+                        Spacer(Modifier.height(14.dp))
+                    }
+
                     Text(
                         "Сектор: $sectorLabel",
                         color = Color.White.copy(alpha = 0.7f),
@@ -521,6 +588,118 @@ fun SectorGameScreen(
                     }
                 }
             }
+        )
+    }
+}
+
+// ─────────────────────────────────────────────
+// Праздничный блок рекорда
+// ─────────────────────────────────────────────
+
+@Composable
+private fun CelebrationRecordBlock(
+    title: String,
+    value: String,
+    prevValue: String,
+    scale: Float
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(GoldAccent.copy(alpha = 0.15f))
+            .padding(14.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(
+            "🎉  ✨  🎊",
+            fontSize = 22.sp,
+            textAlign = TextAlign.Center
+        )
+        Spacer(Modifier.height(6.dp))
+        Text(
+            title,
+            color = GoldAccent,
+            fontSize = 22.sp,
+            fontWeight = FontWeight.Bold,
+            letterSpacing = 1.sp,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.scale(scale)
+        )
+        Spacer(Modifier.height(8.dp))
+        Text(
+            value,
+            color = GoldAccent,
+            fontSize = 32.sp,
+            fontWeight = FontWeight.Bold,
+            textAlign = TextAlign.Center
+        )
+        Spacer(Modifier.height(4.dp))
+        Text(
+            "прошлый: $prevValue",
+            color = Color.White.copy(alpha = 0.55f),
+            fontSize = 12.sp,
+            textAlign = TextAlign.Center
+        )
+    }
+}
+
+@Composable
+private fun AlmostRecordBlock(text: String, bestValue: String) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(Accent.copy(alpha = 0.10f))
+            .padding(14.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(
+            "💪 Почти рекорд",
+            color = Accent,
+            fontSize = 16.sp,
+            fontWeight = FontWeight.Bold,
+            textAlign = TextAlign.Center
+        )
+        Spacer(Modifier.height(4.dp))
+        Text(
+            text,
+            color = Color.White.copy(alpha = 0.85f),
+            fontSize = 13.sp,
+            textAlign = TextAlign.Center
+        )
+        Spacer(Modifier.height(4.dp))
+        Text(
+            "рекорд: $bestValue",
+            color = Color.White.copy(alpha = 0.5f),
+            fontSize = 11.sp,
+            textAlign = TextAlign.Center
+        )
+    }
+}
+
+@Composable
+private fun FirstResultBlock() {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(TileBg.copy(alpha = 0.7f))
+            .padding(12.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(
+            "Твой результат сохранён",
+            color = Color.White.copy(alpha = 0.85f),
+            fontSize = 13.sp,
+            textAlign = TextAlign.Center
+        )
+        Spacer(Modifier.height(2.dp))
+        Text(
+            "Рекорд появится со следующей игры",
+            color = Color.White.copy(alpha = 0.5f),
+            fontSize = 11.sp,
+            textAlign = TextAlign.Center
         )
     }
 }
