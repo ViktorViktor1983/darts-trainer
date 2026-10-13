@@ -1,5 +1,7 @@
 package com.lodkin.dartstrainer.ui.aroundclock
 
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -14,6 +16,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -29,9 +32,11 @@ import com.lodkin.dartstrainer.theme.ErrorColor
 import com.lodkin.dartstrainer.theme.GoldAccent
 import com.lodkin.dartstrainer.theme.TileBg
 import com.lodkin.dartstrainer.theme.TileBgDark
+import com.lodkin.dartstrainer.ui.common.CelebrationOverlay
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
+import kotlin.math.abs
 import kotlin.random.Random
 
 private val PaleYellow = Color(0xFFFFE082)
@@ -46,14 +51,10 @@ private data class ThrowInApproach(
 )
 
 /**
- * @param sectorStart  С какого сектора начинать. 1 — полная версия (S1–S20 + Bull),
- *                     10 — укороченная (S10–S20 + Bull). Используется для утроений.
- * @param trainingRepository  Репозиторий тренировочной БД. Передаётся, только если
- *                            игра запущена из тренировки.
- * @param trainingRecordKey   Ключ рекорда в таблице training_records. Например
- *                            "aroundclock_doubles". Нужен только для тренировки.
- *                            Если задан вместе с trainingRepository — рекорд берётся
- *                            из тренировочной БД, а не из игровой.
+ * @param sectorStart          С какого сектора начинать. 1 — полная версия,
+ *                             10 — укороченная (используется для утроений).
+ * @param trainingRepository   для чтения/обновления тренировочного рекорда.
+ * @param trainingRecordKey    ключ рекорда в training_records.
  */
 @Composable
 fun AroundClockGameScreen(
@@ -81,31 +82,29 @@ fun AroundClockGameScreen(
     var showBackConfirm by remember { mutableStateOf(false) }
     var showFinishDialog by remember { mutableStateOf(false) }
     var bestRecord by remember { mutableStateOf<Int?>(null) }
+    var recordsCount by remember { mutableStateOf(0) }
     var flashMiss by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
-        // Рекорд показываем только для полной версии.
         if (!fullVersion) return@LaunchedEffect
-
         if (isTrainingMode) {
-            // Тренировка — читаем из training_records.
             val rec = withContext(Dispatchers.IO) {
                 trainingRepository!!.getTrainingRecord(trainingRecordKey!!)
             }
             bestRecord = rec?.bestDarts?.takeIf { it > 0 }
+            recordsCount = if (rec == null) 0 else 1
         } else {
-            // Свободная игра — читаем из игровой БД, как раньше.
             val games = withContext(Dispatchers.IO) {
                 repository.getAllGames()
             }
-            bestRecord = games
-                .filter {
-                    it.completed &&
-                    it.targetName == target.name &&
-                    it.orderName == order.name &&
-                    it.hitsRequired == hitsRequired
-                }
-                .minOfOrNull { it.totalDarts }
+            val matching = games.filter {
+                it.completed &&
+                it.targetName == target.name &&
+                it.orderName == order.name &&
+                it.hitsRequired == hitsRequired
+            }
+            recordsCount = matching.size
+            bestRecord = matching.minOfOrNull { it.totalDarts }
         }
     }
 
@@ -160,7 +159,6 @@ fun AroundClockGameScreen(
             .fillMaxSize()
             .background(DarkBg)
     ) {
-        // ── Шапка ──
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -217,14 +215,12 @@ fun AroundClockGameScreen(
             }
         }
 
-        // ── Карта прогресса ──
         SectorProgressMap(
             sequence = sectorSequence,
             currentSector = currentSectorOrNull,
             isFinished = isFinished
         )
 
-        // ── Текущая цель ──
         if (!isFinished && currentSectorOrNull != null) {
             val cs = currentSectorOrNull
             Column(
@@ -303,7 +299,6 @@ fun AroundClockGameScreen(
 
         Spacer(Modifier.height(6.dp))
 
-        // ── Три строки подхода ──
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -316,7 +311,6 @@ fun AroundClockGameScreen(
                     if (globalIndex < allThrows.size) allThrows[globalIndex] else null
 
                 val rowSector: Int? = existing?.sector ?: currentSectorOrNull
-
                 val previewMiss = flashMiss && existing == null && i >= throwsInCurrentApproach
 
                 ApproachRow(
@@ -333,7 +327,6 @@ fun AroundClockGameScreen(
 
         Spacer(Modifier.height(8.dp))
 
-        // ── Кнопки ──
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -388,6 +381,7 @@ fun AroundClockGameScreen(
     if (showBackConfirm) {
         AlertDialog(
             onDismissRequest = { showBackConfirm = false },
+            containerColor = TileBgDark,
             confirmButton = {
                 TextButton(onClick = {
                     showBackConfirm = false
@@ -404,105 +398,132 @@ fun AroundClockGameScreen(
         )
     }
 
-    if (showFinishDialog) {
-        AlertDialog(
-            onDismissRequest = { },
-            confirmButton = {
-                TextButton(onClick = {
-                    showFinishDialog = false
-                    onFinish(allThrows.size, true, state.sectorResults)
-                }) { Text("Продолжить", color = Accent) }
-            },
-            dismissButton = {
-                TextButton(onClick = {
-                    showFinishDialog = false
-                    undo()
-                }) { Text("↶ Отменить бросок", color = ErrorColor) }
-            },
-            title = {
-                Text("КРУГ ПРОЙДЕН", color = Accent, fontSize = 22.sp, fontWeight = FontWeight.Bold)
-            },
-            text = {
-                Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
-                    val prevRecord = bestRecord
-                    val isNewRecord = fullVersion && (prevRecord == null || allThrows.size < prevRecord)
-                    if (isNewRecord) {
-                        Text(
-                            "🏆 НОВЫЙ РЕКОРД!",
-                            color = GoldAccent,
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Spacer(Modifier.height(8.dp))
-                    }
+    // ── Итоги + анимация ──
+    val prevRecord = bestRecord
+    val isFirstEver = fullVersion && recordsCount == 0
+    val currentDarts = allThrows.size
 
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text("Всего дротиков:", color = Color.White, fontSize = 15.sp)
-                        Text(
-                            "${allThrows.size}",
-                            color = GoldAccent,
-                            fontSize = 24.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                    if (fullVersion && prevRecord != null) {
-                        Spacer(Modifier.height(4.dp))
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text("Твой рекорд:", color = Color.White.copy(alpha = 0.6f), fontSize = 13.sp)
-                            Text(
-                                "$prevRecord",
-                                color = Color.White.copy(alpha = 0.6f),
-                                fontSize = 13.sp
-                            )
-                        }
-                    }
-                    Spacer(Modifier.height(4.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text("Секторов пройдено:", color = Color.White, fontSize = 14.sp)
-                        Text(
-                            "${state.sectorsCompleted}",
-                            color = Color.White,
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                    Spacer(Modifier.height(14.dp))
+    val isNewRecord = fullVersion && !isFirstEver && prevRecord != null && currentDarts < prevRecord
+    val isAlmostRecord = fullVersion && !isFirstEver && !isNewRecord && prevRecord != null && prevRecord > 0 &&
+            abs(prevRecord - currentDarts).toFloat() / prevRecord <= 0.10f
+    val missingDarts = if (prevRecord != null) currentDarts - prevRecord else 0
+
+    val recordScale by animateFloatAsState(
+        targetValue = if (isNewRecord) 1f else 0.85f,
+        animationSpec = tween(durationMillis = 500),
+        label = "record_scale"
+    )
+
+    if (showFinishDialog) {
+        CelebrationOverlay(
+            visible = true,
+            isNewRecord = isNewRecord,
+            onConfirm = {
+                showFinishDialog = false
+                if (!isTrainingMode) {
+                    // Игровая БД сохраняется вызывающей стороной (MainActivity) —
+                    // здесь не дублируем.
+                }
+                onFinish(allThrows.size, true, state.sectorResults)
+            },
+            onUndo = {
+                showFinishDialog = false
+                undo()
+            }
+        ) {
+            Text(
+                "КРУГ ПРОЙДЕН",
+                color = Accent,
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 1.sp
+            )
+            Spacer(Modifier.height(12.dp))
+
+            if (isNewRecord && prevRecord != null) {
+                CelebrationRecordBlock(
+                    title = "🏆 НОВЫЙ РЕКОРД!",
+                    value = "$currentDarts дротиков",
+                    prevValue = "$prevRecord дротиков",
+                    scale = recordScale
+                )
+                Spacer(Modifier.height(14.dp))
+            } else if (isAlmostRecord && prevRecord != null) {
+                AlmostRecordBlock(
+                    text = "До нового рекорда не хватило $missingDarts дротиков",
+                    bestValue = "$prevRecord дротиков"
+                )
+                Spacer(Modifier.height(14.dp))
+            } else if (isFirstEver) {
+                FirstResultBlock()
+                Spacer(Modifier.height(14.dp))
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text("Всего дротиков:", color = Color.White, fontSize = 15.sp)
+                Text(
+                    "$currentDarts",
+                    color = GoldAccent,
+                    fontSize = 24.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+            if (fullVersion && prevRecord != null) {
+                Spacer(Modifier.height(4.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text("Твой рекорд:", color = Color.White.copy(alpha = 0.6f), fontSize = 13.sp)
                     Text(
-                        "РАЗБИВКА ПО СЕКТОРАМ",
-                        color = Accent,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 2.sp
+                        "$prevRecord",
+                        color = Color.White.copy(alpha = 0.6f),
+                        fontSize = 13.sp
                     )
-                    Spacer(Modifier.height(6.dp))
-                    state.sectorResults.entries.forEach { (sec, darts) ->
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 2.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text(sectorLabel(sec, target), color = Color.White, fontSize = 13.sp)
-                            Text(
-                                "$darts",
-                                color = GoldAccent,
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                    }
                 }
             }
-        )
+            Spacer(Modifier.height(4.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text("Секторов пройдено:", color = Color.White, fontSize = 14.sp)
+                Text(
+                    "${state.sectorsCompleted}",
+                    color = Color.White,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+            Spacer(Modifier.height(14.dp))
+            Text(
+                "РАЗБИВКА ПО СЕКТОРАМ",
+                color = Accent,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 2.sp
+            )
+            Spacer(Modifier.height(6.dp))
+            state.sectorResults.entries.forEach { (sec, darts) ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 2.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(sectorLabel(sec, target), color = Color.White, fontSize = 13.sp)
+                    Text(
+                        "$darts",
+                        color = GoldAccent,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+        }
     }
 }
 
@@ -700,4 +721,108 @@ private fun targetLabel(target: AroundClockTarget): String = when (target) {
     AroundClockTarget.SINGLE -> "Сектора"
     AroundClockTarget.DOUBLE -> "Удвоения"
     AroundClockTarget.TRIPLE -> "Утроения"
+}
+
+@Composable
+private fun CelebrationRecordBlock(
+    title: String,
+    value: String,
+    prevValue: String,
+    scale: Float
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(GoldAccent.copy(alpha = 0.15f))
+            .padding(14.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text("🎉  ✨  🎊", fontSize = 22.sp, textAlign = TextAlign.Center)
+        Spacer(Modifier.height(6.dp))
+        Text(
+            title,
+            color = GoldAccent,
+            fontSize = 22.sp,
+            fontWeight = FontWeight.Bold,
+            letterSpacing = 1.sp,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.scale(scale)
+        )
+        Spacer(Modifier.height(8.dp))
+        Text(
+            value,
+            color = GoldAccent,
+            fontSize = 32.sp,
+            fontWeight = FontWeight.Bold,
+            textAlign = TextAlign.Center
+        )
+        Spacer(Modifier.height(4.dp))
+        Text(
+            "прошлый: $prevValue",
+            color = Color.White.copy(alpha = 0.55f),
+            fontSize = 12.sp,
+            textAlign = TextAlign.Center
+        )
+    }
+}
+
+@Composable
+private fun AlmostRecordBlock(text: String, bestValue: String) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(Accent.copy(alpha = 0.10f))
+            .padding(14.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(
+            "💪 Почти рекорд",
+            color = Accent,
+            fontSize = 16.sp,
+            fontWeight = FontWeight.Bold,
+            textAlign = TextAlign.Center
+        )
+        Spacer(Modifier.height(4.dp))
+        Text(
+            text,
+            color = Color.White.copy(alpha = 0.85f),
+            fontSize = 13.sp,
+            textAlign = TextAlign.Center
+        )
+        Spacer(Modifier.height(4.dp))
+        Text(
+            "рекорд: $bestValue",
+            color = Color.White.copy(alpha = 0.5f),
+            fontSize = 11.sp,
+            textAlign = TextAlign.Center
+        )
+    }
+}
+
+@Composable
+private fun FirstResultBlock() {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(TileBg.copy(alpha = 0.7f))
+            .padding(12.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(
+            "Твой результат сохранён",
+            color = Color.White.copy(alpha = 0.85f),
+            fontSize = 13.sp,
+            textAlign = TextAlign.Center
+        )
+        Spacer(Modifier.height(2.dp))
+        Text(
+            "Рекорд появится со следующей игры",
+            color = Color.White.copy(alpha = 0.5f),
+            fontSize = 11.sp,
+            textAlign = TextAlign.Center
+        )
+    }
 }
