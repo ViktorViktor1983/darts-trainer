@@ -29,6 +29,7 @@ import com.lodkin.dartstrainer.data.cricket.CricketEntityConverter
 import com.lodkin.dartstrainer.data.cricket.CricketGame
 import com.lodkin.dartstrainer.data.cricket.CricketGameEntity
 import com.lodkin.dartstrainer.data.cricket.CricketRepository
+import com.lodkin.dartstrainer.data.freerecords.FreePlayRecordsRepository
 import com.lodkin.dartstrainer.data.game501.CheckoutTable
 import com.lodkin.dartstrainer.data.game501.Game501
 import com.lodkin.dartstrainer.data.game501.Game501Database
@@ -80,6 +81,7 @@ private fun checkoutColor(count: Int): Pair<Color, Color> {
 @Composable
 fun StatsScreen(
     repository: CricketRepository,
+    freePlayRecordsRepository: FreePlayRecordsRepository? = null,
     initialTab: Int = 0,
     showTabs: Boolean = true,
     onResumeGame501: (Game501Entity) -> Unit = {},
@@ -163,9 +165,6 @@ fun StatsScreen(
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
 
-        // ── ШАПКА ──
-        // Кнопка «← Назад» — прямоугольная плашка, как в секторе 20.
-        // Заголовок — уменьшен, чтобы «Статистика» влезло в одну строку.
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
@@ -442,8 +441,15 @@ fun StatsScreen(
             confirmButton = {
                 TextButton(onClick = {
                     scope.launch {
-                        if (isCricket) repository.clearAll()
-                        else game501Repo.clearAll()
+                        if (isCricket) {
+                            repository.clearAll()
+                            // Рекорды свободной игры по крикету тоже стираем.
+                            freePlayRecordsRepository?.clearCricket()
+                        } else {
+                            game501Repo.clearAll()
+                            // Рекорды свободной игры по 501 тоже стираем.
+                            freePlayRecordsRepository?.clear501()
+                        }
                         reloadKey++
                     }
                     showResetDialog = false
@@ -463,8 +469,8 @@ fun StatsScreen(
             },
             text = {
                 Text(
-                    if (isCricket) "Все матчи по крикету будут удалены. Отменить это действие нельзя."
-                    else "Все матчи x01 будут удалены. Отменить это действие нельзя.",
+                    if (isCricket) "Все матчи по крикету и рекорды по крикету будут удалены. Отменить это действие нельзя."
+                    else "Все матчи x01 и рекорды по x01 будут удалены. Отменить это действие нельзя.",
                     color = Color.White
                 )
             }
