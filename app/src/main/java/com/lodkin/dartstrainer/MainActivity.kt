@@ -455,7 +455,9 @@ fun DartsTrainerApp() {
                 )
 
                 "stats_cricket" -> StatsScreen(
-                    repository = cricketRepository, initialTab = 0, showTabs = false,
+                    repository = cricketRepository,
+                    freePlayRecordsRepository = freePlayRecordsRepository,
+                    initialTab = 0, showTabs = false,
                     onResumeCricket = { entity ->
                         val r = CricketSerializer.fromJson(entity.stateBlob)
                         if (r != null) { cricketGame = r; cricketExistingId = entity.id; screen = "cricket_game" }
@@ -464,7 +466,9 @@ fun DartsTrainerApp() {
                 )
 
                 "stats_501" -> StatsScreen(
-                    repository = cricketRepository, initialTab = 1, showTabs = false,
+                    repository = cricketRepository,
+                    freePlayRecordsRepository = freePlayRecordsRepository,
+                    initialTab = 1, showTabs = false,
                     onResumeGame501 = { entity ->
                         val r = Game501Serializer.fromJson(entity.stateBlob)
                         if (r != null) { game501 = r; game501ExistingId = entity.id; screen = "game501_game" }
