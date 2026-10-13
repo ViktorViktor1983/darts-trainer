@@ -28,12 +28,6 @@ import kotlin.math.cos
 import kotlin.math.sin
 import kotlin.random.Random
 
-/**
- * Диалог с праздничной анимацией поверх содержимого.
- *
- * @param visible      показывать ли диалог
- * @param isNewRecord  побит ли рекорд → включает анимацию
- */
 @Composable
 fun CelebrationOverlay(
     visible: Boolean,
@@ -57,7 +51,6 @@ fun CelebrationOverlay(
                 .fillMaxSize()
                 .background(Color.Black.copy(alpha = 0.6f))
         ) {
-            // ── Карточка диалога по центру ──
             Column(
                 modifier = Modifier
                     .align(Alignment.Center)
@@ -112,7 +105,6 @@ fun CelebrationOverlay(
                 }
             }
 
-            // ── Анимация поверх карточки ──
             if (isNewRecord) {
                 CelebrationCanvas()
             }
@@ -120,17 +112,13 @@ fun CelebrationOverlay(
     }
 }
 
-// ─────────────────────────────────────────────
-// Canvas: конфетти + салют (ракеты + взрывы)
-// ─────────────────────────────────────────────
-
 @Composable
 private fun CelebrationCanvas() {
     var elapsedMs by remember { mutableStateOf(0L) }
     var running by remember { mutableStateOf(true) }
 
-    val confetti = remember { List(60) { ConfettiParticle.newRandom() } }
-    val rockets = remember { List(6) { RocketParticle.newRandom() } }
+    val confetti = remember { List(90) { ConfettiParticle.newRandom() } }
+    val rockets = remember { List(12) { RocketParticle.newRandom() } }
 
     LaunchedEffect(Unit) {
         val start = withFrameNanos { it }
@@ -138,22 +126,22 @@ private fun CelebrationCanvas() {
             withFrameNanos { now ->
                 val ms = (now - start) / 1_000_000L
                 elapsedMs = ms
-                if (ms >= 4000L) running = false
+                if (ms >= 4500L) running = false
             }
         }
     }
 
     Canvas(modifier = Modifier.fillMaxSize()) {
         val t = elapsedMs / 1000f
-        val totalSec = 4.0f
+        val totalSec = 4.5f
 
-        // ── Конфетти ──
+        // ── Конфетти (крупнее и ярче) ──
         confetti.forEach { c ->
-            val x = c.startX * size.width + c.vx * t * 150f
-            val y = c.startY * size.height + c.vy * t * 150f + 0.5f * 450f * t * t
+            val x = c.startX * size.width + c.vx * t * 180f
+            val y = c.startY * size.height + c.vy * t * 180f + 0.5f * 500f * t * t
             val fade = (1f - (t / totalSec)).coerceIn(0f, 1f)
             if (fade > 0.1f && y < size.height + 100f) {
-                val side = c.size * 1.8f
+                val side = c.size * 2.4f
                 drawRect(
                     color = c.color.copy(alpha = fade),
                     topLeft = Offset(x, y),
@@ -162,7 +150,7 @@ private fun CelebrationCanvas() {
             }
         }
 
-        // ── Салют: ракеты + взрывы ──
+        // ── Салют ──
         rockets.forEach { r ->
             val local = t - r.delaySec
             if (local <= 0f) return@forEach
@@ -171,41 +159,67 @@ private fun CelebrationCanvas() {
             val startY = size.height + 40f
             val targetY = r.targetY * size.height
 
-            // Фаза 1: взлёт (riseDuration секунд)
+            // Фаза 1: взлёт
             if (local < r.riseDuration) {
                 val riseProgress = local / r.riseDuration
                 val curY = startY + (targetY - startY) * riseProgress
-                // Голова ракеты
+
+                // Яркая голова ракеты
                 drawCircle(
-                    color = Color.White.copy(alpha = 0.95f),
-                    radius = 5f,
+                    color = Color.White.copy(alpha = 1f),
+                    radius = 8f,
+                    center = Offset(startX, curY)
+                )
+                // Свечение вокруг головы
+                drawCircle(
+                    color = r.color.copy(alpha = 0.5f),
+                    radius = 16f,
                     center = Offset(startX, curY)
                 )
                 // Хвост
                 drawCircle(
-                    color = r.color.copy(alpha = 0.6f),
-                    radius = 3f,
-                    center = Offset(startX, curY + 20f)
+                    color = r.color.copy(alpha = 0.75f),
+                    radius = 6f,
+                    center = Offset(startX, curY + 22f)
+                )
+                drawCircle(
+                    color = r.color.copy(alpha = 0.5f),
+                    radius = 5f,
+                    center = Offset(startX, curY + 44f)
                 )
                 drawCircle(
                     color = r.color.copy(alpha = 0.3f),
-                    radius = 2f,
-                    center = Offset(startX, curY + 40f)
+                    radius = 4f,
+                    center = Offset(startX, curY + 66f)
                 )
             } else {
                 // Фаза 2: взрыв
                 val explosionLocal = local - r.riseDuration
-                val explosionDuration = 1.6f
+                val explosionDuration = 2.0f
                 if (explosionLocal <= explosionDuration) {
                     val progress = explosionLocal / explosionDuration
                     val fade = (1f - progress).coerceIn(0f, 1f)
-                    val maxRadius = 180f + r.size * 60f
+                    val maxRadius = 320f + r.size * 100f
                     val radius = maxRadius * progress
-
                     val center = Offset(startX, targetY)
 
-                    // Лучи в разные стороны
-                    val rayCount = 16
+                    // Яркая центральная вспышка (первые 0,6 сек)
+                    if (progress < 0.6f) {
+                        val cf = (1f - progress / 0.6f).coerceIn(0f, 1f)
+                        drawCircle(
+                            color = Color.White.copy(alpha = cf),
+                            radius = 40f + progress * 100f,
+                            center = center
+                        )
+                        drawCircle(
+                            color = r.color.copy(alpha = cf * 0.7f),
+                            radius = 70f + progress * 160f,
+                            center = center
+                        )
+                    }
+
+                    // Лучи (24 штуки) — ярче, крупнее
+                    val rayCount = 24
                     for (i in 0 until rayCount) {
                         val angle = (i.toFloat() / rayCount) * 2f * Math.PI.toFloat()
                         val dx = cos(angle) * radius
@@ -213,21 +227,33 @@ private fun CelebrationCanvas() {
                         val dotX = center.x + dx
                         val dotY = center.y + dy
 
+                        // Внешний яркий шар
                         drawCircle(
                             color = r.color.copy(alpha = fade),
+                            radius = 10f + (1f - progress) * 8f,
+                            center = Offset(dotX, dotY)
+                        )
+                        // Ядро луча
+                        drawCircle(
+                            color = Color.White.copy(alpha = fade * 0.9f),
                             radius = 4f + (1f - progress) * 3f,
                             center = Offset(dotX, dotY)
                         )
                     }
 
-                    // Яркая центральная вспышка
-                    if (progress < 0.4f) {
-                        val centerFade = (1f - progress / 0.4f).coerceIn(0f, 1f)
-                        drawCircle(
-                            color = Color.White.copy(alpha = centerFade * 0.9f),
-                            radius = 25f + progress * 60f,
-                            center = center
-                        )
+                    // Второй слой лучей (на полпути между центром и краем) — для плотности
+                    if (progress > 0.15f && progress < 0.85f) {
+                        val innerRadius = radius * 0.55f
+                        for (i in 0 until rayCount) {
+                            val angle = (i.toFloat() / rayCount + 0.5f / rayCount) * 2f * Math.PI.toFloat()
+                            val dx = cos(angle) * innerRadius
+                            val dy = sin(angle) * innerRadius
+                            drawCircle(
+                                color = r.color.copy(alpha = fade * 0.6f),
+                                radius = 5f,
+                                center = Offset(center.x + dx, center.y + dy)
+                            )
+                        }
                     }
                 }
             }
@@ -255,26 +281,27 @@ private data class ConfettiParticle(
             Color(0xFF81C784),
             Color(0xFFFFB74D),
             Color(0xFFBA68C8),
-            Color(0xFFFFFFFF)
+            Color(0xFFFFFFFF),
+            Color(0xFFFFEB3B)
         )
 
         fun newRandom() = ConfettiParticle(
             startX = Random.nextFloat(),
             startY = -0.15f - Random.nextFloat() * 0.3f,
-            vx = (Random.nextFloat() - 0.5f) * 0.4f,
-            vy = 0.35f + Random.nextFloat() * 0.45f,
-            size = 7f + Random.nextFloat() * 10f,
+            vx = (Random.nextFloat() - 0.5f) * 0.5f,
+            vy = 0.35f + Random.nextFloat() * 0.5f,
+            size = 8f + Random.nextFloat() * 12f,
             color = COLORS.random()
         )
     }
 }
 
 private data class RocketParticle(
-    val startX: Float,        // 0..1 — где стартует ракета по X
-    val targetY: Float,       // 0..1 — где взрывается (по Y, от верха)
-    val delaySec: Float,      // задержка перед стартом
-    val riseDuration: Float,  // сколько летит вверх
-    val size: Float,          // базовый радиус взрыва
+    val startX: Float,
+    val targetY: Float,
+    val delaySec: Float,
+    val riseDuration: Float,
+    val size: Float,
     val color: Color
 ) {
     companion object {
@@ -284,15 +311,17 @@ private data class RocketParticle(
             Color(0xFFFFB74D),
             Color(0xFFE57373),
             Color(0xFF81C784),
-            Color(0xFFBA68C8)
+            Color(0xFFBA68C8),
+            Color(0xFFFFEB3B),
+            Color(0xFF64B5F6)
         )
 
         fun newRandom() = RocketParticle(
-            startX = 0.1f + Random.nextFloat() * 0.8f,
-            targetY = 0.12f + Random.nextFloat() * 0.35f,
-            delaySec = Random.nextFloat() * 2.0f,
+            startX = 0.05f + Random.nextFloat() * 0.9f,
+            targetY = 0.10f + Random.nextFloat() * 0.40f,
+            delaySec = Random.nextFloat() * 2.2f,
             riseDuration = 0.6f + Random.nextFloat() * 0.5f,
-            size = 0.8f + Random.nextFloat() * 1.0f,
+            size = 0.9f + Random.nextFloat() * 1.2f,
             color = COLORS.random()
         )
     }
