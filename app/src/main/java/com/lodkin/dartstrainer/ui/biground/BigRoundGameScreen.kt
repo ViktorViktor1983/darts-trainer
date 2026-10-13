@@ -31,7 +31,6 @@ import kotlinx.coroutines.launch
 private val PaleYellow = Color(0xFFFFE082)
 private val PaleYellowText = Color(0xFF3E2723)
 
-// 21 сектор: 1..20 + Bull (25)
 private val SECTORS: List<Int> = (1..20).toList() + 25
 
 private const val TOTAL_APPROACHES = 21
@@ -54,10 +53,15 @@ private val NORMS_YOUTH: List<BigRoundNorm> = listOf(
     BigRoundNorm("I юношеский", 390)
 )
 
+/**
+ * @param isTrainingMode  true — игра запущена из тренировки.
+ *                        Результат НЕ сохраняется в игровую БД.
+ */
 @Composable
 fun BigRoundGameScreen(
     category: BigRoundCategory,
     repository: BigRoundRepository,
+    isTrainingMode: Boolean = false,
     onFinish: (totalScore: Int) -> Unit,
     onBack: () -> Unit
 ) {
@@ -126,7 +130,6 @@ fun BigRoundGameScreen(
             .fillMaxSize()
             .background(DarkBg)
     ) {
-        // ── Шапка (без категории) ──
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -159,7 +162,6 @@ fun BigRoundGameScreen(
             )
         }
 
-        // ── Счёт (увеличен ×2) ──
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -188,7 +190,6 @@ fun BigRoundGameScreen(
             )
         }
 
-        // ── Поле ввода (строка «ПОДХОД 3 · S3» ×3) ──
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -204,7 +205,6 @@ fun BigRoundGameScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Column(modifier = Modifier.weight(1f)) {
-                    // Верхняя строка ×3
                     Text(
                         "ПОДХОД ${approaches.size + 1} · $sectorLabel",
                         color = Accent,
@@ -238,7 +238,6 @@ fun BigRoundGameScreen(
             }
         }
 
-        // ── Клавиатура ──
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -417,13 +416,16 @@ fun BigRoundGameScreen(
             confirmButton = {
                 TextButton(onClick = {
                     showFinishDialog = false
-                    scope.launch {
-                        repository.saveGame(
-                            category = category,
-                            totalScore = totalScore,
-                            totalHits = totalHits,
-                            approaches = approaches.toList()
-                        )
+                    // Сохраняем в игровую БД только если это НЕ тренировка.
+                    if (!isTrainingMode) {
+                        scope.launch {
+                            repository.saveGame(
+                                category = category,
+                                totalScore = totalScore,
+                                totalHits = totalHits,
+                                approaches = approaches.toList()
+                            )
+                        }
                     }
                     onFinish(score)
                 }) { Text("Продолжить", color = Accent) }
