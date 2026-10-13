@@ -712,6 +712,7 @@ fun DartsTrainerApp() {
                     } else {
                         MainExerciseRunner(
                             exerciseId = current.id,
+                            playerLevel = currentLevel,
                             aroundClockRepository = aroundClockRepository,
                             sectorRepository = sectorRepository,
                             scoreSetRepository = scoreSetRepository,
@@ -877,6 +878,7 @@ fun DartsTrainerApp() {
                     else {
                         MainExerciseRunner(
                             exerciseId = gameId,
+                            playerLevel = currentLevel,
                             aroundClockRepository = aroundClockRepository,
                             sectorRepository = sectorRepository,
                             scoreSetRepository = scoreSetRepository,
@@ -1289,9 +1291,17 @@ fun DartsTrainerApp() {
     }
 }
 
+/**
+ * Запуск конкретного упражнения основной части.
+ *
+ * @param playerLevel  текущий уровень игрока (1..16).
+ *                     Используется для выбора версии Кругосветки-Утроения:
+ *                     < 9 — укороченная (T10–T20 + Bull), >= 9 — полная (T1–T20 + Bull).
+ */
 @Composable
 private fun MainExerciseRunner(
     exerciseId: String,
+    playerLevel: Int,
     aroundClockRepository: AroundClockRepository,
     sectorRepository: SectorRepository,
     scoreSetRepository: ScoreSetRepository,
@@ -1305,6 +1315,7 @@ private fun MainExerciseRunner(
             order = AroundClockOrder.ORDERED,
             hitsRequired = 1,
             repository = aroundClockRepository,
+            sectorStart = 1,
             onFinish = { totalDarts, _, _ -> onFinish(BlockType.DOUBLES, totalDarts, totalDarts) },
             onBack = onBack
         )
@@ -1313,17 +1324,23 @@ private fun MainExerciseRunner(
             order = AroundClockOrder.ORDERED,
             hitsRequired = 1,
             repository = aroundClockRepository,
+            sectorStart = 1,
             onFinish = { totalDarts, _, _ -> onFinish(BlockType.SECTOR, totalDarts, totalDarts) },
             onBack = onBack
         )
-        "aroundclock_trebles" -> AroundClockGameScreen(
-            target = AroundClockTarget.TRIPLE,
-            order = AroundClockOrder.ORDERED,
-            hitsRequired = 1,
-            repository = aroundClockRepository,
-            onFinish = { totalDarts, _, _ -> onFinish(BlockType.TREBLES, totalDarts, totalDarts) },
-            onBack = onBack
-        )
+        "aroundclock_trebles" -> {
+            // Уровень < 9 (Сильный) → укороченная (T10–T20 + Bull). Иначе — полная.
+            val sectorStart = if (playerLevel >= 9) 1 else 10
+            AroundClockGameScreen(
+                target = AroundClockTarget.TRIPLE,
+                order = AroundClockOrder.ORDERED,
+                hitsRequired = 1,
+                repository = aroundClockRepository,
+                sectorStart = sectorStart,
+                onFinish = { totalDarts, _, _ -> onFinish(BlockType.TREBLES, totalDarts, totalDarts) },
+                onBack = onBack
+            )
+        }
         "sector20" -> SectorGameScreen(
             sector = 20,
             repository = sectorRepository,
