@@ -491,6 +491,7 @@ fun DartsTrainerApp() {
                             .getInt("session_minutes", SettingsStorage.getTrainingMinutes(context))
                         scope.launch {
                             val analysis = TrainingStatsAnalyzer.analyze(trainingRepository)
+                            val completedCount = trainingRepository.getCompletedSessionCount()
                             currentWeakness = analysis.weakestType
                             currentLevel = analysis.level
 
@@ -513,7 +514,8 @@ fun DartsTrainerApp() {
                                 val budgetMain = (trainingMinutes * 0.75).toInt().coerceAtLeast(15)
                                 val dynamicIds = TrainingPlanner.buildDynamicMainExerciseIds(
                                     analysis = analysis,
-                                    budgetMinutes = budgetMain
+                                    budgetMinutes = budgetMain,
+                                    completedTrainingCount = completedCount
                                 )
                                 val baseMap = defaultMainExercises().associateBy { it.id }
                                 dynamicIds
@@ -1291,13 +1293,6 @@ fun DartsTrainerApp() {
     }
 }
 
-/**
- * Запуск конкретного упражнения основной части.
- *
- * @param playerLevel  текущий уровень игрока (1..16).
- *                     Используется для выбора версии Кругосветки-Утроения:
- *                     < 9 — укороченная (T10–T20 + Bull), >= 9 — полная (T1–T20 + Bull).
- */
 @Composable
 private fun MainExerciseRunner(
     exerciseId: String,
@@ -1329,7 +1324,6 @@ private fun MainExerciseRunner(
             onBack = onBack
         )
         "aroundclock_trebles" -> {
-            // Уровень < 9 (Сильный) → укороченная (T10–T20 + Bull). Иначе — полная.
             val sectorStart = if (playerLevel >= 9) 1 else 10
             AroundClockGameScreen(
                 target = AroundClockTarget.TRIPLE,
