@@ -39,25 +39,31 @@ private val PaleYellowText = Color(0xFF3E2723)
 private val HitGreen = Color(0xFF4CAF50)
 private val MissRed = Color(0xFF8B2A2A)
 
-private val ALL_SECTORS = (1..20).toList() + 25
-
 private data class ThrowInApproach(
     val sector: Int,
     val hit: Boolean
 )
 
+/**
+ * @param sectorStart  С какого сектора начинать. 1 — полная версия (S1–S20 + Bull),
+ *                     10 — укороченная (S10–S20 + Bull). Используется для утроений.
+ */
 @Composable
 fun AroundClockGameScreen(
     target: AroundClockTarget,
     order: AroundClockOrder,
     hitsRequired: Int,
     repository: AroundClockRepository,
+    sectorStart: Int = 1,
     onFinish: (totalDarts: Int, completed: Boolean, sectorResults: Map<Int, Int>) -> Unit,
     onBack: () -> Unit
 ) {
-    val sectorSequence = remember {
-        if (order == AroundClockOrder.ORDERED) ALL_SECTORS
-        else ALL_SECTORS.shuffled(Random(System.currentTimeMillis()))
+    val fullVersion = sectorStart <= 1
+
+    val sectorSequence = remember(target, order, sectorStart) {
+        val sectors = (sectorStart..20).toList() + 25
+        if (order == AroundClockOrder.ORDERED) sectors
+        else sectors.shuffled(Random(System.currentTimeMillis()))
     }
 
     val allThrows = remember { mutableStateListOf<ThrowInApproach>() }
@@ -65,11 +71,11 @@ fun AroundClockGameScreen(
     var showBackConfirm by remember { mutableStateOf(false) }
     var showFinishDialog by remember { mutableStateOf(false) }
     var bestRecord by remember { mutableStateOf<Int?>(null) }
-
-    // Визуальный отклик «Все мимо» — на время подсветки блокируем ввод и показываем промахи
     var flashMiss by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
+        // Рекорд считаем только для полной версии. Для укороченной — не показываем.
+        if (!fullVersion) return@LaunchedEffect
         val games = withContext(Dispatchers.IO) {
             repository.getAllGames()
         }
@@ -96,9 +102,6 @@ fun AroundClockGameScreen(
 
     val throwsInCurrentApproach = allThrows.size % 3
 
-    // ── Визуальный отклик при нажатии «Все мимо» ──
-    // При нажатии сначала показываем три промаха ярким цветом,
-    // через 700 мс добавляем их в историю.
     LaunchedEffect(flashMiss) {
         if (flashMiss) {
             delay(700L)
@@ -231,16 +234,24 @@ fun AroundClockGameScreen(
                     fontSize = 14.sp
                 )
                 Spacer(Modifier.height(4.dp))
-                if (bestRecord != null) {
-                    Text(
-                        "🏆 лучший результат: $bestRecord дротиков",
-                        color = GoldAccent.copy(alpha = 0.75f),
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Medium
-                    )
+                if (fullVersion) {
+                    if (bestRecord != null) {
+                        Text(
+                            "🏆 лучший результат: $bestRecord дротиков",
+                            color = GoldAccent.copy(alpha = 0.75f),
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                    } else {
+                        Text(
+                            "рекорда ещё нет — установи первый!",
+                            color = Color.White.copy(alpha = 0.4f),
+                            fontSize = 11.sp
+                        )
+                    }
                 } else {
                     Text(
-                        "рекорда ещё нет — установи первый!",
+                        "укороченная версия",
                         color = Color.White.copy(alpha = 0.4f),
                         fontSize = 11.sp
                     )
@@ -286,7 +297,6 @@ fun AroundClockGameScreen(
 
                 val rowSector: Int? = existing?.sector ?: currentSectorOrNull
 
-                // Если flashMiss активен — показываем ячейки от текущей позиции как «промах»
                 val previewMiss = flashMiss && existing == null && i >= throwsInCurrentApproach
 
                 ApproachRow(
@@ -395,7 +405,7 @@ fun AroundClockGameScreen(
             text = {
                 Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
                     val prevRecord = bestRecord
-                    val isNewRecord = prevRecord == null || allThrows.size < prevRecord
+                    val isNewRecord = fullVersion && (prevRecord == null || allThrows.size < prevRecord)
                     if (isNewRecord) {
                         Text(
                             "🏆 НОВЫЙ РЕКОРД!",
@@ -418,7 +428,7 @@ fun AroundClockGameScreen(
                             fontWeight = FontWeight.Bold
                         )
                     }
-                    if (prevRecord != null) {
+                    if (fullVersion && prevRecord != null) {
                         Spacer(Modifier.height(4.dp))
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -476,9 +486,6 @@ fun AroundClockGameScreen(
     }
 }
 
-// ─────────────────────────────────────────────
-// Карта прогресса секторов
-// ─────────────────────────────────────────────
 @Composable
 private fun SectorProgressMap(
     sequence: List<Int>,
@@ -534,9 +541,6 @@ private fun SectorProgressMap(
     }
 }
 
-// ─────────────────────────────────────────────
-// Строка подхода
-// ─────────────────────────────────────────────
 private enum class RowResult { HIT, MISS, EMPTY }
 
 @Composable
@@ -611,9 +615,6 @@ private fun ApproachRow(
     }
 }
 
-// ─────────────────────────────────────────────
-// Пересчёт состояния
-// ─────────────────────────────────────────────
 private data class GameState(
     val currentSector: Int?,
     val hitsInCurrent: Int,
@@ -660,9 +661,6 @@ private fun recalcState(
     )
 }
 
-// ─────────────────────────────────────────────
-// Метки
-// ─────────────────────────────────────────────
 private fun sectorLabel(sector: Int, target: AroundClockTarget): String {
     if (sector == 25) {
         return when (target) {
