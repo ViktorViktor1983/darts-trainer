@@ -1172,6 +1172,7 @@ fun DartsTrainerApp() {
 
                 "scoreset_game" -> ScoreSetGameScreen(
                     repository = scoreSetRepository,
+                    isTrainingMode = false,
                     onFinish = { ts, ap ->
                         scope.launch { scoreSetRepository.saveGame(ts, ap) }
                         screen = "game_select"
@@ -1368,11 +1369,16 @@ private fun MainExerciseRunner(
             sector = 20,
             repository = sectorRepository,
             isTrainingMode = isTraining,
+            trainingRepository = trainingRepository,
+            trainingRecordKey = if (isTraining) "sector20" else null,
             onFinish = { score -> onFinish(BlockType.SCORE, score, 30) },
             onBack = onBack
         )
         "scoreset" -> ScoreSetGameScreen(
             repository = scoreSetRepository,
+            isTrainingMode = isTraining,
+            trainingRepository = trainingRepository,
+            trainingRecordKey = if (isTraining) "scoreset" else null,
             onFinish = { totalScore, _ -> onFinish(BlockType.SCORE, totalScore, 30) },
             onBack = onBack
         )
@@ -1380,6 +1386,8 @@ private fun MainExerciseRunner(
             category = BigRoundCategory.MALE,
             repository = bigRoundRepository,
             isTrainingMode = isTraining,
+            trainingRepository = trainingRepository,
+            trainingRecordKey = if (isTraining) "biground" else null,
             onFinish = { score -> onFinish(BlockType.SECTOR, score, 63) },
             onBack = onBack
         )
