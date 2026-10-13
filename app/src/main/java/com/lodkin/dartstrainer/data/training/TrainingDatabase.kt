@@ -16,7 +16,11 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 /**
  * База данных тренировочного раздела.
  *
- * Версия 2 (12.10.2026) — добавлена колонка duration_seconds в exercise_results.
+ * Версия 3 (13.10.2026) — добавлена таблица training_records
+ * для хранения отдельного рекорда упражнений в тренировке.
+ *
+ * Рекорды в игровых БД (AroundClockDatabase и др.) остаются
+ * для режима «Просто поиграть». Они не пересекаются.
  */
 
 @Entity(tableName = "training_sessions")
@@ -90,6 +94,22 @@ data class ControlMatchEntity(
     val botScore: Float,
     val legsPlayed: Int,
     val timestamp: Long
+)
+
+/**
+ * Рекорд упражнения в тренировке.
+ * Ключ — exerciseId (например, "aroundclock_doubles").
+ *
+ * bestScore и bestDarts — что именно сравнивается, зависит от упражнения:
+ *   • Кругосветки — bestDarts (меньше = лучше).
+ *   • Сектор 20 / Набор очков / Большой раунд — bestScore (больше = лучше).
+ */
+@Entity(tableName = "training_records")
+data class TrainingRecordEntity(
+    @PrimaryKey val exerciseId: String,
+    val bestScore: Int,
+    val bestDarts: Int,
+    val achievedAt: Long
 )
 
 // ============================================================
@@ -207,6 +227,24 @@ interface ControlMatchDao {
     suspend fun clearAll()
 }
 
+@Dao
+interface TrainingRecordDao {
+    @Insert
+    suspend fun insert(item: TrainingRecordEntity)
+
+    @Update
+    suspend fun update(item: TrainingRecordEntity)
+
+    @Query("SELECT * FROM training_records WHERE exerciseId = :exerciseId LIMIT 1")
+    suspend fun getById(exerciseId: String): TrainingRecordEntity?
+
+    @Query("SELECT * FROM training_records")
+    suspend fun getAll(): List<TrainingRecordEntity>
+
+    @Query("DELETE FROM training_records")
+    suspend fun clearAll()
+}
+
 // ============================================================
 // DATABASE
 // ============================================================
@@ -218,9 +256,10 @@ interface ControlMatchDao {
         PostponedDoubleEntity::class,
         WeaknessSnapshotEntity::class,
         PotentialSnapshotEntity::class,
-        ControlMatchEntity::class
+        ControlMatchEntity::class,
+        TrainingRecordEntity::class
     ],
-    version = 2,
+    version = 3,
     exportSchema = false
 )
 abstract class TrainingDatabase : RoomDatabase() {
@@ -230,6 +269,7 @@ abstract class TrainingDatabase : RoomDatabase() {
     abstract fun weaknessDao(): WeaknessSnapshotDao
     abstract fun potentialDao(): PotentialSnapshotDao
     abstract fun controlDao(): ControlMatchDao
+    abstract fun recordDao(): TrainingRecordDao
 
     companion object {
         @Volatile
@@ -243,6 +283,18 @@ abstract class TrainingDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS training_records (" +
+                            "exerciseId TEXT NOT NULL PRIMARY KEY, " +
+                            "bestScore INTEGER NOT NULL DEFAULT 0, " +
+                            "bestDarts INTEGER NOT NULL DEFAULT 0, " +
+                            "achievedAt INTEGER NOT NULL DEFAULT 0)"
+                )
+            }
+        }
+
         fun getInstance(context: Context): TrainingDatabase {
             return INSTANCE ?: synchronized(this) {
                 INSTANCE ?: Room.databaseBuilder(
@@ -250,7 +302,7 @@ abstract class TrainingDatabase : RoomDatabase() {
                     TrainingDatabase::class.java,
                     "training_database"
                 )
-                    .addMigrations(MIGRATION_1_2)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
                     .build()
                     .also { INSTANCE = it }
             }
@@ -360,9 +412,58 @@ class TrainingRepository(private val db: TrainingDatabase) {
         return db.controlDao().getAll().map { it.toModel() }
     }
 
+    // ---------- Рекорды тренировки ----------
+
+    /** Получить рекорд упражнения в тренировке. null — если рекорда ещё нет. */
+    suspend fun getTrainingRecord(exerciseId: String): TrainingRecordEntity? {
+        return db.recordDao().getById(exerciseId)
+    }
+
+    /**
+     * Обновить рекорд, если новый результат лучше.
+     * @param exerciseId       id упражнения
+     * @param score            очки
+     * @param darts            дротики
+     * @param lowerDartsBetter true для кругосветок (меньше дротиков — лучше),
+     *                         false для наборов (больше очков — лучше).
+     */
+    suspend fun updateTrainingRecordIfBetter(
+        exerciseId: String,
+        score: Int,
+        darts: Int,
+        lowerDartsBetter: Boolean
+    ) {
+        val existing = db.recordDao().getById(exerciseId)
+        val now = System.currentTimeMillis()
+
+        if (existing == null) {
+            db.recordDao().insert(
+                TrainingRecordEntity(
+                    exerciseId = exerciseId,
+                    bestScore = score,
+                    bestDarts = darts,
+                    achievedAt = now
+                )
+            )
+            return
+        }
+
+        val isBetter = if (lowerDartsBetter) darts < existing.bestDarts
+        else score > existing.bestScore
+
+        if (isBetter) {
+            db.recordDao().update(
+                existing.copy(
+                    bestScore = score,
+                    bestDarts = darts,
+                    achievedAt = now
+                )
+            )
+        }
+    }
+
     // ---------- Полный сброс ----------
 
-    /** Удалить все данные тренировочного раздела. */
     suspend fun clearAllTrainingData() {
         db.exerciseDao().clearAll()
         db.sessionDao().clearAll()
@@ -370,6 +471,7 @@ class TrainingRepository(private val db: TrainingDatabase) {
         db.weaknessDao().clearAll()
         db.potentialDao().clearAll()
         db.controlDao().clearAll()
+        db.recordDao().clearAll()
     }
 }
 
