@@ -967,7 +967,12 @@ fun DartsTrainerApp() {
                 "cricket_game" -> {
                     val g = cricketGame
                     if (g != null) CricketGameScreen(
-                        repository = cricketRepository, initialGame = g, existingId = cricketExistingId,
+                        repository = cricketRepository,
+                        freePlayRecordsRepository = freePlayRecordsRepository,
+                        initialGame = g,
+                        existingId = cricketExistingId,
+                        isTrainingMode = isTrainingCricket,
+                        trainingRepository = trainingRepository,
                         onGameFinish = { f, id ->
                             if (isTrainingCricket) {
                                 val playerWon = f.winnerIndex == 0
