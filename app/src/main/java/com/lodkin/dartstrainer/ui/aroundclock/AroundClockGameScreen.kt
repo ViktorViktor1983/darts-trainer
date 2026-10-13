@@ -22,6 +22,7 @@ import androidx.compose.ui.unit.sp
 import com.lodkin.dartstrainer.data.aroundclock.AroundClockOrder
 import com.lodkin.dartstrainer.data.aroundclock.AroundClockRepository
 import com.lodkin.dartstrainer.data.aroundclock.AroundClockTarget
+import com.lodkin.dartstrainer.data.training.TrainingRepository
 import com.lodkin.dartstrainer.theme.Accent
 import com.lodkin.dartstrainer.theme.DarkBg
 import com.lodkin.dartstrainer.theme.ErrorColor
@@ -47,6 +48,12 @@ private data class ThrowInApproach(
 /**
  * @param sectorStart  С какого сектора начинать. 1 — полная версия (S1–S20 + Bull),
  *                     10 — укороченная (S10–S20 + Bull). Используется для утроений.
+ * @param trainingRepository  Репозиторий тренировочной БД. Передаётся, только если
+ *                            игра запущена из тренировки.
+ * @param trainingRecordKey   Ключ рекорда в таблице training_records. Например
+ *                            "aroundclock_doubles". Нужен только для тренировки.
+ *                            Если задан вместе с trainingRepository — рекорд берётся
+ *                            из тренировочной БД, а не из игровой.
  */
 @Composable
 fun AroundClockGameScreen(
@@ -55,10 +62,13 @@ fun AroundClockGameScreen(
     hitsRequired: Int,
     repository: AroundClockRepository,
     sectorStart: Int = 1,
+    trainingRepository: TrainingRepository? = null,
+    trainingRecordKey: String? = null,
     onFinish: (totalDarts: Int, completed: Boolean, sectorResults: Map<Int, Int>) -> Unit,
     onBack: () -> Unit
 ) {
     val fullVersion = sectorStart <= 1
+    val isTrainingMode = trainingRepository != null && !trainingRecordKey.isNullOrBlank()
 
     val sectorSequence = remember(target, order, sectorStart) {
         val sectors = (sectorStart..20).toList() + 25
@@ -74,19 +84,29 @@ fun AroundClockGameScreen(
     var flashMiss by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
-        // Рекорд считаем только для полной версии. Для укороченной — не показываем.
+        // Рекорд показываем только для полной версии.
         if (!fullVersion) return@LaunchedEffect
-        val games = withContext(Dispatchers.IO) {
-            repository.getAllGames()
-        }
-        bestRecord = games
-            .filter {
-                it.completed &&
-                it.targetName == target.name &&
-                it.orderName == order.name &&
-                it.hitsRequired == hitsRequired
+
+        if (isTrainingMode) {
+            // Тренировка — читаем из training_records.
+            val rec = withContext(Dispatchers.IO) {
+                trainingRepository!!.getTrainingRecord(trainingRecordKey!!)
             }
-            .minOfOrNull { it.totalDarts }
+            bestRecord = rec?.bestDarts?.takeIf { it > 0 }
+        } else {
+            // Свободная игра — читаем из игровой БД, как раньше.
+            val games = withContext(Dispatchers.IO) {
+                repository.getAllGames()
+            }
+            bestRecord = games
+                .filter {
+                    it.completed &&
+                    it.targetName == target.name &&
+                    it.orderName == order.name &&
+                    it.hitsRequired == hitsRequired
+                }
+                .minOfOrNull { it.totalDarts }
+        }
     }
 
     val state = remember(allThrows.size) {
