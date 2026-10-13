@@ -29,6 +29,7 @@ import com.lodkin.dartstrainer.theme.ErrorColor
 import com.lodkin.dartstrainer.theme.GoldAccent
 import com.lodkin.dartstrainer.theme.TileBg
 import com.lodkin.dartstrainer.theme.TileBgDark
+import com.lodkin.dartstrainer.ui.common.CelebrationOverlay
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -52,11 +53,6 @@ private const val AUTO_OK_SECONDS = 3
 private const val MAX_HITS_SECTOR = 9
 private const val MAX_HITS_BULL = 6
 
-/**
- * @param isTrainingMode      true — игра запущена из тренировки.
- * @param trainingRepository  нужен для чтения/обновления рекорда в тренировочной БД.
- * @param trainingRecordKey   ключ рекорда в training_records (например "sector20").
- */
 @Composable
 fun SectorGameScreen(
     sector: Int,
@@ -76,7 +72,6 @@ fun SectorGameScreen(
     var showBackConfirm by remember { mutableStateOf(false) }
     var showFinishDialog by remember { mutableStateOf(false) }
 
-    // Рекорд (bestScore). null = рекорда ещё не было.
     var bestRecord by remember { mutableStateOf<Int?>(null) }
     var recordsCount by remember { mutableStateOf(0) }
 
@@ -90,7 +85,6 @@ fun SectorGameScreen(
     val totalScore = totalHits * pointsPerHit
     val isFinished = approaches.size >= TOTAL_APPROACHES
 
-    // Чтение рекорда при старте
     LaunchedEffect(sector, isTrainingMode) {
         if (isTrainingMode && trainingRepository != null && !trainingRecordKey.isNullOrBlank()) {
             val rec = withContext(Dispatchers.IO) {
@@ -147,7 +141,6 @@ fun SectorGameScreen(
             .fillMaxSize()
             .background(DarkBg)
     ) {
-        // ── Шапка ──
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -180,7 +173,6 @@ fun SectorGameScreen(
             )
         }
 
-        // ── Счёт ──
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -209,7 +201,6 @@ fun SectorGameScreen(
             )
         }
 
-        // ── Поле ввода ──
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -257,7 +248,6 @@ fun SectorGameScreen(
             }
         }
 
-        // ── Клавиатура ──
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -430,14 +420,15 @@ fun SectorGameScreen(
                 abs(prevRecord - score).toFloat() / prevRecord <= 0.10f
         val missingPoints = if (prevRecord != null) prevRecord - score else 0
 
-        // Анимация для заголовка рекорда
         val recordScale by animateFloatAsState(
             targetValue = if (isNewRecord) 1f else 0.85f,
             animationSpec = tween(durationMillis = 500),
             label = "record_scale"
         )
 
-        // Нормативы (только для сектора 20)
+        // Праздничный оверлей: конфетти + салют поверх диалога.
+        CelebrationOverlay(visible = isNewRecord, durationMillis = 3000L)
+
         val achievedIdx = SECTOR_20_NORMS.indices.reversed()
             .firstOrNull { score >= SECTOR_20_NORMS[it].second }
         val achieved = if (achievedIdx != null) SECTOR_20_NORMS[achievedIdx] else null
@@ -474,7 +465,6 @@ fun SectorGameScreen(
             },
             text = {
                 Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
-                    // ── Праздничный блок рекорда ──
                     if (isNewRecord && prevRecord != null) {
                         CelebrationRecordBlock(
                             title = "🏆 НОВЫЙ РЕКОРД!",
@@ -591,10 +581,6 @@ fun SectorGameScreen(
         )
     }
 }
-
-// ─────────────────────────────────────────────
-// Праздничный блок рекорда
-// ─────────────────────────────────────────────
 
 @Composable
 private fun CelebrationRecordBlock(
