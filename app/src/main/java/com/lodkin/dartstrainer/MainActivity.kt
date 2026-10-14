@@ -104,6 +104,7 @@ import com.lodkin.dartstrainer.ui.sector.SectorStatsScreen
 import com.lodkin.dartstrainer.ui.training.BlockExerciseItem
 import com.lodkin.dartstrainer.ui.training.ExerciseSummary
 import com.lodkin.dartstrainer.ui.training.PlannedExercise
+import com.lodkin.dartstrainer.ui.training.RestTimerOverlay
 import com.lodkin.dartstrainer.ui.training.SummaryBlockType
 import com.lodkin.dartstrainer.ui.training.SummaryStatus
 import com.lodkin.dartstrainer.ui.training.TrainingBlockScreen
@@ -260,6 +261,19 @@ fun DartsTrainerApp() {
     var showResumeDialog by remember { mutableStateOf(false) }
     var pendingResume by remember { mutableStateOf<TrainingStateStorage.Snapshot?>(null) }
 
+    // ── Таймер отдыха между упражнениями ──
+    var showRestTimer by remember { mutableStateOf(false) }
+    var restTimerSeconds by remember { mutableStateOf(0) }
+    var restNextTitle by remember { mutableStateOf<String?>(null) }
+    var pendingNextStep by remember { mutableStateOf<(() -> Unit)?>(null) }
+
+    fun showRestThen(restSeconds: Int, nextTitle: String?, nextStep: () -> Unit) {
+        restTimerSeconds = restSeconds
+        restNextTitle = nextTitle
+        pendingNextStep = nextStep
+        showRestTimer = true
+    }
+
     fun saveCurrentTrainingState() {
         if (trainingSessionId <= 0L) return
         if (currentPhase == TrainingBlockPhase.FINISHED) return
@@ -317,6 +331,9 @@ fun DartsTrainerApp() {
         exerciseStartMillis = 0L
         isTraining501 = false
         isTrainingCricket = false
+        showRestTimer = false
+        restNextTitle = null
+        pendingNextStep = null
     }
 
     fun activePhases(): List<TrainingBlockPhase> {
@@ -380,14 +397,18 @@ fun DartsTrainerApp() {
         }
         val list = exercisesForPhase(TrainingBlockPhase.MAIN)
         if (currentExerciseIndex + 1 < list.size) {
-            currentExerciseIndex += 1
-            screen = "training_block"
+            val nextExercise = list[currentExerciseIndex + 1]
+            val restSec = TrainingPlanner.restSecondsAfter(nextExercise.id)
+            showRestThen(restSec, nextExercise.title) {
+                currentExerciseIndex += 1
+                screen = "training_block"
+            }
         } else {
             screen = "training_summary"
         }
     }
 
-    BackHandler(enabled = stage == "main" && screen != "main") {
+    BackHandler(enabled = stage == "main" && screen != "main" && !showRestTimer) {
         PARENT_SCREEN[screen]?.let { parent ->
             if (parent == "stats_menu") statsMenuKey++
             if (parent == "main") { resetTrainingState(); TrainingStateStorage.clear(context); autoOpenTimeDialog = true }
@@ -519,19 +540,33 @@ fun DartsTrainerApp() {
                             trainingPaused = false
                             showTimeUpDialog = false
 
-                            mainExercises = if (analysis.hasEnoughData) {
-                                val budgetMain = (trainingMinutes * 0.75).toInt().coerceAtLeast(15)
-                                val dynamicIds = TrainingPlanner.buildDynamicMainExerciseIds(
-                                    analysis = analysis,
-                                    budgetMinutes = budgetMain,
-                                    completedTrainingCount = completedCount
-                                )
-                                val baseMap = defaultMainExercises().associateBy { it.id }
-                                dynamicIds
-                                    .mapNotNull { d -> baseMap[d.id]?.copy(minutes = d.minutes) }
-                                    .ifEmpty { defaultMainExercises() }
+                            // ── Бюджет основной части ──
+                            // Учитываем, какие блоки включены: разминка / психология / силовая.
+                            val warmupMin = if (TrainingBlocksStorage.isWarmupEnabled(context)) 6 else 0
+                            val psychoMin = if (TrainingBlocksStorage.isPsychologyEnabled(context)) 8 else 0
+                            val strengthMin = if (TrainingBlocksStorage.isStrengthEnabled(context)) 7 else 0
+                            val reserveMin = 5
+                            val budgetMain = (trainingMinutes - warmupMin - psychoMin - strengthMin - reserveMin)
+                                .coerceAtLeast(10)
+
+                            // ── Динамический планировщик вызывается ВСЕГДА ──
+                            // Правила (вводный режим, макс 1 тяжёлое, личный темп) работают
+                            // с первой же тренировки.
+                            val dynamicIds = TrainingPlanner.buildDynamicMainExerciseIds(
+                                analysis = analysis,
+                                budgetMinutes = budgetMain,
+                                completedTrainingCount = completedCount
+                            )
+                            val baseMap = defaultMainExercises().associateBy { it.id }
+                            val fromPlanner = dynamicIds
+                                .mapNotNull { d -> baseMap[d.id]?.copy(minutes = d.minutes) }
+
+                            mainExercises = if (fromPlanner.isNotEmpty()) {
+                                fromPlanner
                             } else {
-                                defaultMainExercises()
+                                // Резерв — хотя бы одно упражнение
+                                val fallback = defaultMainExercises().first()
+                                listOf(fallback.copy(minutes = budgetMain.coerceIn(5, 20)))
                             }
 
                             psychologyExercises = if (TrainingBlocksStorage.isPsychologyEnabled(context))
@@ -549,6 +584,8 @@ fun DartsTrainerApp() {
                             isTraining501 = false
                             isTrainingCricket = false
                             isTrainingActive = true
+                            showRestTimer = false
+                            pendingNextStep = null
 
                             TrainingStateStorage.save(
                                 context = context,
@@ -761,8 +798,15 @@ fun DartsTrainerApp() {
                                     put(currentExerciseIndex, SummaryStatus.DONE)
                                 }
                                 if (currentExerciseIndex + 1 < list.size) {
-                                    currentExerciseIndex += 1; screen = "training_block"
-                                } else screen = "training_summary"
+                                    val nextExercise = list[currentExerciseIndex + 1]
+                                    val restSec = TrainingPlanner.restSecondsAfter(current.id)
+                                    showRestThen(restSec, nextExercise.title) {
+                                        currentExerciseIndex += 1
+                                        screen = "training_block"
+                                    }
+                                } else {
+                                    screen = "training_summary"
+                                }
                             },
                             onBack = { screen = "training_block" }
                         )
@@ -1206,11 +1250,25 @@ fun DartsTrainerApp() {
             }
         }
 
-        if (isTrainingActive && screen in TRAINING_SCREENS) {
+        if (isTrainingActive && screen in TRAINING_SCREENS && !showRestTimer) {
             TrainingTimerOverlay(
                 secondsLeft = trainingSecondsLeft,
                 isPaused = trainingPaused,
                 onTogglePause = { trainingPaused = !trainingPaused }
+            )
+        }
+
+        if (showRestTimer) {
+            RestTimerOverlay(
+                totalSeconds = restTimerSeconds,
+                nextExerciseTitle = restNextTitle,
+                onSkip = {
+                    showRestTimer = false
+                    val step = pendingNextStep
+                    pendingNextStep = null
+                    restNextTitle = null
+                    step?.invoke()
+                }
             )
         }
     }
@@ -1280,6 +1338,8 @@ fun DartsTrainerApp() {
                             exerciseStartMillis = 0L
                             isTraining501 = false
                             isTrainingCricket = false
+                            showRestTimer = false
+                            pendingNextStep = null
 
                             screen = when (currentPhase) {
                                 TrainingBlockPhase.WARMUP -> "training_warmup"
