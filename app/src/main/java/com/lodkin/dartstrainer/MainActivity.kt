@@ -10,6 +10,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -774,7 +775,6 @@ fun DartsTrainerApp() {
                             showTimeUpDialog = false
                             trainingMinutes = 0
 
-                            // Свободный режим: все 8 упражнений, без ограничений.
                             val dynamicIds = TrainingPlanner.buildDynamicMainExerciseIds(
                                 analysis = analysis,
                                 budgetMinutes = 999,
@@ -1479,33 +1479,22 @@ fun DartsTrainerApp() {
                 )
             },
             confirmButton = {
-                Text(
-                    "Новый круг",
-                    color = Color(0xFF121212),
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier
-                        .androidx.compose.foundation.clickable {
-                            showFreeNewRoundDialog = false
-                            freeCompletedIds = emptySet()
-                            freeSkippedIds = emptySet()
-                            pickNextFreeExercise()
-                        }
-                        .padding(horizontal = 16.dp, vertical = 10.dp)
-                )
+                TextButton(onClick = {
+                    showFreeNewRoundDialog = false
+                    freeCompletedIds = emptySet()
+                    freeSkippedIds = emptySet()
+                    pickNextFreeExercise()
+                }) {
+                    Text("Новый круг", color = Accent, fontWeight = FontWeight.Bold)
+                }
             },
             dismissButton = {
-                Text(
-                    "Закончить тренировку",
-                    color = Color.White.copy(alpha = 0.75f),
-                    fontSize = 14.sp,
-                    modifier = Modifier
-                        .androidx.compose.foundation.clickable {
-                            showFreeNewRoundDialog = false
-                            screen = "training_free_summary"
-                        }
-                        .padding(horizontal = 14.dp, vertical = 10.dp)
-                )
+                TextButton(onClick = {
+                    showFreeNewRoundDialog = false
+                    screen = "training_free_summary"
+                }) {
+                    Text("Закончить тренировку", color = Color.White.copy(alpha = 0.75f))
+                }
             }
         )
     }
