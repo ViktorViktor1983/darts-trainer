@@ -27,15 +27,15 @@ import com.lodkin.dartstrainer.theme.TileBgDark
 /**
  * Экран «Следующее упражнение» в свободной тренировке.
  *
- * Показывается после отдыха (или сразу, если игрок пропустил отдых).
- * Три кнопки: Играть / Пропустить / Закончить тренировку.
+ * В свободном режиме список упражнений идёт по кругу бесконечно —
+ * поэтому здесь нет счётчика «N / total», только порядковый номер
+ * пройденных упражнений в этой сессии.
  */
 @Composable
 internal fun FreeNextExerciseDialog(
     exerciseTitle: String,
     exerciseMinutes: Int,
-    exerciseNumber: Int,
-    totalExercises: Int,
+    completedSoFar: Int,
     onPlay: () -> Unit,
     onSkip: () -> Unit,
     onFinish: () -> Unit
@@ -56,7 +56,7 @@ internal fun FreeNextExerciseDialog(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
-                "УПРАЖНЕНИЕ ${exerciseNumber} / $totalExercises",
+                if (completedSoFar > 0) "ПРОЙДЕНО: $completedSoFar" else "СВОБОДНАЯ ТРЕНИРОВКА",
                 color = Accent,
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Bold,
