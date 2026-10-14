@@ -258,6 +258,7 @@ fun DartsTrainerApp() {
 
     var isFreeTraining by remember { mutableStateOf(false) }
     var freeExerciseIndex by remember { mutableStateOf(0) }
+    var freeExercisesCompleted by remember { mutableStateOf(0) }
 
     var showRestTimer by remember { mutableStateOf(false) }
     var restTimerSeconds by remember { mutableStateOf(0) }
@@ -341,6 +342,7 @@ fun DartsTrainerApp() {
         showExitTrainingDialog = false
         isFreeTraining = false
         freeExerciseIndex = 0
+        freeExercisesCompleted = 0
     }
 
     fun activePhases(): List<TrainingBlockPhase> {
@@ -453,15 +455,14 @@ fun DartsTrainerApp() {
     fun advanceAfterExercise(finishedExerciseId: String) {
         val list = exercisesForPhase(TrainingBlockPhase.MAIN)
         if (isFreeTraining) {
+            // Свободный режим: упражнения идут по кругу бесконечно.
+            freeExercisesCompleted += 1
             val restSec = TrainingPlanner.restSecondsAfter(finishedExerciseId)
             freeExerciseIndex += 1
-            if (freeExerciseIndex >= list.size) {
-                screen = "training_free_summary"
-            } else {
-                val nextTitle = list[freeExerciseIndex].title
-                showRestThen(restSec, nextTitle) {
-                    screen = "training_free_next"
-                }
+            if (freeExerciseIndex >= list.size) freeExerciseIndex = 0
+            val nextTitle = list[freeExerciseIndex].title
+            showRestThen(restSec, nextTitle) {
+                screen = "training_free_next"
             }
         } else {
             if (currentExerciseIndex + 1 < list.size) {
@@ -692,6 +693,7 @@ fun DartsTrainerApp() {
                             isTrainingActive = true
                             isFreeTraining = false
                             freeExerciseIndex = 0
+                            freeExercisesCompleted = 0
                             showRestTimer = false
                             pendingNextStep = null
 
@@ -735,10 +737,12 @@ fun DartsTrainerApp() {
                             showTimeUpDialog = false
                             trainingMinutes = 0
 
+                            // Свободный режим: все 8 упражнений, без ограничений.
                             val dynamicIds = TrainingPlanner.buildDynamicMainExerciseIds(
                                 analysis = analysis,
                                 budgetMinutes = 999,
-                                completedTrainingCount = completedCount
+                                completedTrainingCount = completedCount,
+                                ignoreHardLimit = true
                             )
                             val baseMap = defaultMainExercises().associateBy { it.id }
                             mainExercises = dynamicIds
@@ -751,6 +755,7 @@ fun DartsTrainerApp() {
                             currentPhase = TrainingBlockPhase.MAIN
                             currentExerciseIndex = 0
                             freeExerciseIndex = 0
+                            freeExercisesCompleted = 0
                             exerciseStatuses = emptyMap()
                             blockExerciseId = null
                             extraGameId = null
@@ -837,14 +842,11 @@ fun DartsTrainerApp() {
                         FreeNextExerciseDialog(
                             exerciseTitle = current.title,
                             exerciseMinutes = current.minutes,
-                            exerciseNumber = freeExerciseIndex + 1,
-                            totalExercises = mainExercises.size,
+                            completedSoFar = freeExercisesCompleted,
                             onPlay = { launchExercise(current.id) },
                             onSkip = {
                                 freeExerciseIndex += 1
-                                if (freeExerciseIndex >= mainExercises.size) {
-                                    screen = "training_free_summary"
-                                }
+                                if (freeExerciseIndex >= mainExercises.size) freeExerciseIndex = 0
                             },
                             onFinish = { screen = "training_free_summary" }
                         )
