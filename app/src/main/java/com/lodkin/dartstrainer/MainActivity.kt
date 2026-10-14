@@ -4,31 +4,14 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.lodkin.dartstrainer.data.SettingsStorage
 import com.lodkin.dartstrainer.data.aroundclock.AroundClockDatabase
 import com.lodkin.dartstrainer.data.aroundclock.AroundClockOrder
@@ -72,9 +55,7 @@ import com.lodkin.dartstrainer.data.training.TrainingStatsAnalyzer
 import com.lodkin.dartstrainer.data.training.WeaknessType
 import com.lodkin.dartstrainer.theme.Accent
 import com.lodkin.dartstrainer.theme.DarkBg
-import com.lodkin.dartstrainer.theme.ErrorColor
 import com.lodkin.dartstrainer.theme.GoldAccent
-import com.lodkin.dartstrainer.theme.TileBgDark
 import com.lodkin.dartstrainer.ui.GameSelectScreen
 import com.lodkin.dartstrainer.ui.LoadingScreen
 import com.lodkin.dartstrainer.ui.MainMenuScreen
@@ -104,12 +85,18 @@ import com.lodkin.dartstrainer.ui.sector.SectorSetupScreen
 import com.lodkin.dartstrainer.ui.sector.SectorStatsScreen
 import com.lodkin.dartstrainer.ui.training.BlockExerciseItem
 import com.lodkin.dartstrainer.ui.training.ExerciseSummary
+import com.lodkin.dartstrainer.ui.training.ExitTrainingDialog
+import com.lodkin.dartstrainer.ui.training.FreeNextExerciseDialog
 import com.lodkin.dartstrainer.ui.training.FreeTrainingSummaryScreen
+import com.lodkin.dartstrainer.ui.training.MainExerciseRunner
 import com.lodkin.dartstrainer.ui.training.PlannedExercise
 import com.lodkin.dartstrainer.ui.training.RestTimerOverlay
+import com.lodkin.dartstrainer.ui.training.ResumeTrainingDialog
 import com.lodkin.dartstrainer.ui.training.SummaryBlockType
 import com.lodkin.dartstrainer.ui.training.SummaryStatus
+import com.lodkin.dartstrainer.ui.training.TimeUpDialog
 import com.lodkin.dartstrainer.ui.training.TrainingBlockScreen
+import com.lodkin.dartstrainer.ui.training.TrainingExercisePlaceholder
 import com.lodkin.dartstrainer.ui.training.TrainingMenuScreen
 import com.lodkin.dartstrainer.ui.training.TrainingProgressScreen
 import com.lodkin.dartstrainer.ui.training.TrainingSettingsScreen
@@ -120,6 +107,7 @@ import com.lodkin.dartstrainer.ui.training.defaultMainBlockItems
 import com.lodkin.dartstrainer.ui.training.defaultMainExercises
 import com.lodkin.dartstrainer.ui.training.defaultPsychologyExercises
 import com.lodkin.dartstrainer.ui.training.defaultStrengthExercises
+import com.lodkin.dartstrainer.ui.training.recommendedGameIds
 import com.lodkin.dartstrainer.ui.training.warmupBlockItems
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -268,11 +256,9 @@ fun DartsTrainerApp() {
     var pendingResume by remember { mutableStateOf<TrainingStateStorage.Snapshot?>(null) }
     var showExitTrainingDialog by remember { mutableStateOf(false) }
 
-    // ── Свободная тренировка ──
     var isFreeTraining by remember { mutableStateOf(false) }
     var freeExerciseIndex by remember { mutableStateOf(0) }
 
-    // ── Таймер отдыха между упражнениями ──
     var showRestTimer by remember { mutableStateOf(false) }
     var restTimerSeconds by remember { mutableStateOf(0) }
     var restNextTitle by remember { mutableStateOf<String?>(null) }
@@ -412,7 +398,6 @@ fun DartsTrainerApp() {
         TrainingBlockPhase.FINISHED -> defaultMainBlockItems(recommendedIds)
     }
 
-    // Запуск текущего упражнения по его id — общий для обычной и свободной.
     fun launchExercise(id: String) {
         exerciseStartMillis = System.currentTimeMillis()
         when (id) {
@@ -465,7 +450,6 @@ fun DartsTrainerApp() {
         }
     }
 
-    // Переход после завершения упражнения. Работает в обоих режимах.
     fun advanceAfterExercise(finishedExerciseId: String) {
         val list = exercisesForPhase(TrainingBlockPhase.MAIN)
         if (isFreeTraining) {
@@ -511,7 +495,6 @@ fun DartsTrainerApp() {
         val isTrainingScreen = screen in TRAINING_SCREENS || screen == "training"
 
         when {
-            // Свободная тренировка — «Назад» → итоги (без диалога).
             isFreeTraining -> {
                 if (screen == "training_free_summary") {
                     resetTrainingState()
@@ -522,7 +505,6 @@ fun DartsTrainerApp() {
                     screen = "training_free_summary"
                 }
             }
-            // Обычная тренировка — диалог «Закончить / Отложить».
             isTrainingScreen && isTrainingActive && trainingSessionId > 0L && screen != "training_summary" -> {
                 showExitTrainingDialog = true
             }
@@ -1393,82 +1375,20 @@ fun DartsTrainerApp() {
         }
     }
 
-    // ── Диалог «Прервать тренировку?» (только для обычной) ──
     if (showExitTrainingDialog) {
-        AlertDialog(
-            onDismissRequest = { showExitTrainingDialog = false },
-            containerColor = TileBgDark,
-            title = {
-                Text(
-                    "Прервать тренировку?",
-                    color = GoldAccent,
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold
-                )
+        ExitTrainingDialog(
+            onFinish = {
+                showExitTrainingDialog = false
+                resetTrainingState()
+                TrainingStateStorage.clear(context)
+                autoOpenTimeDialog = false
+                screen = "main"
             },
-            text = {
-                Column {
-                    Text(
-                        "Закончить сейчас или отложить?",
-                        color = Color.White.copy(alpha = 0.9f),
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Medium
-                    )
-                    Spacer(Modifier.height(10.dp))
-                    Text(
-                        "• «Закончить» — завершает тренировку. " +
-                                "Всё, что успел пройти, пойдёт в статистику.",
-                        color = Color.White.copy(alpha = 0.75f),
-                        fontSize = 13.sp,
-                        lineHeight = 18.sp
-                    )
-                    Spacer(Modifier.height(6.dp))
-                    Text(
-                        "• «Отложить» — сохранит тренировку до 3 часов. " +
-                                "Вернёшься с того же места. Через 3 часа — сбросится, " +
-                                "прогресс уйдёт в статистику.",
-                        color = Color.White.copy(alpha = 0.75f),
-                        fontSize = 13.sp,
-                        lineHeight = 18.sp
-                    )
-                }
-            },
-            confirmButton = {
-                Text(
-                    "Закончить",
-                    color = Color(0xFF121212),
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(ErrorColor)
-                        .clickable {
-                            showExitTrainingDialog = false
-                            resetTrainingState()
-                            TrainingStateStorage.clear(context)
-                            autoOpenTimeDialog = false
-                            screen = "main"
-                        }
-                        .padding(horizontal = 16.dp, vertical = 10.dp)
-                )
-            },
-            dismissButton = {
-                Text(
-                    "Отложить (до 3ч)",
-                    color = Color.White,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(TileBgDark)
-                        .clickable {
-                            showExitTrainingDialog = false
-                            saveCurrentTrainingState()
-                            autoOpenTimeDialog = false
-                            screen = "main"
-                        }
-                        .padding(horizontal = 16.dp, vertical = 10.dp)
-                )
+            onPostpone = {
+                showExitTrainingDialog = false
+                saveCurrentTrainingState()
+                autoOpenTimeDialog = false
+                screen = "main"
             }
         )
     }
@@ -1476,390 +1396,74 @@ fun DartsTrainerApp() {
     if (showResumeDialog && pendingResume != null) {
         val snap = pendingResume!!
         val minutesAgo = TrainingStateStorage.minutesSinceLastUpdate(context)
-        AlertDialog(
-            onDismissRequest = { },
-            containerColor = TileBgDark,
-            title = {
-                Text(
-                    "Незавершённая тренировка",
-                    color = GoldAccent,
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold
-                )
-            },
-            text = {
-                Column {
-                    Text(
-                        "У тебя есть незавершённая тренировка. " +
-                                if (minutesAgo > 0) "Прошло $minutesAgo мин." else "Только что прервана.",
-                        color = Color.White.copy(alpha = 0.85f),
-                        fontSize = 14.sp,
-                        lineHeight = 20.sp
-                    )
-                    Spacer(Modifier.height(10.dp))
-                    Text(
-                        "Продолжить с того места, где остановился, или начать заново?",
-                        color = Color.White.copy(alpha = 0.7f),
-                        fontSize = 13.sp
-                    )
+        ResumeTrainingDialog(
+            minutesAgo = minutesAgo,
+            onContinue = {
+                trainingSessionId = snap.sessionId
+                trainingMinutes = snap.minutes
+                trainingElapsedSeconds = snap.elapsedSeconds
+                currentPhase = runCatching {
+                    TrainingBlockPhase.valueOf(snap.phaseName)
+                }.getOrDefault(TrainingBlockPhase.MAIN)
+                currentExerciseIndex = snap.exerciseIndex
+                exerciseStatuses = snap.statuses.mapNotNull { (k, v) ->
+                    runCatching { k to SummaryStatus.valueOf(v) }.getOrNull()
+                }.toMap()
+
+                mainExercises = if (snap.mainExerciseIds.isNotEmpty()) {
+                    val baseMap = defaultMainExercises().associateBy { it.id }
+                    snap.mainExerciseIds
+                        .mapNotNull { (id, m) -> baseMap[id]?.copy(minutes = m) }
+                        .ifEmpty { defaultMainExercises() }
+                } else {
+                    defaultMainExercises()
                 }
+                psychologyExercises = if (snap.psychologyEnabled)
+                    defaultPsychologyExercises() else emptyList()
+                strengthExercises = if (snap.strengthEnabled)
+                    defaultStrengthExercises() else emptyList()
+
+                trainingPaused = false
+                isTrainingActive = true
+                isFreeTraining = false
+                autoOpenTimeDialog = false
+                showResumeDialog = false
+                exerciseStartMillis = 0L
+                isTraining501 = false
+                isTrainingCricket = false
+                showRestTimer = false
+                pendingNextStep = null
+
+                screen = when (currentPhase) {
+                    TrainingBlockPhase.WARMUP -> "training_warmup"
+                    else -> "training_block"
+                }
+                pendingResume = null
             },
-            confirmButton = {
-                Text(
-                    "Продолжить",
-                    color = Color(0xFF121212),
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(Accent)
-                        .clickable {
-                            trainingSessionId = snap.sessionId
-                            trainingMinutes = snap.minutes
-                            trainingElapsedSeconds = snap.elapsedSeconds
-                            currentPhase = runCatching {
-                                TrainingBlockPhase.valueOf(snap.phaseName)
-                            }.getOrDefault(TrainingBlockPhase.MAIN)
-                            currentExerciseIndex = snap.exerciseIndex
-                            exerciseStatuses = snap.statuses.mapNotNull { (k, v) ->
-                                runCatching { k to SummaryStatus.valueOf(v) }.getOrNull()
-                            }.toMap()
-
-                            mainExercises = if (snap.mainExerciseIds.isNotEmpty()) {
-                                val baseMap = defaultMainExercises().associateBy { it.id }
-                                snap.mainExerciseIds
-                                    .mapNotNull { (id, m) -> baseMap[id]?.copy(minutes = m) }
-                                    .ifEmpty { defaultMainExercises() }
-                            } else {
-                                defaultMainExercises()
-                            }
-                            psychologyExercises = if (snap.psychologyEnabled)
-                                defaultPsychologyExercises() else emptyList()
-                            strengthExercises = if (snap.strengthEnabled)
-                                defaultStrengthExercises() else emptyList()
-
-                            trainingPaused = false
-                            isTrainingActive = true
-                            isFreeTraining = false
-                            autoOpenTimeDialog = false
-                            showResumeDialog = false
-                            exerciseStartMillis = 0L
-                            isTraining501 = false
-                            isTrainingCricket = false
-                            showRestTimer = false
-                            pendingNextStep = null
-
-                            screen = when (currentPhase) {
-                                TrainingBlockPhase.WARMUP -> "training_warmup"
-                                else -> "training_block"
-                            }
-                            pendingResume = null
-                        }
-                        .padding(horizontal = 16.dp, vertical = 10.dp)
-                )
-            },
-            dismissButton = {
-                Text(
-                    "Начать заново",
-                    color = Color.White.copy(alpha = 0.75f),
-                    fontSize = 14.sp,
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(10.dp))
-                        .clickable {
-                            TrainingStateStorage.clear(context)
-                            resetTrainingState()
-                            autoOpenTimeDialog = true
-                            showResumeDialog = false
-                            pendingResume = null
-                        }
-                        .padding(horizontal = 14.dp, vertical = 10.dp)
-                )
+            onRestart = {
+                TrainingStateStorage.clear(context)
+                resetTrainingState()
+                autoOpenTimeDialog = true
+                showResumeDialog = false
+                pendingResume = null
             }
         )
     }
 
     if (showTimeUpDialog) {
-        AlertDialog(
-            onDismissRequest = { },
-            containerColor = TileBgDark,
-            title = { Text("⏱ Время тренировки вышло", color = GoldAccent, fontSize = 18.sp, fontWeight = FontWeight.Bold) },
-            text = { Column { Text(
-                "Ты потренировался $trainingMinutes минут — это твоя цель на сегодня. Что делаем дальше?",
-                color = Color.White.copy(alpha = 0.85f), fontSize = 14.sp
-            ) } },
-            confirmButton = { TextButton(onClick = {
+        TimeUpDialog(
+            trainingMinutes = trainingMinutes,
+            onFinish = {
                 showTimeUpDialog = false
                 resetTrainingState()
                 TrainingStateStorage.clear(context)
                 autoOpenTimeDialog = false
                 screen = "training"
-            }) { Text("Закончить", color = ErrorColor, fontWeight = FontWeight.Bold) } },
-            dismissButton = { TextButton(onClick = {
-                showTimeUpDialog = false; trainingMinutes += 20
-            }) { Text("Продолжить +20 мин", color = GoldAccent, fontWeight = FontWeight.Bold) } }
-        )
-    }
-}
-
-// ─────────────────────────────────────────────
-// Диалог «Следующее упражнение» для свободного режима
-// ─────────────────────────────────────────────
-
-@Composable
-private fun FreeNextExerciseDialog(
-    exerciseTitle: String,
-    exerciseMinutes: Int,
-    exerciseNumber: Int,
-    totalExercises: Int,
-    onPlay: () -> Unit,
-    onSkip: () -> Unit,
-    onFinish: () -> Unit
-) {
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color(0xFF0D1117)),
-        contentAlignment = Alignment.Center
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(24.dp)
-                .clip(RoundedCornerShape(20.dp))
-                .background(TileBgDark)
-                .padding(24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Text(
-                "УПРАЖНЕНИЕ ${exerciseNumber} / $totalExercises",
-                color = Accent,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 2.sp
-            )
-            Spacer(Modifier.height(12.dp))
-            Text(
-                "Сейчас будет:",
-                color = Color.White.copy(alpha = 0.7f),
-                fontSize = 13.sp
-            )
-            Spacer(Modifier.height(6.dp))
-            Text(
-                exerciseTitle,
-                color = GoldAccent,
-                fontSize = 24.sp,
-                fontWeight = FontWeight.Bold
-            )
-            Spacer(Modifier.height(4.dp))
-            Text(
-                "~$exerciseMinutes мин",
-                color = Color.White.copy(alpha = 0.55f),
-                fontSize = 13.sp
-            )
-
-            Spacer(Modifier.height(22.dp))
-
-            // «Играть»
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(14.dp))
-                    .background(Accent)
-                    .clickable { onPlay() }
-                    .padding(vertical = 16.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    "▶  Играть",
-                    color = Color(0xFF121212),
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Bold
-                )
+            },
+            onContinuePlus20 = {
+                showTimeUpDialog = false
+                trainingMinutes += 20
             }
-
-            Spacer(Modifier.height(10.dp))
-
-            // «Пропустить»
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(14.dp))
-                    .background(Color(0xFF1A2332))
-                    .clickable { onSkip() }
-                    .padding(vertical = 14.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    "Пропустить",
-                    color = Color.White.copy(alpha = 0.85f),
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.Medium
-                )
-            }
-
-            Spacer(Modifier.height(16.dp))
-
-            Text(
-                "─── или ───",
-                color = Color.White.copy(alpha = 0.3f),
-                fontSize = 12.sp
-            )
-
-            Spacer(Modifier.height(16.dp))
-
-            // «Закончить тренировку»
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(14.dp))
-                    .background(ErrorColor.copy(alpha = 0.15f))
-                    .clickable { onFinish() }
-                    .padding(vertical = 14.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    "⬛  Закончить тренировку",
-                    color = ErrorColor,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun MainExerciseRunner(
-    exerciseId: String,
-    playerLevel: Int,
-    aroundClockRepository: AroundClockRepository,
-    sectorRepository: SectorRepository,
-    scoreSetRepository: ScoreSetRepository,
-    bigRoundRepository: BigRoundRepository,
-    trainingRepository: TrainingRepository?,
-    onFinish: (BlockType, Int, Int) -> Unit,
-    onBack: () -> Unit
-) {
-    val isTraining = trainingRepository != null
-
-    when (exerciseId) {
-        "aroundclock_doubles" -> AroundClockGameScreen(
-            target = AroundClockTarget.DOUBLE,
-            order = AroundClockOrder.ORDERED,
-            hitsRequired = 1,
-            repository = aroundClockRepository,
-            sectorStart = 1,
-            trainingRepository = trainingRepository,
-            trainingRecordKey = if (isTraining) "aroundclock_doubles" else null,
-            onFinish = { totalDarts, _, _ -> onFinish(BlockType.DOUBLES, totalDarts, totalDarts) },
-            onBack = onBack
         )
-        "aroundclock_sectors" -> AroundClockGameScreen(
-            target = AroundClockTarget.SINGLE,
-            order = AroundClockOrder.ORDERED,
-            hitsRequired = 1,
-            repository = aroundClockRepository,
-            sectorStart = 1,
-            trainingRepository = trainingRepository,
-            trainingRecordKey = if (isTraining) "aroundclock_sectors" else null,
-            onFinish = { totalDarts, _, _ -> onFinish(BlockType.SECTOR, totalDarts, totalDarts) },
-            onBack = onBack
-        )
-        "aroundclock_trebles" -> {
-            val sectorStart = if (playerLevel >= 9) 1 else 10
-            AroundClockGameScreen(
-                target = AroundClockTarget.TRIPLE,
-                order = AroundClockOrder.ORDERED,
-                hitsRequired = 1,
-                repository = aroundClockRepository,
-                sectorStart = sectorStart,
-                trainingRepository = trainingRepository,
-                trainingRecordKey = if (isTraining) "aroundclock_trebles" else null,
-                onFinish = { totalDarts, _, _ -> onFinish(BlockType.TREBLES, totalDarts, totalDarts) },
-                onBack = onBack
-            )
-        }
-        "sector20" -> SectorGameScreen(
-            sector = 20,
-            repository = sectorRepository,
-            isTrainingMode = isTraining,
-            trainingRepository = trainingRepository,
-            trainingRecordKey = if (isTraining) "sector20" else null,
-            onFinish = { score -> onFinish(BlockType.SCORE, score, 30) },
-            onBack = onBack
-        )
-        "scoreset" -> ScoreSetGameScreen(
-            repository = scoreSetRepository,
-            isTrainingMode = isTraining,
-            trainingRepository = trainingRepository,
-            trainingRecordKey = if (isTraining) "scoreset" else null,
-            onFinish = { totalScore, _ -> onFinish(BlockType.SCORE, totalScore, 30) },
-            onBack = onBack
-        )
-        "biground" -> BigRoundGameScreen(
-            category = BigRoundCategory.MALE,
-            repository = bigRoundRepository,
-            isTrainingMode = isTraining,
-            trainingRepository = trainingRepository,
-            trainingRecordKey = if (isTraining) "biground" else null,
-            onFinish = { score -> onFinish(BlockType.SECTOR, score, 63) },
-            onBack = onBack
-        )
-        else -> TrainingExercisePlaceholder(
-            title = "Упражнение",
-            description = "Это упражнение пока в разработке.",
-            onDone = { onFinish(BlockType.SCORE, 0, 0) },
-            onBack = onBack
-        )
-    }
-}
-
-private fun recommendedGameIds(weakness: WeaknessType?): Set<String> = when (weakness) {
-    WeaknessType.DOUBLES -> setOf("aroundclock_doubles", "game501")
-    WeaknessType.SCORE -> setOf("sector20", "scoreset")
-    WeaknessType.ACCURACY -> setOf("aroundclock_sectors", "biground")
-    WeaknessType.TREBLES -> setOf("aroundclock_trebles", "biground", "cricket")
-    null -> emptySet()
-}
-
-@Composable
-private fun TrainingExercisePlaceholder(
-    title: String,
-    description: String,
-    onDone: () -> Unit,
-    onBack: () -> Unit
-) {
-    Box(modifier = Modifier.fillMaxSize().background(DarkBg).padding(16.dp)) {
-        Column(modifier = Modifier.fillMaxSize()) {
-            Box(
-                modifier = Modifier.clip(RoundedCornerShape(12.dp)).background(TileBgDark)
-                    .clickable { onBack() }.padding(horizontal = 14.dp, vertical = 10.dp)
-            ) { Text("← Назад", color = Accent, fontSize = 14.sp, fontWeight = FontWeight.Medium) }
-
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    modifier = Modifier.padding(24.dp)
-                ) {
-                    Text(title, color = GoldAccent, fontSize = 24.sp, fontWeight = FontWeight.Bold)
-                    if (description.isNotBlank()) {
-                        Spacer(Modifier.height(12.dp))
-                        Text(description, color = Color.White.copy(alpha = 0.85f), fontSize = 14.sp)
-                    }
-                    Spacer(Modifier.height(16.dp))
-                    Text(
-                        "Упражнение в разработке",
-                        color = Color.White.copy(alpha = 0.5f),
-                        fontSize = 12.sp
-                    )
-                    Spacer(Modifier.height(24.dp))
-                    Box(
-                        modifier = Modifier.clip(RoundedCornerShape(14.dp))
-                            .background(Accent).clickable { onDone() }
-                            .padding(horizontal = 32.dp, vertical = 14.dp)
-                    ) { Text("Готово", color = Color(0xFF121212), fontSize = 15.sp, fontWeight = FontWeight.Bold) }
-                }
-            }
-        }
     }
 }
