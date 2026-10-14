@@ -6,11 +6,17 @@ import kotlin.math.roundToInt
  * Генератор программы тренировки на день.
  *
  * Правила (согласованы с автором):
- *   1. Максимум 1 тяжёлое упражнение за тренировку.
- *   2. Первые 5 тренировок — вводный режим: больше лёгких и игр, тяжёлое — в конце.
- *   3. Учитывается слабое место (первое упражнение — на слабое).
- *   4. Учитывается реальный темп игрока (avgMinutesByExercise).
- *   5. Не более 50% времени на слабое место.
+ *   1. Максимум 1 тяжёлое упражнение за тренировку (кроме вводного режима).
+ *   2. Первые 3 тренировки — вводный режим без тяжёлых упражнений,
+ *      больше игровой формы:
+ *        • Тренировки 1–2: только игры + лёгкие (difficulty 1–3).
+ *        • Тренировка 3:   игры + лёгкие + средние (difficulty 1–6).
+ *        • Тренировка 4+:  обычный режим.
+ *   3. Первые 5 тренировок — сортировка по возрастанию тяжести
+ *      (лёгкие идут первыми), чтобы игрок плавно вкатился.
+ *   4. Учитывается слабое место (первое упражнение — на слабое).
+ *   5. Учитывается реальный темп игрока (avgMinutesByExercise).
+ *   6. Не более 50% времени на слабое место.
  *
  * Шкала тяжести (от лёгкого к тяжёлому, 1 = самое лёгкое):
  *   1 — Крикет
@@ -76,8 +82,11 @@ object TrainingPlanner {
         val minutes: Int
     )
 
-    /** Пороговое количество тренировок для вводного режима. */
+    /** Пороговое количество тренировок для «вводного режима». */
     private const val INTRO_TRAININGS_COUNT = 5
+
+    /** Пороговое количество тренировок, до которого запрещены тяжёлые. */
+    private const val INTRO_NO_HARD_COUNT = 3
 
     /** Порог, с которого упражнение считается тяжёлым. */
     private const val HARD_DIFFICULTY = 7
@@ -95,6 +104,23 @@ object TrainingPlanner {
         "aroundclock_doubles" -> 7
         "aroundclock_trebles" -> 8
         else -> 4
+    }
+
+    /**
+     * Сколько секунд отдыха после упражнения.
+     *   • лёгкие (1–3)  — 3 минуты
+     *   • средние (4–6) — 4 минуты
+     *   • тяжёлые (7–8) — 5 минут
+     *
+     * Для разминочных / психологических / силовых id — 3 минуты.
+     */
+    fun restSecondsAfter(id: String): Int {
+        val d = difficultyOf(id)
+        return when {
+            d <= 3 -> 3 * 60
+            d <= 6 -> 4 * 60
+            else -> 5 * 60
+        }
     }
 
     // ─────────────────────────────────────────────
@@ -199,6 +225,7 @@ object TrainingPlanner {
         if (budgetMinutes <= 0) return emptyList()
 
         val isIntroductory = completedTrainingCount < INTRO_TRAININGS_COUNT
+        val noHardAllowed = completedTrainingCount < INTRO_NO_HARD_COUNT
 
         // Порядок предпочтения по слабому месту
         val preferenceOrder: List<String> = when (analysis.weakestType) {
@@ -254,11 +281,23 @@ object TrainingPlanner {
             )
         }
 
-        // Вводный режим — сначала лёгкие и игры, тяжёлое уходит в конец
-        val orderedIds = if (isIntroductory) {
-            preferenceOrder.sortedBy { difficultyOf(it) }
+        // ── Порядок упражнений ──
+        // Вводный режим: сначала игры, потом лёгкие/средние по возрастанию тяжести.
+        // Обычный режим: как в preferenceOrder (учитывает слабое место).
+        val orderedIds: List<String> = if (isIntroductory) {
+            val games = listOf("game501", "cricket")
+            val others = preferenceOrder.filter { it !in games }
+                .sortedBy { difficultyOf(it) }
+            (games + others).distinct()
         } else {
             preferenceOrder
+        }
+
+        // ── Максимально допустимая тяжесть ──
+        val maxAllowedDifficulty: Int = when {
+            completedTrainingCount < 2 -> 3   // Тренировки 1–2: игры + лёгкие
+            completedTrainingCount == 2 -> 6  // Тренировка 3: игры + лёгкие + средние
+            else -> 8                          // Тренировка 4+: всё
         }
 
         fun fallbackMinutes(id: String): Int = when (id) {
@@ -285,9 +324,14 @@ object TrainingPlanner {
         var hardCount = 0
 
         for (id in orderedIds) {
-            val isHard = difficultyOf(id) >= HARD_DIFFICULTY
+            val diff = difficultyOf(id)
 
-            // Правило: максимум 1 тяжёлое за тренировку
+            // Фильтр по максимально допустимой тяжести (вводный режим)
+            if (diff > maxAllowedDifficulty) continue
+
+            // Правило: максимум 1 тяжёлое за тренировку (кроме вводного режима)
+            val isHard = diff >= HARD_DIFFICULTY
+            if (isHard && noHardAllowed) continue
             if (isHard && hardCount >= 1) continue
 
             val m = minutesFor(id)
