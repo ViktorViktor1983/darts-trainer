@@ -17,7 +17,7 @@
 
 Приложение для игры в дартс с ботами. 6 игровых режимов, статистика,
 настройки игрока, полноценный тренировочный раздел с ИИ-планировщиком,
-система рекордов с праздничной анимацией.
+система рекордов с праздничной анимацией, свободный режим тренировки.
 
 **Автор:** Виктор Лодкин (ViktorViktor1983).
 
@@ -64,8 +64,10 @@ Darts Checkout — справочник чекаутов.
 загружать файлы в GitHub за ИИ.
 
 **Что раздражает автора:**
-когда ИИ просит «найди строку X в файле» — он предпочитает получить
-файл целиком и заменить его тоже целиком. Экономит время и исключает ошибки.
+- когда ИИ просит «найди строку X в файле» — он предпочитает получить
+  файл целиком и заменить его тоже целиком;
+- когда файл слишком большой (1500+ строк) — просит разбить на части.
+  Но если разбить без потери качества нельзя — соглашается оставить как есть.
 
 ---
 
@@ -99,7 +101,10 @@ Darts Checkout — справочник чекаутов.
 ### Пакет com.lodkin.dartstrainer/
 
 **Корень:**
-- MainActivity.kt — точка входа, вся навигация (~1600 строк)
+- MainActivity.kt — точка входа, вся навигация (~1470 строк)
+  ВАЖНО: файл большой, но дробить дальше рискованно — там одно большое
+  Compose-состояние, связанное через замыкания. Уже вынесено всё, что
+  выносится без переписывания архитектуры.
 - theme/ — цвета, стили
 
 ### data/ — данные
@@ -115,32 +120,29 @@ Darts Checkout — справочник чекаутов.
 - CheckoutTable.kt, Game501Simulator.kt, BotPreferences.kt
 
 #### data/cricket/
-- CricketModels.kt, CricketLogic.kt (checkLegWinner исправлен)
-- CricketBotAI.kt (исправлен), CricketPlayers.kt (CRICKET_BOTS + PlayerNamesStorage)
+- CricketModels.kt, CricketLogic.kt
+- CricketBotAI.kt, CricketPlayers.kt
 - CricketDatabase.kt (версия 4), CricketEntityConverter.kt
 - CricketSerializer.kt, CricketSettingsStorage.kt
 
 #### data/sector/
 - SectorDatabase.kt — SectorGameEntity, Dao, DB, Repository.
-  Есть getGamesBySector(sector) для чтения рекорда.
+  Есть getGamesBySector(sector).
 
 #### data/biground/
 - BigRoundDatabase.kt — BigRoundGameEntity, Dao, DB, Repository.
-  Есть getAllGames().
 
 #### data/scoreset/
 - ScoreSetDatabase.kt — ScoreSetGameEntity, Dao, DB, Repository.
-  Есть getAllGames().
 
 #### data/aroundclock/
 - AroundClockDatabase.kt — AroundClockGameEntity, Dao, DB, Repository.
-  Есть getAllGames(), фильтрация по target/order/hitsRequired.
 
-#### data/freerecords/ (НОВОЕ — 14.10.2026)
-- **FreePlayRecordsDatabase.kt** — рекорды свободной игры.
-  Одна таблица `free_records`: recordKey (PK), bestInt, bestFloat, extraInt, achievedAt.
+#### data/freerecords/ — рекорды свободной игры
+- **FreePlayRecordsDatabase.kt** — таблица `free_records`
+  (recordKey PK, bestInt, bestFloat, extraInt, achievedAt).
   Ключи: game501_leg, game501_match, cricket_leg, cricket_match.
-  Репозиторий `FreePlayRecordsRepository` с методами:
+  Репозиторий `FreePlayRecordsRepository`:
   - get(key), hasRecord(key), getAll()
   - tryUpdate501Leg(darts, ppr): Boolean
   - tryUpdate501Match(ppr, doublesPercent): Boolean
@@ -150,75 +152,85 @@ Darts Checkout — справочник чекаутов.
 
 #### data/training/ — тренировочный раздел
 
-- **TrainingModels.kt** — модели:
-  TrainingSession, ExerciseResult (с durationSeconds),
-  PostponedDouble, WeaknessSnapshot, PotentialSnapshot, ControlMatch.
-  Enums: WeaknessType (SCORE, DOUBLES, ACCURACY, TREBLES), BlockType,
-  TrainingMode, ControlGameType.
-
-- **TrainingDatabase.kt** — **версия 4** (14.10.2026).
+- **TrainingModels.kt** — модели сессий, результатов, снимков.
+- **TrainingDatabase.kt** — **версия 4**.
   Таблицы: training_sessions, exercise_results, postponed_doubles,
   weakness_snapshots, potential_snapshots, control_matches, training_records.
   Миграции: 1→2 (durationSeconds), 2→3 (training_records), 3→4 (bestFloat, extraInt).
-  TrainingRecordEntity поля: exerciseId (PK), bestScore, bestDarts, bestFloat, extraInt, achievedAt.
+  TrainingRecordEntity: exerciseId (PK), bestScore, bestDarts, bestFloat, extraInt, achievedAt.
   Методы репозитория:
-  - getTrainingRecord(exerciseId)
-  - updateTrainingRecordIfBetter(exerciseId, score, darts, lowerDartsBetter) — для старых упражнений
+  - updateTrainingRecordIfBetter(exerciseId, score, darts, lowerDartsBetter)
   - update501LegRecord(darts, ppr): Boolean
   - update501MatchRecord(ppr, doublesPercent): Boolean
   - updateCricketLegRecord(mpr): Boolean
   - updateCricketMatchRecord(mpr): Boolean
-  - clearAllTrainingData() — чистит всё, включая training_records.
+  - clearAllTrainingData()
 
-- **DartsNorms.kt** — 16 уровней (LevelNorm).
-- **LevelCalculator.kt** — расчёт уровня, потенциала, трендов.
-- **WeaknessDetector.kt** — определение слабых мест.
 - **TrainingPlanner.kt** — генератор программы.
   Шкала тяжести: Крикет 1, 501 2, Кругосветка-Сектора 3, Набор 4,
   Сектор 20 = 5, Большой 6, Удвоения 7, Утроения 8.
-  Порог «тяжёлое»: difficulty >= 7. Максимум 1 тяжёлое за тренировку.
-  Первые 5 тренировок — вводный режим.
-- **TrainingBlocksStorage.kt** — флаги блоков (SharedPreferences training_blocks).
-- **TrainingStateStorage.kt** — автосохранение тренировки. Правило 3 часа.
+  Ключевые правила:
+    • `INTRO_TRAININGS_COUNT = 5` — первые 5 тренировок вводный режим.
+    • `INTRO_NO_HARD_COUNT = 3` — первые 3 тренировки БЕЗ тяжёлых.
+      Тренировка 1–2: игры + лёгкие (difficulty ≤ 3).
+      Тренировка 3: игры + лёгкие + средние (difficulty ≤ 6).
+      Тренировка 4+: обычный режим, максимум 1 тяжёлое.
+    • `HARD_DIFFICULTY = 7`.
+    • В вводном режиме игры идут первыми, потом лёгкие по возрастанию тяжести.
+    • `restSecondsAfter(id)`: лёгкие 3 мин / средние 4 мин / тяжёлые 5 мин.
+
+- **DartsNorms.kt**, **LevelCalculator.kt**, **WeaknessDetector.kt**.
+- **TrainingStatsAnalyzer.kt** — анализ (5 последних записей), считает
+  `avgMinutesByExercise` (личный темп игрока).
+- **TrainingBlocksStorage.kt** — флаги блоков (warmup / psychology / strength).
+- **TrainingStateStorage.kt** — автосохранение тренировки.
+  Правило 3 часа (см. раздел 6).
+  Snapshot хранит: sessionId, minutes, elapsedSeconds, phaseName,
+  exerciseIndex, statuses, mainExerciseIds (список пар id→минуты),
+  psychologyEnabled, strengthEnabled, lastUpdateMillis.
 - **TrainingBotLevelStorage.kt** — уровни ботов для тренировочных партий.
-- **TrainingStatsAnalyzer.kt** — анализ данных (5 последних записей).
 
 ### ui/common/ — общие компоненты
 
 - **CelebrationOverlay.kt** — праздничный диалог с анимацией.
   Параметры: visible, isNewRecord, onConfirm, onUndo, content.
-  Если isNewRecord = false — анимации нет, но диалог показывается.
-  Внутри Dialog. Анимация: 12 ракет + 90 конфетти, длительность 4,5 сек.
 
 ### ui/ — экраны
 
-**Общие:**
-- WelcomeScreen, OnboardingScreen, LoadingScreen
-- MainMenuScreen — главное меню.
-- GameSelectScreen — сетка 6 игр.
-- SettingsScreen — общие настройки (сейчас: полный сброс через factoryReset()).
-  factoryReset() удаляет ВСЕ БД приложения через context.databaseList() —
-  включая free_records.db.
+**Общие:** Welcome, Onboarding, Loading, MainMenu, GameSelect, Settings.
 
-**Статистика:**
-- StatsAggregates.kt, StatsScreen.kt, StatsMenuScreen.kt
-- StatsScreen принимает `freePlayRecordsRepository: FreePlayRecordsRepository?`.
-  При сбросе статистики Крикета вызывается repository.clearAll() + clearCricket(),
-  при сбросе 501 — game501Repo.clearAll() + clear501().
+**Статистика:** StatsAggregates.kt, StatsScreen.kt, StatsMenuScreen.kt.
+  StatsScreen принимает `freePlayRecordsRepository`.
+  При сбросе 501 / Крикета вызывает clear501() / clearCricket().
 
-**Игровые:**
-- ui/game501/, ui/cricket/, ui/sector/, ui/biground/, ui/scoreset/,
-  ui/aroundclock/ — по 3 экрана (Setup/Game/Stats) в каждой.
+**Игровые:** ui/game501/, ui/cricket/, ui/sector/, ui/biground/,
+ui/scoreset/, ui/aroundclock/ — по 3 экрана (Setup/Game/Stats).
 
 ### ui/training/ — тренировочный раздел
 
-- TrainingMenuScreen.kt — главный экран тренировки.
+Файлы:
+- TrainingMenuScreen.kt — главный экран.
+  Две кнопки старта: «⏱ Свободная тренировка» и «▶ По времени ▼».
+  Вторая — стрелочка открывает список времени (30/45/60/80/100/120).
 - TrainingSettingsScreen.kt — 4 переключателя блоков + полный сброс.
-- TrainingProgressScreen.kt — уровень, потенциал, 4 параметра, темп.
-- TrainingWarmupScreen.kt — 4 фазы разминки с таймером.
+- TrainingProgressScreen.kt — уровень, потенциал, параметры, темп.
+- TrainingWarmupScreen.kt — 4 фазы разминки.
 - TrainingBlockScreen.kt — список упражнений блока.
-- TrainingSummaryScreen.kt — итоги блока.
-- TrainingTimer.kt — TrainingTimerOverlay.
+  Содержит `PlannedExercise`, `defaultMainExercises()`,
+  `defaultPsychologyExercises()`, `defaultStrengthExercises()`.
+- TrainingSummaryScreen.kt — итоги блока (обычный режим).
+- TrainingTimer.kt — TrainingTimerOverlay (перетаскивание, пауза, скрытие).
+- **RestTimerOverlay.kt** (новый) — таймер отдыха между упражнениями.
+  Модальный, 3/4/5 мин, кнопка «Пропустить».
+- **FreeTrainingSummaryScreen.kt** (новый) — итоги свободной тренировки.
+  Показывает время, число упражнений, результаты по каждому.
+  Парсит `detailsJson` (won, ppr, dbl, mpr).
+- **FreeNextExerciseDialog.kt** (новый) — экран «Следующее упражнение»
+  в свободном режиме. Три кнопки: Играть / Пропустить / Закончить.
+- **TrainingExerciseRunner.kt** (новый) — вынесено из MainActivity:
+  `MainExerciseRunner`, `recommendedGameIds`, `TrainingExercisePlaceholder`.
+- **TrainingDialogs.kt** (новый) — вынесено из MainActivity:
+  `ExitTrainingDialog`, `ResumeTrainingDialog`, `TimeUpDialog`.
 
 ---
 
@@ -230,26 +242,43 @@ Darts Checkout — справочник чекаутов.
 - var screen: экран внутри stage=main
 - PARENT_SCREEN — карта для системной «Назад»
 
-### Тренировочные экраны
+### Экраны тренировки
 training, training_settings, training_progress, training_warmup,
 training_block, training_exercise, training_summary,
-training_block_exercise, training_extra_game.
+training_block_exercise, training_extra_game,
+training_free_next, training_free_summary.
 
-### TRAINING_SCREENS (где таймер)
+### TRAINING_SCREENS (где таймер тренировки)
 training_warmup, training_block, training_exercise,
-training_block_exercise, training_extra_game.
+training_block_exercise, training_extra_game, training_free_next.
 
 ### TrainingBlockPhase (enum)
 WARMUP, MAIN, PSYCHOLOGY, STRENGTH, FINISHED.
 
 ### Данные
-Room. Для каждой игры — отдельная база. Тренировка — TrainingDatabase (v4).
+Room. Для каждой игры — отдельная база.
+Тренировка — TrainingDatabase (v4).
 Рекорды свободной игры — FreePlayRecordsDatabase (v1).
 
 ### Незавершённые партии
 Только 501 и Крикет. isFinished, stateBlob, lastUpdateMillis.
 
-### Сохранение в БД — через scope MainActivity
+### Сохранение в БД — через scope MainActivity.
+
+### Два режима тренировки
+1. **По времени** — классический. Игрок выбирает 30/45/60/80/100/120 мин.
+   Планировщик подбирает упражнения под бюджет.
+   Есть разминка, психология, силовая (по флагам).
+   Автосейв работает, правило 3 часа работает.
+   Выход через диалог «Закончить / Отложить (до 3ч)».
+2. **Свободная** — без времени.
+   Нет разминки / психологии / силовой.
+   Нет бюджета — все упражнения по приоритету.
+   Экран `training_free_next` между упражнениями (Играть / Пропустить / Закончить).
+   Таймер отдыха работает так же (3/4/5 мин).
+   «Закончить тренировку» → `training_free_summary` (итоговый экран).
+   Автосейв НЕ работает (нет смысла — нет позиции в цепочке).
+   Правило 3 часа НЕ применяется.
 
 ### Бросок в Bull при розыгрыше
 pRed = (0.05 + (lvl - 1) * 0.027) * 0.8
@@ -267,67 +296,59 @@ pGreen = (0.25 + (lvl - 1) * 0.013) * 0.8
 | Сектор 20 | Максимум очков |
 | Большой раунд | Максимум очков |
 | Набор очков | Максимум очков |
-| **501** | **Лег: минимум дротиков. Матч: лучший PPR.** |
-| **Крикет** | **Лег: лучший MPR. Матч: лучший MPR.** |
+| 501 | Лег: минимум дротиков. Матч: лучший PPR. |
+| Крикет | Лег: лучший MPR. Матч: лучший MPR. |
 
 ### Где хранятся
 
-**Старые игры (Кругосветка, Сектор, Большой, Набор):**
-Рекорд НЕ хранится отдельно — вычисляется из игровых партий при чтении.
-Сброс статистики чистит партии → рекорд пропадает.
+- Кругосветка, Сектор, Большой, Набор — рекорд вычисляется из партий.
+- **501 и Крикет** — отдельные таблицы:
+  - Тренировка → `training_records` (TrainingDatabase v4).
+  - Свободная игра → `free_records` (FreePlayRecordsDatabase v1).
 
-**Новые игры (501, Крикет):**
-Отдельные таблицы, потому что партии — это blob.
+### Логика фиксации 501 и Крикета
 
-- **Тренировка** → таблица `training_records` в TrainingDatabase (v4).
-  Ключи: game501_leg, game501_match, cricket_leg, cricket_match.
-  Поля: bestInt не используется (для 501/Крикета), bestFloat = PPR/MPR,
-  bestDarts (для лега 501) = дротики, extraInt = % удвоений для матча 501.
-- **Свободная игра** → таблица `free_records` в FreePlayRecordsDatabase (v1).
-  Те же ключи. Поля: bestInt (дротики лега 501), bestFloat (PPR/MPR),
-  extraInt (% удвоений).
-
-### Логика фиксации рекордов 501 и Крикета
-
-- **Парные игры (isPairGame = true) — не фиксируются.**
+- Парные игры (isPairGame = true) — НЕ фиксируются.
 - 1×1 (с ботом или с человеком) — фиксируются.
-- «Свой» игрок определяется по имени из `SettingsStorage.getPlayerName()`.
-  Если имени в партии нет (играют друзья) — не фиксируем.
-- Только **выигранные** леги и **выигранные** матчи.
-- **Рекорд лега** — сразу после лега.
-  У 501 — при `game.legHistory.size` меняется.
-  У Крикета — при нажатии «Продолжить» в диалоге лега
-  (там ещё дротики корректируются).
-- **Рекорд матча** — после окончания матча.
-  У 501 — при «Продолжить» в финальном диалоге.
-  У Крикета — то же.
-- Салюты показываются **последовательно**: сначала за лег, потом за матч.
-- Салют матча — **только после** него вызывается `onGameFinish(game, id)`.
+- «Свой» игрок определяется по имени из SettingsStorage.getPlayerName().
+  Если имени в партии нет — не фиксируем.
+- Только выигранные леги и выигранные матчи.
+- Рекорд лега — сразу после лега.
+- Рекорд матча — после окончания матча.
+- Салюты показываются последовательно: сначала за лег, потом за матч.
+- Салют матча — только после него вызывается onGameFinish.
 
 ### Порог «почти рекорд»
-- Очки/PPR/MPR (больше = лучше): (рекорд − результат) / рекорд × 100% ≤ 10%.
-- Дротики (меньше = лучше): (результат − рекорд) / рекорд × 100% ≤ 10%.
-- Текст: «До нового рекорда не хватило N дротиков / X.X PPR / X.X MPR».
-  С правильным склонением: 1 дротик, 2–4 дротика, 5+ дротиков.
+- Очки/PPR/MPR: (рекорд − результат) / рекорд × 100% ≤ 10%.
+- Дротики: (результат − рекорд) / рекорд × 100% ≤ 10%.
+- С правильным склонением: 1 дротик / 2–4 дротика / 5+ дротиков.
 
 ### Форматы цифр
-- PPR/MPR — 1 знак после запятой (65.3, 3.5).
-- Дротики — целое (12).
-- % удвоений — целое (32%).
+- PPR/MPR — 1 знак после запятой.
+- Дротики — целое.
+- % удвоений — целое.
 
 ### Праздничный диалог — три состояния
-1. Новый рекорд → 🏆 крупный + салют + конфетти.
+1. Новый рекорд → 🏆 + салют + конфетти.
 2. Почти рекорд → 💪 голубой фон, без салюта, «не хватило N».
 3. Первый результат → тихое «Твой результат сохранён».
 
+### Правило 3 часов (только для тренировки по времени)
+
+- Автосейв в SharedPreferences при каждом изменении.
+- Меньше 3 часов — при входе диалог «Продолжить / Начать заново».
+- Больше 3 часов — при входе `TrainingStateStorage.isExpired(snapshot)`
+  возвращает true. `MainActivity` вызывает `clear(context)` и
+  предлагает начать новую. Всё, что было пройдено, уже в БД.
+- Свободный режим это правило не использует.
+
 ### Сбросы рекордов
-- **Тренировочные** рекорды (включая 501/Крикет) — через TrainingSettingsScreen
-  (кнопка ⚙ → полный сброс) → clearAllTrainingData().
-- **Свободная игра 501/Крикет** — через StatsScreen (кнопка «Сбросить статистику»
-  на вкладке 501 или Крикет) → clear501() / clearCricket().
-- **Полный заводской сброс** — SettingsScreen → factoryReset() → удаляет все БД.
-- **Старые игры** (Кругосветка, Сектор, Большой, Набор) — рекорды исчезают
-  вместе с партиями при их удалении.
+- Тренировочные (включая 501/Крикет) — через TrainingSettingsScreen → ⚙ →
+  полный сброс → clearAllTrainingData().
+- Свободная игра 501/Крикет — через StatsScreen → «Сбросить статистику»
+  → clear501() / clearCricket().
+- Полный заводской сброс — SettingsScreen → factoryReset().
+- Старые игры — рекорды исчезают вместе с партиями.
 
 ---
 
@@ -350,11 +371,9 @@ pGreen = (0.25 + (lvl - 1) * 0.013) * 0.8
 15. Профи — 99–103 / 40–44%
 16. Легенда — 104–110 / 44–48%
 
-**Привязки к разрядам:**
-7 (Разрядник) = I взрослый разряд
-11 (КМС) = КМС
-13 (Мастер) = МС
-16 (Легенда) = уровень Люка Литтлера
+Привязки к разрядам:
+7 (Разрядник) = I взрослый разряд, 11 (КМС) = КМС,
+13 (Мастер) = МС, 16 (Легенда) = уровень Люка Литтлера.
 
 ---
 
@@ -399,32 +418,41 @@ pGreen = (0.25 + (lvl - 1) * 0.013) * 0.8
 ### Потенциал = максимум из 4 параметров.
 ### Экзамен = каждые 10 тренировок.
 ### Тренды = по 3 последним тренировкам.
-### Средний темп = по 5 последним записям с durationSeconds > 0.
 
-### Правило «не более 50% на слабое место».
+### Бюджет основной части
+Считается от выбранного времени минус включённые блоки:
+- Разминка: 6 мин
+- Психология: 8 мин
+- Силовая: 7 мин
+- Резерв: 5 мин
+Остаток = бюджет на основную часть.
 
-### Правило 3 часов
-Выход → сохранение. Возврат <3ч → диалог «Продолжить / Начать заново».
+### Личный темп игрока
+TrainingStatsAnalyzer собирает avgMinutesByExercise — среднее время
+упражнения по последним 5 записям. Программа ориентируется на твой темп:
+быстрый игрок получит больше упражнений, медленный — меньше.
 
-### Адаптивная сложность ботов
-Первая партия — на 1 уровень слабее. Выиграл → +1, проиграл → −1.
+### Мягкий старт (вводный режим)
+- Тренировки 1–2: игры + лёгкие (difficulty ≤ 3). Без тяжёлых.
+- Тренировка 3: игры + лёгкие + средние (difficulty ≤ 6). Без тяжёлых.
+- Тренировки 4+: обычный режим, максимум 1 тяжёлое.
+- В вводном режиме игры идут первыми, между ними — лёгкие.
 
-### Кругосветка-Утроения
-- Уровень <9 (Сильный) → укороченная T10–T20 + Bull (12 целей).
-- Уровень ≥9 → полная T1–T20 + Bull (21 цель).
+### Таймер отдыха
+- Показывается после завершения упражнения.
+- 3 мин — после лёгкого, 4 мин — после среднего, 5 мин — после тяжёлого.
+- Модальный оверлей поверх всего, кнопка «Пропустить».
 
-### Кругосветка-Удвоения
-Все D1–D20 + Bull (21 цель). Не сокращать.
-
-### Баланс тяжести
-Максимум 1 тяжёлое упражнение за тренировку. Первые 5 тренировок —
-вводный режим. Игры (501, Крикет) разбавляют тяжёлые.
-
-### Структура тренировки
-- Разминка (4 фазы)
-- Основная часть (до 8 упражнений)
-- Психология (3 заглушки)
-- Силовая (5 заглушек)
+### Свободный режим (без времени)
+- Идея: игрок заходит без обязательств, играет сколько хочет.
+- Нет списка «что впереди» — только текущее упражнение.
+- Диалог перед каждым: Играть / Пропустить / Закончить тренировку.
+- Пропустить → следующее по приоритету.
+- Закончить → экран итогов → главное меню.
+- Разминка / психология / силовая НЕ включаются.
+- Автосейв НЕ работает, правило 3 часа НЕ применяется.
+- Статистика собирается полностью (как в обычном режиме),
+  рекорды фиксируются, слабые места обновляются.
 
 ### Свободная игра vs Тренировка
 Раздельная статистика. Сравнение = индикатор психологического давления.
@@ -453,32 +481,29 @@ pGreen = (0.25 + (lvl - 1) * 0.013) * 0.8
 Welcome, Onboarding, Loading, MainMenu, Settings, GameSelect.
 
 ### Статистика
-StatsMenuScreen (сетка 2×3), StatsScreen (вкладки, графики, чекауты).
+StatsMenuScreen, StatsScreen (вкладки, графики, чекауты).
 
 ### Игровые режимы
-501, Крикет (исправлены 2 бага), Сектор, Большой раунд,
-Набор очков, Кругосветка (3 режима).
+501, Крикет, Сектор, Большой раунд, Набор очков, Кругосветка (3 режима).
 
-### Тренировочный раздел — ПОЛНОСТЬЮ РАБОТАЕТ
-- Модели, БД (версия 4), DartsNorms, LevelCalculator, WeaknessDetector.
+### Тренировочный раздел — полностью работает
+- Модели, БД (v4), DartsNorms, LevelCalculator, WeaknessDetector.
 - TrainingBlocksStorage, TrainingStateStorage, TrainingBotLevelStorage.
-- TrainingStatsAnalyzer, TrainingPlanner.
-- TrainingMenuScreen (⚙ + 📊), TrainingSettingsScreen (со сбросом),
-  TrainingProgressScreen, TrainingWarmupScreen, TrainingBlockScreen,
-  TrainingSummaryScreen, TrainingTimerOverlay.
-- 8 упражнений основной части пишут в тренировочную БД.
-- 501 и Крикет в тренировке с адаптивным ботом.
+- TrainingStatsAnalyzer, TrainingPlanner (с вводным режимом).
+- TrainingMenuScreen, TrainingSettingsScreen, TrainingProgressScreen,
+  TrainingWarmupScreen, TrainingBlockScreen, TrainingSummaryScreen,
+  TrainingTimerOverlay.
 - Автосохранение тренировки (правило 3 часа).
+- Диалоги «Закончить / Отложить» и «Продолжить / Начать заново».
+- Таймер отдыха между упражнениями (RestTimerOverlay).
+- **Свободный режим тренировки** (без времени).
+- **FreeTrainingSummaryScreen** — итоги с разбивкой по упражнениям.
 
-### Система рекордов — полностью готова (14.10.2026)
-- **Готово:** Кругосветка ×3, Сектор 20, Большой раунд, Набор очков
-  (через игровые БД).
-- **Готово:** 501 и Крикет (лег + матч) в тренировке и свободной игре
-  (через training_records и free_records).
+### Система рекордов — полностью готова
+- Кругосветка ×3, Сектор 20, Большой раунд, Набор очков.
+- 501 и Крикет (лег + матч) в тренировке и свободной игре.
 - Раздельные рекорды (тренировка / свободная игра).
-- Праздничный диалог с салютом и конфетти — CelebrationOverlay.kt.
-- Все экраны (Sector, BigRound, ScoreSet, AroundClock, Game501, Cricket)
-  подключены.
+- Праздничный диалог с салютом и конфетти.
 - Порог «почти рекорд» ≤10%.
 - Сброс статистики чистит соответствующие рекорды.
 
@@ -494,12 +519,12 @@ StatsMenuScreen (сетка 2×3), StatsScreen (вкладки, графики, 
 2. **Раздел «О программе»** в настройках — пояснения для игрока.
 3. **Реальные психологические упражнения** — вместо заглушек.
 4. **Реальные силовые упражнения** — вместо заглушек.
-5. **Кнопка «Статистика» на главном экране** — сделать отдельной
-   большой карточкой, как «Тренировка» и «Просто поиграть».
+5. **Кнопка «Статистика» на главном экране** — отдельной большой карточкой.
 6. **Диагностическое первое упражнение** — для не-новичков.
 7. **Облегчённые игры для новичков.**
 8. **Экран статистики тренировок** — прогресс по 4 параметрам.
-9. **Полное сохранение середины упражнения** (не только позиции в цепочке).
+9. **Полное сохранение середины упражнения** — сейчас только позиция
+   в цепочке, не середина отдельного упражнения.
 
 ---
 
@@ -513,6 +538,12 @@ StatsMenuScreen (сетка 2×3), StatsScreen (вкладки, графики, 
 - **13.10.2026** — рекорды не сбрасывались при полном сбросе.
 - **14.10.2026** — при сбросе статистики 501/Крикета рекорды свободной игры
   не стирались. Исправлено: добавлены clear501() / clearCricket().
+- **14.10.2026** — «Назад» из 501/Крикета в тренировке вёл в «Просто
+  поиграть». Исправлено: возвращает в training_block.
+- **14.10.2026** — «Назад» из training_block молча стирал тренировку.
+  Исправлено: показывается диалог «Закончить / Отложить».
+- **14.10.2026** — возобновление показывало все 8 упражнений вместо тех,
+  что были в сессии. Исправлено: список сохраняется в снапшот.
 
 ---
 
@@ -523,9 +554,16 @@ StatsMenuScreen (сетка 2×3), StatsScreen (вкладки, графики, 
 - При замене файла целиком — копировать ВСЁ.
 - При изменении @Entity — версия +1, миграция с ALTER TABLE.
   НЕ использовать fallbackToDestructiveMigration().
-- Все модели тренировок — в data/training/, экраны — в ui/training/,
-  общие компоненты — в ui/common/, рекорды свободной игры — в data/freerecords/.
+- Раскладка по папкам:
+  - data/ — данные.
+  - data/training/ — модели тренировок.
+  - data/freerecords/ — рекорды свободной игры.
+  - ui/ — экраны.
+  - ui/training/ — экраны тренировки.
+  - ui/common/ — общие компоненты.
 - При обновлении AI_CONTEXT — НЕ использовать вложенные блоки кода.
+- **Компоненты, вынесенные из MainActivity, помечать `internal`**,
+  чтобы не создавать конфликтов имён.
 
 ---
 
@@ -559,37 +597,28 @@ StatsMenuScreen (сетка 2×3), StatsScreen (вкладки, графики, 
 - **2026-10-08** — статистика, незавершённые партии.
 - **2026-10-09** — StatsAggregates, размеры шрифтов, Bull.
 - **2026-10-10** — Тренировочный раздел. 4 параметра. 2 комплекса.
-  TrainingModels, TrainingDatabase (v1), DartsNorms, LevelCalculator,
-  WeaknessDetector, TrainingPlanner.
 - **2026-10-11** — TrainingMenuScreen, TrainingSettingsScreen,
   TrainingProgressScreen, TrainingWarmupScreen, TrainingBlockScreen,
-  TrainingSummaryScreen, TrainingTimerOverlay.
-  TrainingBlocksStorage, TrainingStateStorage, TrainingBotLevelStorage,
-  TrainingStatsAnalyzer.
-  8 упражнений основной части.
-  Кругосветка-Утроения сокращена до уровня <9.
-  Правило 3 часов.
-- **2026-10-12** — durationSeconds в ExerciseResult, миграция БД 1→2.
-  TrainingPlanner: учёт completedTrainingCount, вводный режим (5 тренировок),
-  максимум 1 тяжёлое.
-- **2026-10-13** — Система рекордов:
-  training_records (миграция 2→3).
-  CelebrationOverlay.kt (ракеты + конфетти + салют).
-  SectorGameScreen, BigRoundGameScreen, ScoreSetGameScreen,
-  AroundClockGameScreen — праздничный диалог.
-  Раздельные рекорды (тренировка / свободная игра).
-  Формула «почти рекорд» ≤10%.
-- **2026-10-14** — Рекорды 501 и Крикета (лег + матч).
-  TrainingDatabase v4: миграция 3→4, поля bestFloat и extraInt.
-  Методы update501LegRecord, update501MatchRecord,
-  updateCricketLegRecord, updateCricketMatchRecord.
-  Новая БД: FreePlayRecordsDatabase (v1) + FreePlayRecordsRepository.
-  Game501Screen.kt и CricketGameScreen.kt:
-    - параметры freePlayRecordsRepository, isTrainingMode, trainingRepository
-    - фиксация рекордов (только выигранные леги и матчи)
-    - парные игры не фиксируются
-    - «свой» игрок по SettingsStorage.getPlayerName()
-    - салюты за лег и матч последовательно
-  MainActivity.kt: создан freePlayRecordsRepository, передан в Game501Screen,
-  CricketGameScreen, StatsScreen.
-  StatsScreen.kt: при сбросе статистики Крикета/501 — clearCricket()/clear501().
+  TrainingSummaryScreen, TrainingTimerOverlay. Правило 3 часов.
+- **2026-10-12** — durationSeconds, миграция 1→2. Вводный режим.
+- **2026-10-13** — Система рекордов: training_records (миграция 2→3),
+  CelebrationOverlay, рекорды для Сектора / Большого / Набора / Кругосветки.
+- **2026-10-14** — Рекорды 501 и Крикета.
+  TrainingDatabase v4 (bestFloat, extraInt).
+  FreePlayRecordsDatabase (v1) + FreePlayRecordsRepository.
+  Game501Screen.kt и CricketGameScreen.kt: фиксация рекордов, салюты.
+  MainActivity.kt: freePlayRecordsRepository.
+  StatsScreen.kt: сброс рекордов вместе со статистикой.
+  TrainingStateStorage: сохраняет список упражнений и флаги блоков,
+  добавлен isExpired().
+  TrainingPlanner: правило «первые 3 тренировки без тяжёлых»,
+  restSecondsAfter().
+  RestTimerOverlay.kt (новый) — таймер отдыха.
+  TrainingMenuScreen.kt — две кнопки старта: «Свободная» и «По времени ▼».
+  MainActivity — свободный режим тренировки (без времени),
+  отдельный экран training_free_next, автосейв отключён в свободном.
+  FreeTrainingSummaryScreen.kt (новый).
+  FreeNextExerciseDialog.kt (новый).
+  TrainingExerciseRunner.kt (новый) — вынесено из MainActivity.
+  TrainingDialogs.kt (новый) — вынесено из MainActivity.
+  Исправлены три бага навигации при «Назад» из тренировки.
