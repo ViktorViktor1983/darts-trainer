@@ -18,13 +18,17 @@ import com.lodkin.dartstrainer.theme.Accent
 import com.lodkin.dartstrainer.theme.GoldAccent
 import com.lodkin.dartstrainer.theme.TileBg
 import com.lodkin.dartstrainer.theme.TileBgDark
+import java.util.Locale
 
 @Composable
 fun MainMenuScreen(
     onTraining: () -> Unit,
     onFreePlay: () -> Unit,
     onStatsClick: () -> Unit,
-    onSettingsClick: () -> Unit
+    onSettingsClick: () -> Unit,
+    avg501Ppr: Float? = null,
+    avg501DoublesPercent: Float? = null,
+    count501Matches: Int = 0
 ) {
     Column(
         modifier = Modifier
@@ -68,12 +72,13 @@ fun MainMenuScreen(
         Spacer(Modifier.height(20.dp))
 
         // Тренировка
-        BigButton(
-            title = "Тренировка",
-            subtitle = "По программе тренера",
+        TrainingCard(
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(50f),
+            avg501Ppr = avg501Ppr,
+            avg501DoublesPercent = avg501DoublesPercent,
+            count501Matches = count501Matches,
             onClick = onTraining
         )
 
@@ -90,38 +95,115 @@ fun MainMenuScreen(
     }
 }
 
+/**
+ * Карточка «Тренировка».
+ *
+ * Сверху — заголовок и подпись. Снизу, если есть данные по 501,
+ * показываем средний PPR и % удвоений по всем тренировочным партиям.
+ */
 @Composable
-fun BigButton(
-    title: String,
-    subtitle: String,
+private fun TrainingCard(
     modifier: Modifier,
+    avg501Ppr: Float?,
+    avg501DoublesPercent: Float?,
+    count501Matches: Int,
     onClick: () -> Unit
 ) {
     Box(
         modifier = modifier
             .clip(RoundedCornerShape(20.dp))
             .background(TileBg)
-            .clickable { onClick() },
-        contentAlignment = Alignment.Center
+            .clickable { onClick() }
     ) {
         Column(
+            modifier = Modifier.fillMaxSize(),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(4.dp)
+            verticalArrangement = Arrangement.Center
         ) {
             Text(
-                text = title,
+                text = "Тренировка",
                 fontSize = 26.sp,
                 fontWeight = FontWeight.Bold,
                 color = Color.White,
                 textAlign = TextAlign.Center
             )
             Text(
-                text = subtitle,
+                text = "По программе тренера",
                 fontSize = 14.sp,
                 color = Accent,
                 textAlign = TextAlign.Center
             )
+
+            if (avg501Ppr != null && count501Matches > 0) {
+                Spacer(Modifier.height(14.dp))
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(TileBgDark)
+                        .padding(horizontal = 18.dp, vertical = 8.dp)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                "PPR",
+                                color = Color.White.copy(alpha = 0.55f),
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = 1.sp
+                            )
+                            Spacer(Modifier.height(2.dp))
+                            Text(
+                                String.format(Locale.US, "%.1f", avg501Ppr),
+                                color = GoldAccent,
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+
+                        Spacer(Modifier.width(20.dp))
+
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                "УДВОЕНИЯ",
+                                color = Color.White.copy(alpha = 0.55f),
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = 1.sp
+                            )
+                            Spacer(Modifier.height(2.dp))
+                            Text(
+                                if (avg501DoublesPercent != null)
+                                    "${avg501DoublesPercent.toInt()}%"
+                                else "—",
+                                color = GoldAccent,
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    "$count501Matches ${plural501Matches(count501Matches)}",
+                    color = Color.White.copy(alpha = 0.4f),
+                    fontSize = 10.sp
+                )
+            }
         }
+    }
+}
+
+/**
+ * Плюрализация для слова «партия».
+ */
+private fun plural501Matches(n: Int): String {
+    val mod10 = n % 10
+    val mod100 = n % 100
+    return when {
+        mod100 in 11..19 -> "партий"
+        mod10 == 1 -> "партия"
+        mod10 in 2..4 -> "партии"
+        else -> "партий"
     }
 }
 
@@ -158,7 +240,7 @@ private fun FreePlayCard(
             )
         }
 
-        // Кнопка статистики в правом нижнем углу — выше в 3 раза
+        // Кнопка статистики в правом нижнем углу
         Box(
             modifier = Modifier
                 .align(Alignment.BottomEnd)
