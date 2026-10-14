@@ -9,10 +9,11 @@ import android.content.Context
  * и вернуться к тренировке с того же места.
  *
  * Правила:
- *   • Если с последнего обновления прошло больше 3 часов — состояние считается устаревшим.
+ *   • Если с последнего обновления прошло больше 3 часов — состояние
+ *     считается устаревшим. ВАЖНО: load() его не удаляет — решение
+ *     принимает MainActivity (записать в статистику и очистить).
  *   • При завершении тренировки состояние очищается.
- *   • Сохраняется только позиция в цепочке (блок + номер упражнения + статусы),
- *     а не середина отдельного упражнения.
+ *   • Сохраняется позиция в цепочке + список упражнений + флаги блоков.
  */
 object TrainingStateStorage {
 
@@ -26,8 +27,15 @@ object TrainingStateStorage {
     private const val KEY_EX_INDEX = "exercise_index"
     private const val KEY_LAST_UPDATE = "last_update"
     private const val KEY_STATUSES = "statuses"
+    private const val KEY_MAIN_EXERCISES = "main_exercises"
+    private const val KEY_PSYCHOLOGY_ENABLED = "psychology_enabled"
+    private const val KEY_STRENGTH_ENABLED = "strength_enabled"
 
     private const val MAX_IDLE_MILLIS = 3L * 60 * 60 * 1000
+
+    // Разделители для сериализации списка упражнений.
+    private const val EX_SEP = "|"
+    private const val EX_FIELD_SEP = ":"
 
     data class Snapshot(
         val sessionId: Long,
@@ -36,9 +44,19 @@ object TrainingStateStorage {
         val phaseName: String,
         val exerciseIndex: Int,
         val statuses: Map<Int, String>,
+        /** id → минуты. Пустой список — восстановить из defaultMainExercises(). */
+        val mainExerciseIds: List<Pair<String, Int>>,
+        val psychologyEnabled: Boolean,
+        val strengthEnabled: Boolean,
         val lastUpdateMillis: Long
     )
 
+    /**
+     * Сохранить состояние тренировки.
+     *
+     * @param mainExerciseIds список пар (id упражнения → минуты).
+     *                        Пустой — не сохраняется, при загрузке будет пусто.
+     */
     fun save(
         context: Context,
         sessionId: Long,
@@ -46,9 +64,16 @@ object TrainingStateStorage {
         elapsedSeconds: Int,
         phaseName: String,
         exerciseIndex: Int,
-        statuses: Map<Int, String>
+        statuses: Map<Int, String>,
+        mainExerciseIds: List<Pair<String, Int>> = emptyList(),
+        psychologyEnabled: Boolean = false,
+        strengthEnabled: Boolean = false
     ) {
         val statusString = statuses.entries.joinToString(",") { (idx, status) -> "$idx:$status" }
+        val exString = mainExerciseIds.joinToString(EX_SEP) { (id, m) ->
+            "$id$EX_FIELD_SEP$m"
+        }
+
         prefs(context).edit()
             .putBoolean(KEY_ACTIVE, true)
             .putLong(KEY_SESSION_ID, sessionId)
@@ -57,32 +82,33 @@ object TrainingStateStorage {
             .putString(KEY_PHASE, phaseName)
             .putInt(KEY_EX_INDEX, exerciseIndex)
             .putString(KEY_STATUSES, statusString)
+            .putString(KEY_MAIN_EXERCISES, exString)
+            .putBoolean(KEY_PSYCHOLOGY_ENABLED, psychologyEnabled)
+            .putBoolean(KEY_STRENGTH_ENABLED, strengthEnabled)
             .putLong(KEY_LAST_UPDATE, System.currentTimeMillis())
             .apply()
     }
 
+    /**
+     * Загрузить состояние. ВАЖНО: не проверяет срок 3 часа — это делает
+     * MainActivity через isExpired(). Если снапшот просрочен, MainActivity
+     * сам решит: записать в статистику и очистить.
+     *
+     * Возвращает null только если состояние вообще отсутствует.
+     */
     fun load(context: Context): Snapshot? {
         val p = prefs(context)
         val active = p.getBoolean(KEY_ACTIVE, false)
         if (!active) return null
 
         val lastUpdate = p.getLong(KEY_LAST_UPDATE, 0L)
-        val now = System.currentTimeMillis()
-        if (lastUpdate <= 0L || (now - lastUpdate) > MAX_IDLE_MILLIS) {
-            clear(context)
-            return null
-        }
+        if (lastUpdate <= 0L) return null
 
         val statusRaw = p.getString(KEY_STATUSES, "") ?: ""
-        val statuses = if (statusRaw.isBlank()) emptyMap() else {
-            statusRaw.split(",").mapNotNull { entry ->
-                val parts = entry.split(":")
-                if (parts.size == 2) {
-                    val idx = parts[0].toIntOrNull() ?: return@mapNotNull null
-                    idx to parts[1]
-                } else null
-            }.toMap()
-        }
+        val statuses = parseStatuses(statusRaw)
+
+        val exRaw = p.getString(KEY_MAIN_EXERCISES, "") ?: ""
+        val exercises = parseExercises(exRaw)
 
         return Snapshot(
             sessionId = p.getLong(KEY_SESSION_ID, 0L),
@@ -91,8 +117,19 @@ object TrainingStateStorage {
             phaseName = p.getString(KEY_PHASE, "MAIN") ?: "MAIN",
             exerciseIndex = p.getInt(KEY_EX_INDEX, 0),
             statuses = statuses,
+            mainExerciseIds = exercises,
+            psychologyEnabled = p.getBoolean(KEY_PSYCHOLOGY_ENABLED, false),
+            strengthEnabled = p.getBoolean(KEY_STRENGTH_ENABLED, false),
             lastUpdateMillis = lastUpdate
         )
+    }
+
+    /**
+     * Просрочен ли снапшот (прошло больше 3 часов).
+     */
+    fun isExpired(snapshot: Snapshot): Boolean {
+        val now = System.currentTimeMillis()
+        return (now - snapshot.lastUpdateMillis) > MAX_IDLE_MILLIS
     }
 
     fun clear(context: Context) {
@@ -104,6 +141,34 @@ object TrainingStateStorage {
         if (last <= 0L) return 0
         val diff = System.currentTimeMillis() - last
         return (diff / 60000L).toInt()
+    }
+
+    // ─────────────────────────────────────────────
+    // Сериализация / парсинг
+    // ─────────────────────────────────────────────
+
+    private fun parseStatuses(raw: String): Map<Int, String> {
+        if (raw.isBlank()) return emptyMap()
+        return raw.split(",").mapNotNull { entry ->
+            val parts = entry.split(":")
+            if (parts.size == 2) {
+                val idx = parts[0].toIntOrNull() ?: return@mapNotNull null
+                idx to parts[1]
+            } else null
+        }.toMap()
+    }
+
+    private fun parseExercises(raw: String): List<Pair<String, Int>> {
+        if (raw.isBlank()) return emptyList()
+        return raw.split(EX_SEP).mapNotNull { entry ->
+            val parts = entry.split(EX_FIELD_SEP)
+            if (parts.size == 2) {
+                val id = parts[0]
+                val minutes = parts[1].toIntOrNull() ?: return@mapNotNull null
+                if (id.isBlank()) return@mapNotNull null
+                id to minutes
+            } else null
+        }
     }
 
     private fun prefs(context: Context) =
