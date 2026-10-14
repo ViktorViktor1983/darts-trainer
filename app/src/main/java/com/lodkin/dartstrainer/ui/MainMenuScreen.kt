@@ -5,31 +5,59 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.lodkin.dartstrainer.data.training.TrainingDatabase
+import com.lodkin.dartstrainer.data.training.TrainingRepository
+import com.lodkin.dartstrainer.data.training.TrainingStatsAnalyzer
 import com.lodkin.dartstrainer.theme.Accent
 import com.lodkin.dartstrainer.theme.GoldAccent
 import com.lodkin.dartstrainer.theme.TileBg
 import com.lodkin.dartstrainer.theme.TileBgDark
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.util.Locale
 
+/**
+ * Главное меню.
+ *
+ * ВАЖНО: этот экран сам читает статистику 501 из тренировочной БД
+ * и показывает средний PPR + % удвоений на карточке «Тренировка».
+ * MainActivity его трогать не нужно.
+ */
 @Composable
 fun MainMenuScreen(
     onTraining: () -> Unit,
     onFreePlay: () -> Unit,
     onStatsClick: () -> Unit,
-    onSettingsClick: () -> Unit,
-    avg501Ppr: Float? = null,
-    avg501DoublesPercent: Float? = null,
-    count501Matches: Int = 0
+    onSettingsClick: () -> Unit
 ) {
+    val context = LocalContext.current
+    val repository = remember {
+        TrainingRepository(TrainingDatabase.getInstance(context))
+    }
+
+    var avgPpr by remember { mutableStateOf<Float?>(null) }
+    var avgDbl by remember { mutableStateOf<Float?>(null) }
+    var count501 by remember { mutableStateOf(0) }
+
+    LaunchedEffect(Unit) {
+        val analysis = withContext(Dispatchers.IO) {
+            TrainingStatsAnalyzer.analyze(repository)
+        }
+        avgPpr = analysis.avg501Ppr
+        avgDbl = analysis.avg501DoublesPercent
+        count501 = analysis.count501Matches
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -76,9 +104,9 @@ fun MainMenuScreen(
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(50f),
-            avg501Ppr = avg501Ppr,
-            avg501DoublesPercent = avg501DoublesPercent,
-            count501Matches = count501Matches,
+            avg501Ppr = avgPpr,
+            avg501DoublesPercent = avgDbl,
+            count501Matches = count501,
             onClick = onTraining
         )
 
@@ -97,9 +125,7 @@ fun MainMenuScreen(
 
 /**
  * Карточка «Тренировка».
- *
- * Сверху — заголовок и подпись. Снизу, если есть данные по 501,
- * показываем средний PPR и % удвоений по всем тренировочным партиям.
+ * Сверху — заголовок. Снизу, если есть данные по 501 — плашка с PPR и % удвоений.
  */
 @Composable
 private fun TrainingCard(
@@ -193,9 +219,6 @@ private fun TrainingCard(
     }
 }
 
-/**
- * Плюрализация для слова «партия».
- */
 private fun plural501Matches(n: Int): String {
     val mod10 = n % 10
     val mod100 = n % 100
@@ -219,7 +242,6 @@ private fun FreePlayCard(
             .background(TileBg)
             .clickable { onFreePlay() }
     ) {
-        // Центральный текст
         Column(
             modifier = Modifier.fillMaxSize(),
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -240,7 +262,6 @@ private fun FreePlayCard(
             )
         }
 
-        // Кнопка статистики в правом нижнем углу
         Box(
             modifier = Modifier
                 .align(Alignment.BottomEnd)
