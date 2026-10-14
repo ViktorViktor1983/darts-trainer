@@ -6,12 +6,17 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.sp
 import com.lodkin.dartstrainer.data.SettingsStorage
 import com.lodkin.dartstrainer.data.aroundclock.AroundClockDatabase
 import com.lodkin.dartstrainer.data.aroundclock.AroundClockOrder
@@ -56,6 +61,7 @@ import com.lodkin.dartstrainer.data.training.WeaknessType
 import com.lodkin.dartstrainer.theme.Accent
 import com.lodkin.dartstrainer.theme.DarkBg
 import com.lodkin.dartstrainer.theme.GoldAccent
+import com.lodkin.dartstrainer.theme.TileBgDark
 import com.lodkin.dartstrainer.ui.GameSelectScreen
 import com.lodkin.dartstrainer.ui.LoadingScreen
 import com.lodkin.dartstrainer.ui.MainMenuScreen
@@ -86,7 +92,7 @@ import com.lodkin.dartstrainer.ui.sector.SectorStatsScreen
 import com.lodkin.dartstrainer.ui.training.BlockExerciseItem
 import com.lodkin.dartstrainer.ui.training.ExerciseSummary
 import com.lodkin.dartstrainer.ui.training.ExitTrainingDialog
-import com.lodkin.dartstrainer.ui.training.FreeNextExerciseDialog
+import com.lodkin.dartstrainer.ui.training.FreeRouletteScreen
 import com.lodkin.dartstrainer.ui.training.FreeTrainingSummaryScreen
 import com.lodkin.dartstrainer.ui.training.MainExerciseRunner
 import com.lodkin.dartstrainer.ui.training.PlannedExercise
@@ -256,10 +262,17 @@ fun DartsTrainerApp() {
     var pendingResume by remember { mutableStateOf<TrainingStateStorage.Snapshot?>(null) }
     var showExitTrainingDialog by remember { mutableStateOf(false) }
 
+    // ── Свободная тренировка (рулетка) ──
     var isFreeTraining by remember { mutableStateOf(false) }
-    var freeExerciseIndex by remember { mutableStateOf(0) }
+    var freeNoRepeat by remember { mutableStateOf(false) }
+    var freeCompletedIds by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var freeSkippedIds by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var freeCurrentId by remember { mutableStateOf<String?>(null) }
+    var freeRouletteKey by remember { mutableStateOf(0) }
     var freeExercisesCompleted by remember { mutableStateOf(0) }
+    var showFreeNewRoundDialog by remember { mutableStateOf(false) }
 
+    // ── Таймер отдыха ──
     var showRestTimer by remember { mutableStateOf(false) }
     var restTimerSeconds by remember { mutableStateOf(0) }
     var restNextTitle by remember { mutableStateOf<String?>(null) }
@@ -270,6 +283,27 @@ fun DartsTrainerApp() {
         restNextTitle = nextTitle
         pendingNextStep = nextStep
         showRestTimer = true
+    }
+
+    fun pickNextFreeExercise() {
+        val all = mainExercises.map { it.id }
+        if (all.isEmpty()) {
+            freeCurrentId = null
+            return
+        }
+        if (!freeNoRepeat) {
+            freeCurrentId = all.random()
+            freeRouletteKey += 1
+            return
+        }
+        val candidates = all.filterNot { it in freeCompletedIds || it in freeSkippedIds }
+        if (candidates.isEmpty()) {
+            freeCurrentId = null
+            showFreeNewRoundDialog = true
+        } else {
+            freeCurrentId = candidates.random()
+            freeRouletteKey += 1
+        }
     }
 
     fun saveCurrentTrainingState() {
@@ -341,8 +375,13 @@ fun DartsTrainerApp() {
         pendingNextStep = null
         showExitTrainingDialog = false
         isFreeTraining = false
-        freeExerciseIndex = 0
+        freeNoRepeat = false
+        freeCompletedIds = emptySet()
+        freeSkippedIds = emptySet()
+        freeCurrentId = null
+        freeRouletteKey = 0
         freeExercisesCompleted = 0
+        showFreeNewRoundDialog = false
     }
 
     fun activePhases(): List<TrainingBlockPhase> {
@@ -453,18 +492,16 @@ fun DartsTrainerApp() {
     }
 
     fun advanceAfterExercise(finishedExerciseId: String) {
-        val list = exercisesForPhase(TrainingBlockPhase.MAIN)
         if (isFreeTraining) {
-            // Свободный режим: упражнения идут по кругу бесконечно.
             freeExercisesCompleted += 1
+            freeCompletedIds = freeCompletedIds + finishedExerciseId
+            freeCurrentId = null
             val restSec = TrainingPlanner.restSecondsAfter(finishedExerciseId)
-            freeExerciseIndex += 1
-            if (freeExerciseIndex >= list.size) freeExerciseIndex = 0
-            val nextTitle = list[freeExerciseIndex].title
-            showRestThen(restSec, nextTitle) {
+            showRestThen(restSec, null) {
                 screen = "training_free_next"
             }
         } else {
+            val list = exercisesForPhase(TrainingBlockPhase.MAIN)
             if (currentExerciseIndex + 1 < list.size) {
                 val nextExercise = list[currentExerciseIndex + 1]
                 val restSec = TrainingPlanner.restSecondsAfter(finishedExerciseId)
@@ -479,9 +516,11 @@ fun DartsTrainerApp() {
     }
 
     fun finishCurrentMainExercise() {
-        val finishedId = mainExercises.getOrNull(
-            if (isFreeTraining) freeExerciseIndex else currentExerciseIndex
-        )?.id ?: ""
+        val finishedId = if (isFreeTraining) {
+            freeCurrentId ?: ""
+        } else {
+            mainExercises.getOrNull(currentExerciseIndex)?.id ?: ""
+        }
         if (!isFreeTraining) {
             exerciseStatuses = exerciseStatuses.toMutableMap().apply {
                 put(currentExerciseIndex, SummaryStatus.DONE)
@@ -692,8 +731,6 @@ fun DartsTrainerApp() {
                             isTrainingCricket = false
                             isTrainingActive = true
                             isFreeTraining = false
-                            freeExerciseIndex = 0
-                            freeExercisesCompleted = 0
                             showRestTimer = false
                             pendingNextStep = null
 
@@ -754,8 +791,6 @@ fun DartsTrainerApp() {
 
                             currentPhase = TrainingBlockPhase.MAIN
                             currentExerciseIndex = 0
-                            freeExerciseIndex = 0
-                            freeExercisesCompleted = 0
                             exerciseStatuses = emptyMap()
                             blockExerciseId = null
                             extraGameId = null
@@ -764,6 +799,13 @@ fun DartsTrainerApp() {
                             isTrainingCricket = false
                             isTrainingActive = true
                             isFreeTraining = true
+                            freeNoRepeat = false
+                            freeCompletedIds = emptySet()
+                            freeSkippedIds = emptySet()
+                            freeCurrentId = null
+                            freeRouletteKey = 0
+                            freeExercisesCompleted = 0
+                            showFreeNewRoundDialog = false
                             showRestTimer = false
                             pendingNextStep = null
 
@@ -835,21 +877,39 @@ fun DartsTrainerApp() {
                 }
 
                 "training_free_next" -> {
-                    val current = mainExercises.getOrNull(freeExerciseIndex)
+                    val current = mainExercises.firstOrNull { it.id == freeCurrentId }
+
                     if (current == null) {
-                        screen = "training_free_summary"
+                        LaunchedEffect(freeCurrentId) {
+                            if (freeCurrentId == null && !showFreeNewRoundDialog) {
+                                pickNextFreeExercise()
+                            }
+                        }
+                        Box(modifier = Modifier.fillMaxSize())
                     } else {
-                        FreeNextExerciseDialog(
-                            exerciseTitle = current.title,
-                            exerciseMinutes = current.minutes,
-                            completedSoFar = freeExercisesCompleted,
-                            onPlay = { launchExercise(current.id) },
-                            onSkip = {
-                                freeExerciseIndex += 1
-                                if (freeExerciseIndex >= mainExercises.size) freeExerciseIndex = 0
-                            },
-                            onFinish = { screen = "training_free_summary" }
-                        )
+                        key(freeRouletteKey) {
+                            FreeRouletteScreen(
+                                finalExercise = current,
+                                allExercises = mainExercises,
+                                completedCount = freeExercisesCompleted,
+                                noRepeat = freeNoRepeat,
+                                onToggleNoRepeat = { newValue ->
+                                    freeNoRepeat = newValue
+                                    if (newValue) {
+                                        freeSkippedIds = emptySet()
+                                    } else {
+                                        freeSkippedIds = emptySet()
+                                        freeCompletedIds = emptySet()
+                                    }
+                                },
+                                onPlay = { launchExercise(current.id) },
+                                onSkip = {
+                                    freeSkippedIds = freeSkippedIds + current.id
+                                    freeCurrentId = null
+                                },
+                                onFinish = { screen = "training_free_summary" }
+                            )
+                        }
                     }
                 }
 
@@ -870,8 +930,11 @@ fun DartsTrainerApp() {
 
                 "training_exercise" -> {
                     val list = exercisesForPhase(currentPhase)
-                    val idx = if (isFreeTraining) freeExerciseIndex else currentExerciseIndex
-                    val current = list.getOrNull(idx)
+                    val current = if (isFreeTraining) {
+                        mainExercises.firstOrNull { it.id == freeCurrentId }
+                    } else {
+                        list.getOrNull(currentExerciseIndex)
+                    }
                     if (current == null) {
                         screen = if (isFreeTraining) "training_free_next" else "training_block"
                     } else if (currentPhase != TrainingBlockPhase.MAIN) {
@@ -1392,6 +1455,57 @@ fun DartsTrainerApp() {
                 saveCurrentTrainingState()
                 autoOpenTimeDialog = false
                 screen = "main"
+            }
+        )
+    }
+
+    if (showFreeNewRoundDialog) {
+        AlertDialog(
+            onDismissRequest = { },
+            containerColor = TileBgDark,
+            title = {
+                Text(
+                    "Все упражнения пройдены",
+                    color = GoldAccent,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Text(
+                    "Ты прошёл все 8 упражнений. Что делаем дальше?",
+                    color = Color.White.copy(alpha = 0.9f),
+                    fontSize = 14.sp
+                )
+            },
+            confirmButton = {
+                Text(
+                    "Новый круг",
+                    color = Color(0xFF121212),
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier
+                        .androidx.compose.foundation.clickable {
+                            showFreeNewRoundDialog = false
+                            freeCompletedIds = emptySet()
+                            freeSkippedIds = emptySet()
+                            pickNextFreeExercise()
+                        }
+                        .padding(horizontal = 16.dp, vertical = 10.dp)
+                )
+            },
+            dismissButton = {
+                Text(
+                    "Закончить тренировку",
+                    color = Color.White.copy(alpha = 0.75f),
+                    fontSize = 14.sp,
+                    modifier = Modifier
+                        .androidx.compose.foundation.clickable {
+                            showFreeNewRoundDialog = false
+                            screen = "training_free_summary"
+                        }
+                        .padding(horizontal = 14.dp, vertical = 10.dp)
+                )
             }
         )
     }
