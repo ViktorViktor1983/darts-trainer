@@ -40,6 +40,7 @@ fun TrainingMenuScreen(
     repository: TrainingRepository,
     autoOpenTimeDialog: Boolean,
     onStartTraining: () -> Unit,
+    onStartFreeTraining: () -> Unit,
     onOpenSettings: () -> Unit,
     onOpenProgress: () -> Unit,
     onBack: () -> Unit
@@ -95,7 +96,7 @@ fun TrainingMenuScreen(
             .verticalScroll(rememberScrollState())
             .padding(16.dp)
     ) {
-        // ── Верхняя панель: ← Назад + Тренировка + 📊 + ⚙ ──
+        // ── Верхняя панель ──
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
@@ -117,7 +118,6 @@ fun TrainingMenuScreen(
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.weight(1f)
             )
-            // Кнопка прогресса
             Box(
                 modifier = Modifier
                     .size(42.dp)
@@ -129,7 +129,6 @@ fun TrainingMenuScreen(
                 Text("📊", fontSize = 20.sp)
             }
             Spacer(Modifier.width(8.dp))
-            // Кнопка настроек тренировки
             Box(
                 modifier = Modifier
                     .size(42.dp)
@@ -215,24 +214,81 @@ fun TrainingMenuScreen(
 
         Spacer(Modifier.height(24.dp))
 
+        // ══════════════════════════════════════════
+        // ДВЕ КНОПКИ СТАРТА
+        // ══════════════════════════════════════════
+
+        // ── Свободная тренировка ──
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(14.dp))
-                .background(Accent)
-                .clickable {
-                    saveSessionPrefs(context, selectedMinutes)
-                    onStartTraining()
-                }
+                .background(TileBgDark)
+                .clickable { onStartFreeTraining() }
                 .padding(vertical = 16.dp),
             contentAlignment = Alignment.Center
         ) {
-            Text(
-                "▶  Начать тренировку",
-                color = Color(0xFF121212),
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Bold
-            )
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    "⏱  Свободная тренировка",
+                    color = Accent,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(Modifier.height(3.dp))
+                Text(
+                    "без времени · в любой момент можно закончить",
+                    color = Color.White.copy(alpha = 0.5f),
+                    fontSize = 11.sp
+                )
+            }
+        }
+
+        Spacer(Modifier.height(10.dp))
+
+        // ── По времени с выпадающим списком ──
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(14.dp))
+                .background(Accent),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Основная часть — старт с текущим временем
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .clickable {
+                        saveSessionPrefs(context, selectedMinutes)
+                        onStartTraining()
+                    }
+                    .padding(vertical = 16.dp, horizontal = 14.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    "▶  По времени · $selectedMinutes мин",
+                    color = Color(0xFF121212),
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+            // Стрелка — открывает список
+            Box(
+                modifier = Modifier
+                    .padding(end = 6.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(Color(0xFF121212).copy(alpha = 0.18f))
+                    .clickable { showTimeDialog = true }
+                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    "▼",
+                    color = Color(0xFF121212),
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
         }
 
         Spacer(Modifier.height(24.dp))
