@@ -1,552 +1,1472 @@
-package com.lodkin.dartstrainer.data.training
+package com.lodkin.dartstrainer
 
-import kotlin.math.roundToInt
+import android.os.Bundle
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
+import androidx.activity.compose.setContent
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.material3.darkColorScheme
+import androidx.compose.runtime.*
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import com.lodkin.dartstrainer.data.SettingsStorage
+import com.lodkin.dartstrainer.data.aroundclock.AroundClockDatabase
+import com.lodkin.dartstrainer.data.aroundclock.AroundClockOrder
+import com.lodkin.dartstrainer.data.aroundclock.AroundClockRepository
+import com.lodkin.dartstrainer.data.aroundclock.AroundClockTarget
+import com.lodkin.dartstrainer.data.biground.BigRoundCategory
+import com.lodkin.dartstrainer.data.biground.BigRoundDatabase
+import com.lodkin.dartstrainer.data.biground.BigRoundRepository
+import com.lodkin.dartstrainer.data.cricket.CricketDatabase
+import com.lodkin.dartstrainer.data.cricket.CricketGame
+import com.lodkin.dartstrainer.data.cricket.CricketLogic
+import com.lodkin.dartstrainer.data.cricket.CricketPlayer
+import com.lodkin.dartstrainer.data.cricket.CricketRepository
+import com.lodkin.dartstrainer.data.cricket.CricketSerializer
+import com.lodkin.dartstrainer.data.cricket.CricketType
+import com.lodkin.dartstrainer.data.freerecords.FreePlayRecordsDatabase
+import com.lodkin.dartstrainer.data.freerecords.FreePlayRecordsRepository
+import com.lodkin.dartstrainer.data.game501.Game501
+import com.lodkin.dartstrainer.data.game501.Game501Database
+import com.lodkin.dartstrainer.data.game501.Game501Logic
+import com.lodkin.dartstrainer.data.game501.Game501Repository
+import com.lodkin.dartstrainer.data.game501.Game501Serializer
+import com.lodkin.dartstrainer.data.game501.GameType
+import com.lodkin.dartstrainer.data.game501.OutMode
+import com.lodkin.dartstrainer.data.game501.Player501
+import com.lodkin.dartstrainer.data.scoreset.ScoreSetDatabase
+import com.lodkin.dartstrainer.data.scoreset.ScoreSetRepository
+import com.lodkin.dartstrainer.data.sector.SectorDatabase
+import com.lodkin.dartstrainer.data.sector.SectorRepository
+import com.lodkin.dartstrainer.data.training.BlockType
+import com.lodkin.dartstrainer.data.training.ExerciseResult
+import com.lodkin.dartstrainer.data.training.TrainingBlocksStorage
+import com.lodkin.dartstrainer.data.training.TrainingBotLevelStorage
+import com.lodkin.dartstrainer.data.training.TrainingDatabase
+import com.lodkin.dartstrainer.data.training.TrainingMode
+import com.lodkin.dartstrainer.data.training.TrainingPlanner
+import com.lodkin.dartstrainer.data.training.TrainingRepository
+import com.lodkin.dartstrainer.data.training.TrainingSession
+import com.lodkin.dartstrainer.data.training.TrainingStateStorage
+import com.lodkin.dartstrainer.data.training.TrainingStatsAnalyzer
+import com.lodkin.dartstrainer.data.training.WeaknessType
+import com.lodkin.dartstrainer.theme.Accent
+import com.lodkin.dartstrainer.theme.DarkBg
+import com.lodkin.dartstrainer.theme.GoldAccent
+import com.lodkin.dartstrainer.ui.GameSelectScreen
+import com.lodkin.dartstrainer.ui.LoadingScreen
+import com.lodkin.dartstrainer.ui.MainMenuScreen
+import com.lodkin.dartstrainer.ui.OnboardingResult
+import com.lodkin.dartstrainer.ui.OnboardingScreen
+import com.lodkin.dartstrainer.ui.SettingsScreen
+import com.lodkin.dartstrainer.ui.StatsMenuScreen
+import com.lodkin.dartstrainer.ui.StatsScreen
+import com.lodkin.dartstrainer.ui.WelcomeScreen
+import com.lodkin.dartstrainer.ui.aroundclock.AroundClockGameScreen
+import com.lodkin.dartstrainer.ui.aroundclock.AroundClockSetupScreen
+import com.lodkin.dartstrainer.ui.aroundclock.AroundClockStatsScreen
+import com.lodkin.dartstrainer.ui.biground.BigRoundGameScreen
+import com.lodkin.dartstrainer.ui.biground.BigRoundSetupScreen
+import com.lodkin.dartstrainer.ui.biground.BigRoundStatsScreen
+import com.lodkin.dartstrainer.ui.cricket.CricketGameScreen
+import com.lodkin.dartstrainer.ui.cricket.CricketSetupScreen
+import com.lodkin.dartstrainer.ui.cricket.CricketStatsScreen
+import com.lodkin.dartstrainer.ui.game501.Game501Screen
+import com.lodkin.dartstrainer.ui.game501.Game501SetupScreen
+import com.lodkin.dartstrainer.ui.game501.Game501StatsScreen
+import com.lodkin.dartstrainer.ui.scoreset.ScoreSetGameScreen
+import com.lodkin.dartstrainer.ui.scoreset.ScoreSetSetupScreen
+import com.lodkin.dartstrainer.ui.scoreset.ScoreSetStatsScreen
+import com.lodkin.dartstrainer.ui.sector.SectorGameScreen
+import com.lodkin.dartstrainer.ui.sector.SectorSetupScreen
+import com.lodkin.dartstrainer.ui.sector.SectorStatsScreen
+import com.lodkin.dartstrainer.ui.training.BlockExerciseItem
+import com.lodkin.dartstrainer.ui.training.ExerciseSummary
+import com.lodkin.dartstrainer.ui.training.ExitTrainingDialog
+import com.lodkin.dartstrainer.ui.training.FreeNextExerciseDialog
+import com.lodkin.dartstrainer.ui.training.FreeTrainingSummaryScreen
+import com.lodkin.dartstrainer.ui.training.MainExerciseRunner
+import com.lodkin.dartstrainer.ui.training.PlannedExercise
+import com.lodkin.dartstrainer.ui.training.RestTimerOverlay
+import com.lodkin.dartstrainer.ui.training.ResumeTrainingDialog
+import com.lodkin.dartstrainer.ui.training.SummaryBlockType
+import com.lodkin.dartstrainer.ui.training.SummaryStatus
+import com.lodkin.dartstrainer.ui.training.TimeUpDialog
+import com.lodkin.dartstrainer.ui.training.TrainingBlockScreen
+import com.lodkin.dartstrainer.ui.training.TrainingExercisePlaceholder
+import com.lodkin.dartstrainer.ui.training.TrainingMenuScreen
+import com.lodkin.dartstrainer.ui.training.TrainingProgressScreen
+import com.lodkin.dartstrainer.ui.training.TrainingSettingsScreen
+import com.lodkin.dartstrainer.ui.training.TrainingSummaryScreen
+import com.lodkin.dartstrainer.ui.training.TrainingTimerOverlay
+import com.lodkin.dartstrainer.ui.training.TrainingWarmupScreen
+import com.lodkin.dartstrainer.ui.training.defaultMainBlockItems
+import com.lodkin.dartstrainer.ui.training.defaultMainExercises
+import com.lodkin.dartstrainer.ui.training.defaultPsychologyExercises
+import com.lodkin.dartstrainer.ui.training.defaultStrengthExercises
+import com.lodkin.dartstrainer.ui.training.recommendedGameIds
+import com.lodkin.dartstrainer.ui.training.warmupBlockItems
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import java.util.Locale
+import kotlin.random.Random
 
-/**
- * Генератор программы тренировки на день.
- *
- * Правила (согласованы с автором):
- *   1. Максимум 1 тяжёлое упражнение за тренировку (кроме вводного режима).
- *   2. Первые 3 тренировки — вводный режим без тяжёлых упражнений,
- *      больше игровой формы:
- *        • Тренировки 1–2: только игры + лёгкие (difficulty 1–3).
- *        • Тренировка 3:   игры + лёгкие + средние (difficulty 1–6).
- *        • Тренировка 4+:  обычный режим.
- *   3. Первые 5 тренировок — сортировка по возрастанию тяжести
- *      (лёгкие идут первыми), чтобы игрок плавно вкатился.
- *   4. Учитывается слабое место (первое упражнение — на слабое).
- *   5. Учитывается реальный темп игрока (avgMinutesByExercise).
- *   6. Не более 50% времени на слабое место.
- *
- * Шкала тяжести (от лёгкого к тяжёлому, 1 = самое лёгкое):
- *   1 — Крикет
- *   2 — 501
- *   3 — Кругосветка: Сектора
- *   4 — Набор очков
- *   5 — Сектор 20
- *   6 — Большой раунд
- *   7 — Кругосветка: Удвоения
- *   8 — Кругосветка: Утроения
- *
- * Порог «тяжёлое»: difficulty >= 7.
- */
-object TrainingPlanner {
+private val PARENT_SCREEN: Map<String, String> = mapOf(
+    "stats_menu" to "main",
+    "stats_cricket" to "stats_menu",
+    "stats_501" to "stats_menu",
+    "settings" to "main",
+    "training" to "main",
+    "training_settings" to "training",
+    "training_progress" to "training",
+    "training_warmup" to "training",
+    "training_block" to "training",
+    "training_exercise" to "training_block",
+    "training_summary" to "training",
+    "training_block_exercise" to "training_summary",
+    "training_extra_game" to "training_summary",
+    "training_free_next" to "main",
+    "training_free_summary" to "main",
+    "game_select" to "main",
 
-    // ─────────────────────────────────────────────
-    // МОДЕЛИ ПЛАНА
-    // ─────────────────────────────────────────────
+    "cricket_setup" to "game_select",
+    "cricket_game" to "game_select",
+    "cricket_stats" to "main",
 
-    enum class ExerciseKind {
-        WARMUP_MUSCLES,
-        WARMUP_TRAJECTORY,
-        WARMUP_ACCURACY,
-        WARMUP_AIM,
+    "game501_setup" to "game_select",
+    "game501_game" to "game_select",
+    "game501_stats" to "main",
 
-        DOUBLES_ROUNDS,
-        DOUBLES_TARGETED,
-        DOUBLES_POSTPONED,
+    "sector_setup" to "game_select",
+    "sector_game" to "game_select",
+    "sector_stats" to "stats_menu",
 
-        SECTOR_20,
-        SECTOR_19,
-        SCORE_SET,
+    "aroundclock_setup" to "game_select",
+    "aroundclock_game" to "game_select",
+    "aroundclock_stats" to "stats_menu",
 
-        AROUND_CLOCK_SECTORS,
-        AROUND_CLOCK_DOUBLES,
-        AROUND_CLOCK_TREBLES,
+    "biground_setup" to "game_select",
+    "biground_game" to "game_select",
+    "biground_stats" to "stats_menu",
 
-        GAME_501,
-        GAME_CRICKET,
-        GAME_ANY,
+    "scoreset_setup" to "game_select",
+    "scoreset_game" to "game_select",
+    "scoreset_stats" to "stats_menu"
+)
 
-        STRENGTH
-    }
+private val TRAINING_SCREENS: Set<String> = setOf(
+    "training_warmup",
+    "training_block",
+    "training_exercise",
+    "training_block_exercise",
+    "training_extra_game",
+    "training_free_next"
+)
 
-    data class TrainingBlock(
-        val kind: ExerciseKind,
-        val title: String,
-        val description: String,
-        val minutes: Int,
-        val isMainFocus: Boolean = false
-    )
+private enum class TrainingBlockPhase {
+    WARMUP,
+    MAIN,
+    PSYCHOLOGY,
+    STRENGTH,
+    FINISHED
+}
 
-    data class TrainingPlan(
-        val blocks: List<TrainingBlock>,
-        val totalMinutes: Int,
-        val focus: WeaknessType?,
-        val isControl: Boolean,
-        val postponedDoubles: List<Int>
-    )
-
-    data class PlannedDynamicExercise(
-        val id: String,
-        val minutes: Int
-    )
-
-    /** Пороговое количество тренировок для «вводного режима». */
-    private const val INTRO_TRAININGS_COUNT = 5
-
-    /** Пороговое количество тренировок, до которого запрещены тяжёлые. */
-    private const val INTRO_NO_HARD_COUNT = 3
-
-    /** Порог, с которого упражнение считается тяжёлым. */
-    private const val HARD_DIFFICULTY = 7
-
-    /**
-     * Шкала тяжести: чем больше число — тем тяжелее упражнение.
-     */
-    private fun difficultyOf(id: String): Int = when (id) {
-        "cricket" -> 1
-        "game501" -> 2
-        "aroundclock_sectors" -> 3
-        "scoreset" -> 4
-        "sector20" -> 5
-        "biground" -> 6
-        "aroundclock_doubles" -> 7
-        "aroundclock_trebles" -> 8
-        else -> 4
-    }
-
-    /**
-     * Сколько секунд отдыха после упражнения.
-     *   • лёгкие (1–3)  — 3 минуты
-     *   • средние (4–6) — 4 минуты
-     *   • тяжёлые (7–8) — 5 минут
-     *
-     * Для разминочных / психологических / силовых id — 3 минуты.
-     */
-    fun restSecondsAfter(id: String): Int {
-        val d = difficultyOf(id)
-        return when {
-            d <= 3 -> 3 * 60
-            d <= 6 -> 4 * 60
-            else -> 5 * 60
-        }
-    }
-
-    // ─────────────────────────────────────────────
-    // ГЛАВНАЯ ФУНКЦИЯ
-    // ─────────────────────────────────────────────
-
-    fun buildPlan(
-        weaknesses: WeaknessDetector.WeaknessResult,
-        minutes: Int,
-        isControl: Boolean,
-        postponedDoubles: List<Int> = emptyList()
-    ): TrainingPlan {
-
-        if (isControl) {
-            return buildControlPlan(minutes)
-        }
-
-        val blocks = mutableListOf<TrainingBlock>()
-        var remaining = minutes
-
-        val warmup = buildWarmup(minutes)
-        blocks.addAll(warmup)
-        remaining -= warmup.sumOf { it.minutes }
-
-        if (postponedDoubles.isNotEmpty() && remaining > 0) {
-            val minPostponed = minOf(remaining, postponedDoubles.size * 5)
-            blocks.add(
-                TrainingBlock(
-                    kind = ExerciseKind.DOUBLES_POSTPONED,
-                    title = "Возврат отложенных даблов",
-                    description = "Свежая рука — отличный шанс закрыть то, что не получилось в прошлый раз.",
-                    minutes = minPostponed,
-                    isMainFocus = true
-                )
-            )
-            remaining -= minPostponed
-        }
-
-        val main = weaknesses.mainWeakness
-        if (main != null && remaining > 0) {
-            val timeMain = (remaining * 0.5).toInt().coerceAtLeast(10)
-            blocks.add(buildMainBlock(main.type, timeMain))
-            remaining -= timeMain
-        }
-
-        val second = weaknesses.weaknesses.getOrNull(1)
-        if (second != null && remaining >= 15) {
-            val timeSecond = (remaining * 0.5).toInt().coerceAtLeast(10)
-            blocks.add(buildSecondBlock(second.type, timeSecond))
-            remaining -= timeSecond
-        }
-
-        if (remaining >= 10) {
-            val gameTime = minOf(remaining - 5, 30)
-            if (gameTime >= 10) {
-                blocks.add(
-                    TrainingBlock(
-                        kind = ExerciseKind.GAME_ANY,
-                        title = "Игровой блок",
-                        description = buildGameDescription(main?.type),
-                        minutes = gameTime
-                    )
-                )
-                remaining -= gameTime
+class MainActivity : ComponentActivity() {
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContent {
+            MaterialTheme(colorScheme = darkColorScheme()) {
+                Surface(modifier = Modifier.fillMaxSize(), color = DarkBg) {
+                    DartsTrainerApp()
+                }
             }
         }
+    }
+}
 
-        blocks.add(
-            TrainingBlock(
-                kind = ExerciseKind.STRENGTH,
-                title = "Силовые упражнения",
-                description = "Выносливость мышц — чтобы рука не садилась в конце турнира.",
-                minutes = 5
-            )
-        )
+@Composable
+fun DartsTrainerApp() {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
 
-        return TrainingPlan(
-            blocks = blocks,
-            totalMinutes = blocks.sumOf { it.minutes },
-            focus = main?.type,
-            isControl = false,
-            postponedDoubles = postponedDoubles
+    val cricketRepository = remember { CricketRepository(CricketDatabase.get(context).cricketDao()) }
+    val game501Repository = remember { Game501Repository(Game501Database.get(context).game501Dao()) }
+    val sectorRepository = remember { SectorRepository(SectorDatabase.get(context).sectorDao()) }
+    val aroundClockRepository = remember { AroundClockRepository(AroundClockDatabase.get(context).aroundClockDao()) }
+    val bigRoundRepository = remember { BigRoundRepository(BigRoundDatabase.get(context).bigRoundDao()) }
+    val scoreSetRepository = remember { ScoreSetRepository(ScoreSetDatabase.get(context).scoreSetDao()) }
+    val trainingRepository = remember { TrainingRepository(TrainingDatabase.getInstance(context)) }
+    val freePlayRecordsRepository = remember {
+        FreePlayRecordsRepository(FreePlayRecordsDatabase.get(context))
+    }
+
+    val sessionStartTime = remember { System.currentTimeMillis() }
+    val sessionForm = remember { 0.85 + Random.nextDouble() * 0.30 }
+
+    var onboardingDone by remember { mutableStateOf(SettingsStorage.isOnboardingDone(context)) }
+    var stage by remember { mutableStateOf(if (onboardingDone) "loading" else "welcome") }
+    var screen by remember { mutableStateOf("main") }
+
+    var cricketGame by remember { mutableStateOf<CricketGame?>(null) }
+    var cricketExistingId by remember { mutableStateOf(0L) }
+    var game501 by remember { mutableStateOf<Game501?>(null) }
+    var game501ExistingId by remember { mutableStateOf(0L) }
+    var sectorToPlay by remember { mutableStateOf<Int?>(null) }
+    var aroundClockTarget by remember { mutableStateOf<AroundClockTarget?>(null) }
+    var aroundClockOrder by remember { mutableStateOf<AroundClockOrder?>(null) }
+    var aroundClockHits by remember { mutableStateOf(1) }
+    var bigRoundCategory by remember { mutableStateOf<BigRoundCategory?>(null) }
+    var statsMenuKey by remember { mutableStateOf(0) }
+
+    var trainingMinutes by remember {
+        mutableStateOf(
+            context.getSharedPreferences("training_prefs", android.content.Context.MODE_PRIVATE)
+                .getInt("session_minutes", SettingsStorage.getTrainingMinutes(context))
         )
     }
 
-    // ─────────────────────────────────────────────
-    // ДИНАМИЧЕСКИЙ ВЫБОР УПРАЖНЕНИЙ ОСНОВНОЙ ЧАСТИ
-    // ─────────────────────────────────────────────
+    var trainingSessionId by remember { mutableStateOf(0L) }
+    var isTrainingActive by remember { mutableStateOf(false) }
+    var trainingElapsedSeconds by remember { mutableStateOf(0) }
+    var trainingPaused by remember { mutableStateOf(false) }
+    var showTimeUpDialog by remember { mutableStateOf(false) }
+    var autoOpenTimeDialog by remember { mutableStateOf(true) }
 
-    /**
-     * Подобрать упражнения основной части на день.
-     *
-     * @param analysis               результат анализа данных
-     * @param budgetMinutes          сколько минут доступно на основную часть
-     * @param completedTrainingCount сколько тренировок уже завершено (для вводного режима)
-     */
-    fun buildDynamicMainExerciseIds(
-        analysis: TrainingStatsAnalyzer.TrainingAnalysis,
-        budgetMinutes: Int,
-        completedTrainingCount: Int = Int.MAX_VALUE
-    ): List<PlannedDynamicExercise> {
-        if (budgetMinutes <= 0) return emptyList()
+    var currentPhase by remember { mutableStateOf(TrainingBlockPhase.WARMUP) }
+    var mainExercises by remember { mutableStateOf<List<PlannedExercise>>(emptyList()) }
+    var psychologyExercises by remember { mutableStateOf<List<PlannedExercise>>(emptyList()) }
+    var strengthExercises by remember { mutableStateOf<List<PlannedExercise>>(emptyList()) }
+    var currentExerciseIndex by remember { mutableStateOf(0) }
+    var exerciseStatuses by remember { mutableStateOf<Map<Int, SummaryStatus>>(emptyMap()) }
+    var currentWeakness by remember { mutableStateOf<WeaknessType?>(null) }
+    var currentLevel by remember { mutableStateOf(1) }
 
-        val isIntroductory = completedTrainingCount < INTRO_TRAININGS_COUNT
-        val noHardAllowed = completedTrainingCount < INTRO_NO_HARD_COUNT
+    var blockExerciseId by remember { mutableStateOf<String?>(null) }
+    var extraGameId by remember { mutableStateOf<String?>(null) }
 
-        // Порядок предпочтения по слабому месту
-        val preferenceOrder: List<String> = when (analysis.weakestType) {
-            WeaknessType.DOUBLES -> listOf(
-                "aroundclock_doubles",
-                "game501",
-                "biground",
-                "sector20",
-                "scoreset",
-                "aroundclock_sectors",
-                "aroundclock_trebles",
-                "cricket"
-            )
-            WeaknessType.SCORE -> listOf(
-                "sector20",
-                "game501",
-                "scoreset",
-                "biground",
-                "aroundclock_doubles",
-                "aroundclock_sectors",
-                "aroundclock_trebles",
-                "cricket"
-            )
-            WeaknessType.ACCURACY -> listOf(
-                "aroundclock_sectors",
-                "cricket",
-                "biground",
-                "sector20",
-                "aroundclock_trebles",
-                "scoreset",
-                "aroundclock_doubles",
-                "game501"
-            )
-            WeaknessType.TREBLES -> listOf(
-                "aroundclock_trebles",
-                "cricket",
-                "biground",
-                "aroundclock_sectors",
-                "sector20",
-                "scoreset",
-                "aroundclock_doubles",
-                "game501"
-            )
-            null -> listOf(
-                "aroundclock_doubles",
-                "sector20",
-                "aroundclock_sectors",
-                "scoreset",
-                "biground",
-                "aroundclock_trebles",
-                "game501",
-                "cricket"
-            )
+    var exerciseStartMillis by remember { mutableStateOf(0L) }
+
+    var isTraining501 by remember { mutableStateOf(false) }
+    var isTrainingCricket by remember { mutableStateOf(false) }
+
+    var showResumeDialog by remember { mutableStateOf(false) }
+    var pendingResume by remember { mutableStateOf<TrainingStateStorage.Snapshot?>(null) }
+    var showExitTrainingDialog by remember { mutableStateOf(false) }
+
+    var isFreeTraining by remember { mutableStateOf(false) }
+    var freeExerciseIndex by remember { mutableStateOf(0) }
+    var freeExercisesCompleted by remember { mutableStateOf(0) }
+
+    var showRestTimer by remember { mutableStateOf(false) }
+    var restTimerSeconds by remember { mutableStateOf(0) }
+    var restNextTitle by remember { mutableStateOf<String?>(null) }
+    var pendingNextStep by remember { mutableStateOf<(() -> Unit)?>(null) }
+
+    fun showRestThen(restSeconds: Int, nextTitle: String?, nextStep: () -> Unit) {
+        restTimerSeconds = restSeconds
+        restNextTitle = nextTitle
+        pendingNextStep = nextStep
+        showRestTimer = true
+    }
+
+    fun saveCurrentTrainingState() {
+        if (trainingSessionId <= 0L) return
+        if (isFreeTraining) return
+        if (currentPhase == TrainingBlockPhase.FINISHED) return
+        TrainingStateStorage.save(
+            context = context,
+            sessionId = trainingSessionId,
+            minutes = trainingMinutes,
+            elapsedSeconds = trainingElapsedSeconds,
+            phaseName = currentPhase.name,
+            exerciseIndex = currentExerciseIndex,
+            statuses = exerciseStatuses.mapValues { it.value.name },
+            mainExerciseIds = mainExercises.map { it.id to it.minutes },
+            psychologyEnabled = psychologyExercises.isNotEmpty(),
+            strengthEnabled = strengthExercises.isNotEmpty()
+        )
+    }
+
+    LaunchedEffect(isTrainingActive, trainingPaused, screen) {
+        if (!isTrainingActive || trainingPaused || screen !in TRAINING_SCREENS) return@LaunchedEffect
+        while (true) {
+            delay(1000L)
+            trainingElapsedSeconds += 1
+            if (!isFreeTraining && trainingElapsedSeconds >= trainingMinutes * 60) {
+                showTimeUpDialog = true
+                break
+            }
         }
+    }
+    val trainingSecondsLeft = if (isFreeTraining) trainingElapsedSeconds
+        else (trainingMinutes * 60 - trainingElapsedSeconds).coerceAtLeast(0)
 
-        // ── Порядок упражнений ──
-        // Вводный режим: сначала игры, потом лёгкие/средние по возрастанию тяжести.
-        // Обычный режим: как в preferenceOrder (учитывает слабое место).
-        val orderedIds: List<String> = if (isIntroductory) {
-            val games = listOf("game501", "cricket")
-            val others = preferenceOrder.filter { it !in games }
-                .sortedBy { difficultyOf(it) }
-            (games + others).distinct()
+    LaunchedEffect(
+        trainingSessionId, currentPhase, currentExerciseIndex, exerciseStatuses, mainExercises
+    ) {
+        if (isTrainingActive && trainingSessionId > 0L && !isFreeTraining) {
+            saveCurrentTrainingState()
+        }
+    }
+
+    LaunchedEffect(isTrainingActive, screen) {
+        if (!isTrainingActive || screen !in TRAINING_SCREENS) return@LaunchedEffect
+        while (true) {
+            delay(30_000L)
+            if (!isFreeTraining) saveCurrentTrainingState()
+        }
+    }
+
+    fun resetTrainingState() {
+        isTrainingActive = false
+        trainingElapsedSeconds = 0
+        trainingPaused = false
+        trainingSessionId = 0L
+        currentPhase = TrainingBlockPhase.WARMUP
+        mainExercises = emptyList()
+        psychologyExercises = emptyList()
+        strengthExercises = emptyList()
+        currentExerciseIndex = 0
+        exerciseStatuses = emptyMap()
+        blockExerciseId = null
+        extraGameId = null
+        exerciseStartMillis = 0L
+        isTraining501 = false
+        isTrainingCricket = false
+        showRestTimer = false
+        restNextTitle = null
+        pendingNextStep = null
+        showExitTrainingDialog = false
+        isFreeTraining = false
+        freeExerciseIndex = 0
+        freeExercisesCompleted = 0
+    }
+
+    fun activePhases(): List<TrainingBlockPhase> {
+        val list = mutableListOf<TrainingBlockPhase>()
+        if (TrainingBlocksStorage.isWarmupEnabled(context)) list.add(TrainingBlockPhase.WARMUP)
+        list.add(TrainingBlockPhase.MAIN)
+        if (TrainingBlocksStorage.isPsychologyEnabled(context)) list.add(TrainingBlockPhase.PSYCHOLOGY)
+        if (TrainingBlocksStorage.isStrengthEnabled(context)) list.add(TrainingBlockPhase.STRENGTH)
+        return list
+    }
+
+    fun exercisesForPhase(phase: TrainingBlockPhase): List<PlannedExercise> = when (phase) {
+        TrainingBlockPhase.MAIN -> mainExercises
+        TrainingBlockPhase.PSYCHOLOGY -> psychologyExercises
+        TrainingBlockPhase.STRENGTH -> strengthExercises
+        else -> emptyList()
+    }
+
+    fun nextPhaseAfter(phase: TrainingBlockPhase): TrainingBlockPhase {
+        val phases = activePhases()
+        val idx = phases.indexOf(phase)
+        return if (idx >= 0 && idx < phases.lastIndex) phases[idx + 1] else TrainingBlockPhase.FINISHED
+    }
+
+    fun isLastActivePhase(phase: TrainingBlockPhase): Boolean {
+        val phases = activePhases()
+        return phases.isNotEmpty() && phases.last() == phase
+    }
+
+    fun goToNextPhase() {
+        val next = nextPhaseAfter(currentPhase)
+        currentPhase = next
+        currentExerciseIndex = 0
+        exerciseStatuses = emptyMap()
+        if (next == TrainingBlockPhase.FINISHED) {
+            screen = "training_summary"
         } else {
-            preferenceOrder
+            screen = "training_block"
         }
+    }
 
-        // ── Максимально допустимая тяжесть ──
-        val maxAllowedDifficulty: Int = when {
-            completedTrainingCount < 2 -> 3   // Тренировки 1–2: игры + лёгкие
-            completedTrainingCount == 2 -> 6  // Тренировка 3: игры + лёгкие + средние
-            else -> 8                          // Тренировка 4+: всё
+    fun blockTypeForPhase(phase: TrainingBlockPhase): SummaryBlockType = when (phase) {
+        TrainingBlockPhase.WARMUP -> SummaryBlockType.WARMUP
+        TrainingBlockPhase.MAIN -> SummaryBlockType.MAIN
+        TrainingBlockPhase.PSYCHOLOGY -> SummaryBlockType.PSYCHOLOGY
+        TrainingBlockPhase.STRENGTH -> SummaryBlockType.STRENGTH
+        TrainingBlockPhase.FINISHED -> SummaryBlockType.STRENGTH
+    }
+
+    fun blockItemsForPhase(phase: TrainingBlockPhase, recommendedIds: Set<String>): List<BlockExerciseItem> = when (phase) {
+        TrainingBlockPhase.WARMUP -> warmupBlockItems()
+        TrainingBlockPhase.MAIN -> defaultMainBlockItems(recommendedIds)
+        TrainingBlockPhase.PSYCHOLOGY -> psychologyExercises.map { BlockExerciseItem(it.id, it.title) }
+        TrainingBlockPhase.STRENGTH -> strengthExercises.map { BlockExerciseItem(it.id, it.title) }
+        TrainingBlockPhase.FINISHED -> defaultMainBlockItems(recommendedIds)
+    }
+
+    fun launchExercise(id: String) {
+        exerciseStartMillis = System.currentTimeMillis()
+        when (id) {
+            "game501" -> {
+                val playerName = SettingsStorage.getPlayerName(context).ifBlank { "Игрок" }
+                val botLevel = TrainingBotLevelStorage.getLevel501(context, currentLevel)
+                val players = listOf(
+                    Player501(name = playerName, isBot = false, botLevel = 0, teamIndex = 0),
+                    Player501(name = "Бот $botLevel", isBot = true, botLevel = botLevel, teamIndex = 1)
+                )
+                game501 = Game501Logic.newGame(
+                    gameType = GameType.X501,
+                    outMode = OutMode.DOUBLE_OUT,
+                    players = players,
+                    legsPerSet = 1,
+                    setsPerMatch = 1,
+                    isPairGame = false,
+                    startingTeamIndex = 0,
+                    autoOkSeconds = 0,
+                    sessionStartTime = sessionStartTime,
+                    sessionForm = sessionForm
+                )
+                game501ExistingId = 0L
+                isTraining501 = true
+                screen = "game501_game"
+            }
+            "cricket" -> {
+                val playerName = SettingsStorage.getPlayerName(context).ifBlank { "Игрок" }
+                val botLevel = TrainingBotLevelStorage.getLevelCricket(context, currentLevel)
+                val players = listOf(
+                    CricketPlayer(name = playerName, isBot = false, botLevel = 0, teamIndex = 0),
+                    CricketPlayer(name = "Бот $botLevel", isBot = true, botLevel = botLevel, teamIndex = 1)
+                )
+                cricketGame = CricketLogic.newGame(
+                    type = CricketType.AMERICAN,
+                    players = players,
+                    legsPerSet = 1,
+                    setsPerMatch = 1,
+                    isPairGame = false,
+                    startingTeamIndex = 0,
+                    autoOkSeconds = 0,
+                    sessionStartTime = sessionStartTime,
+                    sessionForm = sessionForm
+                )
+                cricketExistingId = 0L
+                isTrainingCricket = true
+                screen = "cricket_game"
+            }
+            else -> screen = "training_exercise"
         }
+    }
 
-        fun fallbackMinutes(id: String): Int = when (id) {
-            "aroundclock_doubles" -> 14
-            "aroundclock_sectors" -> 12
-            "aroundclock_trebles" -> 12
-            "sector20" -> 8
-            "scoreset" -> 6
-            "biground" -> 12
-            "game501" -> 18
-            "cricket" -> 12
-            else -> 10
+    fun advanceAfterExercise(finishedExerciseId: String) {
+        val list = exercisesForPhase(TrainingBlockPhase.MAIN)
+        if (isFreeTraining) {
+            // Свободный режим: упражнения идут по кругу бесконечно.
+            freeExercisesCompleted += 1
+            val restSec = TrainingPlanner.restSecondsAfter(finishedExerciseId)
+            freeExerciseIndex += 1
+            if (freeExerciseIndex >= list.size) freeExerciseIndex = 0
+            val nextTitle = list[freeExerciseIndex].title
+            showRestThen(restSec, nextTitle) {
+                screen = "training_free_next"
+            }
+        } else {
+            if (currentExerciseIndex + 1 < list.size) {
+                val nextExercise = list[currentExerciseIndex + 1]
+                val restSec = TrainingPlanner.restSecondsAfter(finishedExerciseId)
+                showRestThen(restSec, nextExercise.title) {
+                    currentExerciseIndex += 1
+                    screen = "training_block"
+                }
+            } else {
+                screen = "training_summary"
+            }
         }
+    }
 
-        fun minutesFor(id: String): Int {
-            val tempo = analysis.avgMinutesByExercise[id]
-            val value = if (tempo != null && tempo > 0f) tempo.roundToInt() else fallbackMinutes(id)
-            return value.coerceAtLeast(3)
+    fun finishCurrentMainExercise() {
+        val finishedId = mainExercises.getOrNull(
+            if (isFreeTraining) freeExerciseIndex else currentExerciseIndex
+        )?.id ?: ""
+        if (!isFreeTraining) {
+            exerciseStatuses = exerciseStatuses.toMutableMap().apply {
+                put(currentExerciseIndex, SummaryStatus.DONE)
+            }
         }
+        advanceAfterExercise(finishedId)
+    }
 
-        // ── Набор с правилами ──
-        var remaining = budgetMinutes
-        val result = mutableListOf<PlannedDynamicExercise>()
-        var hardCount = 0
+    BackHandler(
+        enabled = stage == "main" && screen != "main" && !showRestTimer && !showExitTrainingDialog
+    ) {
+        val isTrainingScreen = screen in TRAINING_SCREENS || screen == "training"
 
-        for (id in orderedIds) {
-            val diff = difficultyOf(id)
+        when {
+            isFreeTraining -> {
+                if (screen == "training_free_summary") {
+                    resetTrainingState()
+                    TrainingStateStorage.clear(context)
+                    autoOpenTimeDialog = false
+                    screen = "main"
+                } else {
+                    screen = "training_free_summary"
+                }
+            }
+            isTrainingScreen && isTrainingActive && trainingSessionId > 0L && screen != "training_summary" -> {
+                showExitTrainingDialog = true
+            }
+            else -> {
+                PARENT_SCREEN[screen]?.let { parent ->
+                    if (parent == "stats_menu") statsMenuKey++
+                    if (parent == "main") {
+                        resetTrainingState()
+                        TrainingStateStorage.clear(context)
+                        autoOpenTimeDialog = true
+                    }
+                    if (screen == "training_summary") return@BackHandler
+                    if (screen in TRAINING_SCREENS && parent == "training") {
+                        autoOpenTimeDialog = false
+                    }
+                    screen = parent
+                }
+            }
+        }
+    }
 
-            // Фильтр по максимально допустимой тяжести (вводный режим)
-            if (diff > maxAllowedDifficulty) continue
+    if (stage == "loading") LaunchedEffect(Unit) { delay(3000); stage = "main" }
 
-            // Правило: максимум 1 тяжёлое за тренировку (кроме вводного режима)
-            val isHard = diff >= HARD_DIFFICULTY
-            if (isHard && noHardAllowed) continue
-            if (isHard && hardCount >= 1) continue
+    Box(modifier = Modifier.fillMaxSize()) {
+        when (stage) {
+            "welcome" -> WelcomeScreen(onStart = { stage = "onboarding" })
+            "onboarding" -> OnboardingScreen(onFinish = { result: OnboardingResult ->
+                SettingsStorage.setPlayerName(context, result.name)
+                SettingsStorage.setTrainingMinutes(context, result.trainingMinutes)
+                SettingsStorage.setTrainingsPerWeek(context, result.trainingsPerWeek)
+                SettingsStorage.setTrainingMode(context, result.trainingMode)
+                SettingsStorage.setStartMode(context, result.startMode)
+                SettingsStorage.setOnboardingDone(context)
+                onboardingDone = true
+                stage = "main"
+            })
+            "loading" -> LoadingScreen()
 
-            val m = minutesFor(id)
-            if (m <= remaining) {
-                result.add(PlannedDynamicExercise(id, m))
-                remaining -= m
-                if (isHard) hardCount++
+            "main" -> when (screen) {
+                "main" -> MainMenuScreen(
+                    onTraining = {
+                        val snap = TrainingStateStorage.load(context)
+                        if (snap != null && snap.sessionId > 0L) {
+                            if (TrainingStateStorage.isExpired(snap)) {
+                                TrainingStateStorage.clear(context)
+                                resetTrainingState()
+                                autoOpenTimeDialog = true
+                            } else {
+                                pendingResume = snap
+                                showResumeDialog = true
+                                autoOpenTimeDialog = false
+                            }
+                        } else {
+                            autoOpenTimeDialog = true
+                        }
+                        screen = "training"
+                    },
+                    onFreePlay = { screen = "game_select" },
+                    onStatsClick = { statsMenuKey++; screen = "stats_menu" },
+                    onSettingsClick = { screen = "settings" }
+                )
+
+                "stats_menu" -> StatsMenuScreen(
+                    cricketRepository = cricketRepository,
+                    reloadKey = statsMenuKey,
+                    onResumeGame501 = { entity ->
+                        val r = Game501Serializer.fromJson(entity.stateBlob)
+                        if (r != null) { game501 = r; game501ExistingId = entity.id; screen = "game501_game" }
+                    },
+                    onResumeCricket = { entity ->
+                        val r = CricketSerializer.fromJson(entity.stateBlob)
+                        if (r != null) { cricketGame = r; cricketExistingId = entity.id; screen = "cricket_game" }
+                    },
+                    onCricket = { screen = "stats_cricket" },
+                    on501 = { screen = "stats_501" },
+                    onSector = { screen = "sector_stats" },
+                    onBigRound = { screen = "biground_stats" },
+                    onScoreSet = { screen = "scoreset_stats" },
+                    onAroundClock = { screen = "aroundclock_stats" },
+                    onBack = { screen = "main" }
+                )
+
+                "stats_cricket" -> StatsScreen(
+                    repository = cricketRepository,
+                    freePlayRecordsRepository = freePlayRecordsRepository,
+                    initialTab = 0, showTabs = false,
+                    onResumeCricket = { entity ->
+                        val r = CricketSerializer.fromJson(entity.stateBlob)
+                        if (r != null) { cricketGame = r; cricketExistingId = entity.id; screen = "cricket_game" }
+                    },
+                    onBack = { statsMenuKey++; screen = "stats_menu" }
+                )
+
+                "stats_501" -> StatsScreen(
+                    repository = cricketRepository,
+                    freePlayRecordsRepository = freePlayRecordsRepository,
+                    initialTab = 1, showTabs = false,
+                    onResumeGame501 = { entity ->
+                        val r = Game501Serializer.fromJson(entity.stateBlob)
+                        if (r != null) { game501 = r; game501ExistingId = entity.id; screen = "game501_game" }
+                    },
+                    onBack = { statsMenuKey++; screen = "stats_menu" }
+                )
+
+                "settings" -> SettingsScreen(
+                    onBack = { screen = "main" },
+                    onFactoryReset = {
+                        cricketGame = null; cricketExistingId = 0L
+                        game501 = null; game501ExistingId = 0L
+                        sectorToPlay = null
+                        aroundClockTarget = null; aroundClockOrder = null; aroundClockHits = 1
+                        bigRoundCategory = null
+                        resetTrainingState(); autoOpenTimeDialog = true
+                        onboardingDone = false; screen = "main"; stage = "welcome"
+                    }
+                )
+
+                "training" -> TrainingMenuScreen(
+                    playerName = SettingsStorage.getPlayerName(context),
+                    repository = trainingRepository,
+                    autoOpenTimeDialog = autoOpenTimeDialog,
+                    onStartTraining = {
+                        autoOpenTimeDialog = false
+                        trainingMinutes = context
+                            .getSharedPreferences("training_prefs", android.content.Context.MODE_PRIVATE)
+                            .getInt("session_minutes", SettingsStorage.getTrainingMinutes(context))
+                        scope.launch {
+                            val analysis = TrainingStatsAnalyzer.analyze(trainingRepository)
+                            val completedCount = trainingRepository.getCompletedSessionCount()
+                            currentWeakness = analysis.weakestType
+                            currentLevel = analysis.level
+
+                            val session = TrainingSession(
+                                dateMillis = System.currentTimeMillis(),
+                                plannedMinutes = trainingMinutes,
+                                actualMinutes = 0,
+                                levelAtStart = analysis.level,
+                                mode = TrainingMode.FLEXIBLE,
+                                focus = analysis.weakestType,
+                                isControl = false,
+                                isCompleted = false
+                            )
+                            trainingSessionId = trainingRepository.insertSession(session)
+                            trainingElapsedSeconds = 0
+                            trainingPaused = false
+                            showTimeUpDialog = false
+
+                            val warmupMin = if (TrainingBlocksStorage.isWarmupEnabled(context)) 6 else 0
+                            val psychoMin = if (TrainingBlocksStorage.isPsychologyEnabled(context)) 8 else 0
+                            val strengthMin = if (TrainingBlocksStorage.isStrengthEnabled(context)) 7 else 0
+                            val reserveMin = 5
+                            val budgetMain = (trainingMinutes - warmupMin - psychoMin - strengthMin - reserveMin)
+                                .coerceAtLeast(10)
+
+                            val dynamicIds = TrainingPlanner.buildDynamicMainExerciseIds(
+                                analysis = analysis,
+                                budgetMinutes = budgetMain,
+                                completedTrainingCount = completedCount
+                            )
+                            val baseMap = defaultMainExercises().associateBy { it.id }
+                            val fromPlanner = dynamicIds
+                                .mapNotNull { d -> baseMap[d.id]?.copy(minutes = d.minutes) }
+
+                            mainExercises = if (fromPlanner.isNotEmpty()) {
+                                fromPlanner
+                            } else {
+                                val fallback = defaultMainExercises().first()
+                                listOf(fallback.copy(minutes = budgetMain.coerceIn(5, 20)))
+                            }
+
+                            psychologyExercises = if (TrainingBlocksStorage.isPsychologyEnabled(context))
+                                defaultPsychologyExercises() else emptyList()
+                            strengthExercises = if (TrainingBlocksStorage.isStrengthEnabled(context))
+                                defaultStrengthExercises() else emptyList()
+
+                            val first = activePhases().firstOrNull() ?: TrainingBlockPhase.MAIN
+                            currentPhase = first
+                            currentExerciseIndex = 0
+                            exerciseStatuses = emptyMap()
+                            blockExerciseId = null
+                            extraGameId = null
+                            exerciseStartMillis = 0L
+                            isTraining501 = false
+                            isTrainingCricket = false
+                            isTrainingActive = true
+                            isFreeTraining = false
+                            freeExerciseIndex = 0
+                            freeExercisesCompleted = 0
+                            showRestTimer = false
+                            pendingNextStep = null
+
+                            TrainingStateStorage.save(
+                                context = context,
+                                sessionId = trainingSessionId,
+                                minutes = trainingMinutes,
+                                elapsedSeconds = 0,
+                                phaseName = first.name,
+                                exerciseIndex = 0,
+                                statuses = emptyMap(),
+                                mainExerciseIds = mainExercises.map { it.id to it.minutes },
+                                psychologyEnabled = psychologyExercises.isNotEmpty(),
+                                strengthEnabled = strengthExercises.isNotEmpty()
+                            )
+
+                            screen = if (first == TrainingBlockPhase.WARMUP) "training_warmup" else "training_block"
+                        }
+                    },
+                    onStartFreeTraining = {
+                        autoOpenTimeDialog = false
+                        scope.launch {
+                            val analysis = TrainingStatsAnalyzer.analyze(trainingRepository)
+                            val completedCount = trainingRepository.getCompletedSessionCount()
+                            currentWeakness = analysis.weakestType
+                            currentLevel = analysis.level
+
+                            val session = TrainingSession(
+                                dateMillis = System.currentTimeMillis(),
+                                plannedMinutes = 0,
+                                actualMinutes = 0,
+                                levelAtStart = analysis.level,
+                                mode = TrainingMode.FLEXIBLE,
+                                focus = analysis.weakestType,
+                                isControl = false,
+                                isCompleted = false
+                            )
+                            trainingSessionId = trainingRepository.insertSession(session)
+                            trainingElapsedSeconds = 0
+                            trainingPaused = false
+                            showTimeUpDialog = false
+                            trainingMinutes = 0
+
+                            // Свободный режим: все 8 упражнений, без ограничений по тяжести.
+                            val dynamicIds = TrainingPlanner.buildDynamicMainExerciseIds(
+                                analysis = analysis,
+                                budgetMinutes = 999,
+                                completedTrainingCount = completedCount,
+                                ignoreHardLimit = true
+                            )
+                            val baseMap = defaultMainExercises().associateBy { it.id }
+                            mainExercises = dynamicIds
+                                .mapNotNull { d -> baseMap[d.id]?.copy(minutes = d.minutes) }
+                                .ifEmpty { defaultMainExercises() }
+
+                            psychologyExercises = emptyList()
+                            strengthExercises = emptyList()
+
+                            currentPhase = TrainingBlockPhase.MAIN
+                            currentExerciseIndex = 0
+                            freeExerciseIndex = 0
+                            freeExercisesCompleted = 0
+                            exerciseStatuses = emptyMap()
+                            blockExerciseId = null
+                            extraGameId = null
+                            exerciseStartMillis = 0L
+                            isTraining501 = false
+                            isTrainingCricket = false
+                            isTrainingActive = true
+                            isFreeTraining = true
+                            showRestTimer = false
+                            pendingNextStep = null
+
+                            screen = "training_free_next"
+                        }
+                    },
+                    onOpenSettings = {
+                        autoOpenTimeDialog = false
+                        screen = "training_settings"
+                    },
+                    onOpenProgress = {
+                        autoOpenTimeDialog = false
+                        screen = "training_progress"
+                    },
+                    onBack = {
+                        if (isTrainingActive && trainingSessionId > 0L && !isFreeTraining) {
+                            showExitTrainingDialog = true
+                        } else {
+                            autoOpenTimeDialog = true
+                            screen = "main"
+                        }
+                    }
+                )
+
+                "training_settings" -> TrainingSettingsScreen(
+                    repository = trainingRepository,
+                    onBack = { screen = "training" }
+                )
+
+                "training_progress" -> TrainingProgressScreen(
+                    repository = trainingRepository,
+                    onBack = { screen = "training" }
+                )
+
+                "training_warmup" -> TrainingWarmupScreen(
+                    longWarmup = trainingMinutes >= 100,
+                    onFinish = {
+                        val next = nextPhaseAfter(TrainingBlockPhase.WARMUP)
+                        currentPhase = next
+                        currentExerciseIndex = 0
+                        exerciseStatuses = emptyMap()
+                        if (next == TrainingBlockPhase.FINISHED) {
+                            screen = "training_summary"
+                        } else {
+                            screen = "training_block"
+                        }
+                    },
+                    onBack = { screen = "training" }
+                )
+
+                "training_block" -> {
+                    val list = exercisesForPhase(currentPhase)
+                    TrainingBlockScreen(
+                        exercises = list,
+                        currentIndex = currentExerciseIndex,
+                        onStartCurrent = {
+                            val current = list.getOrNull(currentExerciseIndex)
+                            if (current != null) launchExercise(current.id)
+                        },
+                        onSkipCurrent = {
+                            exerciseStatuses = exerciseStatuses.toMutableMap().apply {
+                                put(currentExerciseIndex, SummaryStatus.SKIPPED)
+                            }
+                            if (currentExerciseIndex + 1 < list.size) currentExerciseIndex += 1
+                            else screen = "training_summary"
+                        },
+                        onBack = { showExitTrainingDialog = true }
+                    )
+                }
+
+                "training_free_next" -> {
+                    val current = mainExercises.getOrNull(freeExerciseIndex)
+                    if (current == null) {
+                        screen = "training_free_summary"
+                    } else {
+                        FreeNextExerciseDialog(
+                            exerciseTitle = current.title,
+                            exerciseMinutes = current.minutes,
+                            completedSoFar = freeExercisesCompleted,
+                            onPlay = { launchExercise(current.id) },
+                            onSkip = {
+                                freeExerciseIndex += 1
+                                if (freeExerciseIndex >= mainExercises.size) freeExerciseIndex = 0
+                            },
+                            onFinish = { screen = "training_free_summary" }
+                        )
+                    }
+                }
+
+                "training_free_summary" -> {
+                    FreeTrainingSummaryScreen(
+                        playerName = SettingsStorage.getPlayerName(context),
+                        sessionId = trainingSessionId,
+                        actualSeconds = trainingElapsedSeconds,
+                        repository = trainingRepository,
+                        onFinishTraining = {
+                            resetTrainingState()
+                            TrainingStateStorage.clear(context)
+                            autoOpenTimeDialog = false
+                            screen = "main"
+                        }
+                    )
+                }
+
+                "training_exercise" -> {
+                    val list = exercisesForPhase(currentPhase)
+                    val idx = if (isFreeTraining) freeExerciseIndex else currentExerciseIndex
+                    val current = list.getOrNull(idx)
+                    if (current == null) {
+                        screen = if (isFreeTraining) "training_free_next" else "training_block"
+                    } else if (currentPhase != TrainingBlockPhase.MAIN) {
+                        TrainingExercisePlaceholder(
+                            title = current.title,
+                            description = current.whyImportant,
+                            onDone = {
+                                val duration = if (exerciseStartMillis > 0L)
+                                    ((System.currentTimeMillis() - exerciseStartMillis) / 1000L).toInt()
+                                else 0
+                                exerciseStartMillis = 0L
+
+                                if (currentPhase == TrainingBlockPhase.PSYCHOLOGY) {
+                                    scope.launch {
+                                        trainingRepository.insertExerciseResult(
+                                            ExerciseResult(
+                                                sessionId = trainingSessionId,
+                                                blockType = BlockType.WARMUP,
+                                                exerciseId = current.id,
+                                                score = 0,
+                                                dartsThrown = 0,
+                                                timestamp = System.currentTimeMillis(),
+                                                durationSeconds = duration,
+                                                detailsJson = ""
+                                            )
+                                        )
+                                    }
+                                }
+
+                                exerciseStatuses = exerciseStatuses.toMutableMap().apply {
+                                    put(currentExerciseIndex, SummaryStatus.DONE)
+                                }
+                                if (currentExerciseIndex + 1 < list.size) {
+                                    currentExerciseIndex += 1; screen = "training_block"
+                                } else screen = "training_summary"
+                            },
+                            onBack = {
+                                screen = if (isFreeTraining) "training_free_next" else "training_block"
+                            }
+                        )
+                    } else {
+                        MainExerciseRunner(
+                            exerciseId = current.id,
+                            playerLevel = currentLevel,
+                            aroundClockRepository = aroundClockRepository,
+                            sectorRepository = sectorRepository,
+                            scoreSetRepository = scoreSetRepository,
+                            bigRoundRepository = bigRoundRepository,
+                            trainingRepository = trainingRepository,
+                            onFinish = { blockType, score, darts ->
+                                val duration = if (exerciseStartMillis > 0L)
+                                    ((System.currentTimeMillis() - exerciseStartMillis) / 1000L).toInt()
+                                else 0
+                                exerciseStartMillis = 0L
+
+                                scope.launch {
+                                    trainingRepository.insertExerciseResult(
+                                        ExerciseResult(
+                                            sessionId = trainingSessionId,
+                                            blockType = blockType,
+                                            exerciseId = current.id,
+                                            score = score,
+                                            dartsThrown = darts,
+                                            timestamp = System.currentTimeMillis(),
+                                            durationSeconds = duration,
+                                            detailsJson = ""
+                                        )
+                                    )
+                                    val lowerDartsBetter = current.id.startsWith("aroundclock_")
+                                    trainingRepository.updateTrainingRecordIfBetter(
+                                        exerciseId = current.id,
+                                        score = score,
+                                        darts = darts,
+                                        lowerDartsBetter = lowerDartsBetter
+                                    )
+                                }
+                                if (!isFreeTraining) {
+                                    exerciseStatuses = exerciseStatuses.toMutableMap().apply {
+                                        put(currentExerciseIndex, SummaryStatus.DONE)
+                                    }
+                                }
+                                advanceAfterExercise(current.id)
+                            },
+                            onBack = {
+                                screen = if (isFreeTraining) "training_free_next" else "training_block"
+                            }
+                        )
+                    }
+                }
+
+                "training_summary" -> {
+                    val list = exercisesForPhase(currentPhase)
+                    val summaries = list.mapIndexed { index, ex ->
+                        ExerciseSummary(
+                            title = ex.title,
+                            minutes = ex.minutes,
+                            status = exerciseStatuses[index] ?: SummaryStatus.NOT_DONE
+                        )
+                    }
+                    val recommendedIds = recommendedGameIds(currentWeakness)
+                    val isLast = isLastActivePhase(currentPhase)
+
+                    TrainingSummaryScreen(
+                        playerName = SettingsStorage.getPlayerName(context),
+                        planMinutes = trainingMinutes,
+                        actualSeconds = trainingElapsedSeconds,
+                        exercises = summaries,
+                        blockType = blockTypeForPhase(currentPhase),
+                        blockExercises = blockItemsForPhase(currentPhase, recommendedIds),
+                        isLastBlock = isLast,
+                        recommendedIds = recommendedIds,
+                        onContinue = {
+                            if (isLast) {
+                                resetTrainingState()
+                                TrainingStateStorage.clear(context)
+                                autoOpenTimeDialog = false
+                                screen = "main"
+                            } else {
+                                goToNextPhase()
+                            }
+                        },
+                        onPlayExercise = { id -> launchExercise(id) },
+                        onPlayGame = { id ->
+                            extraGameId = id
+                            exerciseStartMillis = System.currentTimeMillis()
+                            screen = "training_extra_game"
+                        },
+                        onFinishTraining = {
+                            resetTrainingState()
+                            TrainingStateStorage.clear(context)
+                            autoOpenTimeDialog = false
+                            screen = "main"
+                        }
+                    )
+                }
+
+                "training_block_exercise" -> {
+                    val id = blockExerciseId
+                    if (id == null) {
+                        screen = "training_summary"
+                    } else {
+                        val title = blockItemsForPhase(currentPhase, recommendedGameIds(currentWeakness))
+                            .firstOrNull { it.id == id }?.title ?: "Упражнение"
+                        TrainingExercisePlaceholder(
+                            title = title,
+                            description = "",
+                            onDone = {
+                                exerciseStartMillis = 0L
+                                blockExerciseId = null
+                                screen = "training_summary"
+                            },
+                            onBack = {
+                                exerciseStartMillis = 0L
+                                blockExerciseId = null
+                                screen = "training_summary"
+                            }
+                        )
+                    }
+                }
+
+                "training_extra_game" -> {
+                    val gameId = extraGameId
+                    if (gameId == null) screen = "training_summary"
+                    else {
+                        MainExerciseRunner(
+                            exerciseId = gameId,
+                            playerLevel = currentLevel,
+                            aroundClockRepository = aroundClockRepository,
+                            sectorRepository = sectorRepository,
+                            scoreSetRepository = scoreSetRepository,
+                            bigRoundRepository = bigRoundRepository,
+                            trainingRepository = trainingRepository,
+                            onFinish = { blockType, score, darts ->
+                                val duration = if (exerciseStartMillis > 0L)
+                                    ((System.currentTimeMillis() - exerciseStartMillis) / 1000L).toInt()
+                                else 0
+                                exerciseStartMillis = 0L
+
+                                scope.launch {
+                                    trainingRepository.insertExerciseResult(
+                                        ExerciseResult(
+                                            sessionId = trainingSessionId,
+                                            blockType = blockType,
+                                            exerciseId = "extra_" + gameId,
+                                            score = score,
+                                            dartsThrown = darts,
+                                            timestamp = System.currentTimeMillis(),
+                                            durationSeconds = duration,
+                                            detailsJson = ""
+                                        )
+                                    )
+                                    val lowerDartsBetter = gameId.startsWith("aroundclock_")
+                                    trainingRepository.updateTrainingRecordIfBetter(
+                                        exerciseId = gameId,
+                                        score = score,
+                                        darts = darts,
+                                        lowerDartsBetter = lowerDartsBetter
+                                    )
+                                }
+                                extraGameId = null
+                                screen = "training_summary"
+                            },
+                            onBack = {
+                                exerciseStartMillis = 0L
+                                extraGameId = null
+                                screen = "training_summary"
+                            }
+                        )
+                    }
+                }
+
+                "game_select" -> GameSelectScreen(
+                    onCricket = { screen = "cricket_setup" },
+                    on501 = { screen = "game501_setup" },
+                    onSector = { screen = "sector_setup" },
+                    onAroundClock = { screen = "aroundclock_setup" },
+                    onBigRound = { screen = "biground_setup" },
+                    onScoreSet = { screen = "scoreset_setup" },
+                    onBack = { screen = "main" }
+                )
+
+                "cricket_setup" -> CricketSetupScreen(
+                    playerName = SettingsStorage.getPlayerName(context),
+                    onStartGame = { type, players, legsPerSet, setsPerMatch, isPairGame, startingTeam, autoOkSeconds ->
+                        cricketGame = CricketLogic.newGame(
+                            type, players, legsPerSet, setsPerMatch, isPairGame,
+                            startingTeam, autoOkSeconds, sessionStartTime, sessionForm
+                        )
+                        cricketExistingId = 0L
+                        isTrainingCricket = false
+                        screen = "cricket_game"
+                    },
+                    onBack = { screen = "game_select" }
+                )
+
+                "cricket_game" -> {
+                    val g = cricketGame
+                    if (g != null) CricketGameScreen(
+                        repository = cricketRepository,
+                        freePlayRecordsRepository = freePlayRecordsRepository,
+                        initialGame = g,
+                        existingId = cricketExistingId,
+                        isTrainingMode = isTrainingCricket,
+                        trainingRepository = trainingRepository,
+                        onGameFinish = { f, id ->
+                            if (isTrainingCricket) {
+                                val playerWon = f.winnerIndex == 0
+                                val player = f.players.getOrNull(0)
+                                val mpr = player?.let { p ->
+                                    if (p.matchDartsThrown > 0) {
+                                        val marks = p.matchHits.values.sum().toFloat()
+                                        marks / (p.matchDartsThrown / 3f)
+                                    } else 0f
+                                } ?: 0f
+                                val mprStr = String.format(Locale.US, "%.1f", mpr)
+                                val dur = if (exerciseStartMillis > 0L)
+                                    ((System.currentTimeMillis() - exerciseStartMillis) / 1000L).toInt()
+                                else 0
+                                exerciseStartMillis = 0L
+                                val botLevel = g.players.getOrNull(1)?.botLevel ?: 1
+                                TrainingBotLevelStorage.updateLevelCricket(context, botLevel, playerWon)
+                                scope.launch {
+                                    trainingRepository.insertExerciseResult(
+                                        ExerciseResult(
+                                            sessionId = trainingSessionId,
+                                            blockType = BlockType.CRICKET,
+                                            exerciseId = "cricket",
+                                            score = mpr.toInt(),
+                                            dartsThrown = player?.matchDartsThrown ?: 0,
+                                            timestamp = System.currentTimeMillis(),
+                                            durationSeconds = dur,
+                                            detailsJson = "won=$playerWon;mpr=$mprStr"
+                                        )
+                                    )
+                                }
+                                isTrainingCricket = false
+                                cricketGame = null
+                                cricketExistingId = 0L
+                                finishCurrentMainExercise()
+                            } else {
+                                scope.launch { cricketRepository.saveGame(f, existingId = id) }
+                                cricketGame = f; cricketExistingId = 0L; screen = "cricket_stats"
+                            }
+                        },
+                        onBack = {
+                            val wasTraining = isTrainingCricket
+                            isTrainingCricket = false
+                            cricketGame = null; cricketExistingId = 0L
+                            screen = if (wasTraining) {
+                                if (isFreeTraining) "training_free_next" else "training_block"
+                            } else "game_select"
+                        }
+                    ) else screen = "cricket_setup"
+                }
+
+                "cricket_stats" -> {
+                    val g = cricketGame
+                    if (g != null) CricketStatsScreen(
+                        game = g,
+                        onPlayAgain = { screen = "cricket_setup" },
+                        onBackToMenu = { cricketGame = null; screen = "main" }
+                    ) else screen = "main"
+                }
+
+                "game501_setup" -> Game501SetupScreen(
+                    playerName = SettingsStorage.getPlayerName(context),
+                    onStartGame = { gameType, outMode, players, legsPerSet, setsPerMatch, isPairGame, startingTeam, autoOkSeconds ->
+                        game501 = Game501Logic.newGame(
+                            gameType, outMode, players, legsPerSet, setsPerMatch, isPairGame,
+                            startingTeam, autoOkSeconds, sessionStartTime, sessionForm
+                        )
+                        game501ExistingId = 0L
+                        isTraining501 = false
+                        screen = "game501_game"
+                    },
+                    onBack = { screen = "game_select" }
+                )
+
+                "game501_game" -> {
+                    val g = game501
+                    if (g != null) Game501Screen(
+                        repository = game501Repository,
+                        freePlayRecordsRepository = freePlayRecordsRepository,
+                        initialGame = g,
+                        existingId = game501ExistingId,
+                        isTrainingMode = isTraining501,
+                        trainingRepository = trainingRepository,
+                        onGameFinish = { f, id ->
+                            if (isTraining501) {
+                                val playerWon = f.winnerIndex == 0
+                                val player = f.players.getOrNull(0)
+                                val ppr = player?.let { p -> Game501Logic.matchPpr(p) } ?: 0.0
+                                val dbl = player?.let { p -> Game501Logic.doublesAccuracy(p) } ?: 0.0
+                                val pprStr = String.format(Locale.US, "%.1f", ppr)
+                                val dblStr = dbl.toInt().toString()
+                                val dur = if (exerciseStartMillis > 0L)
+                                    ((System.currentTimeMillis() - exerciseStartMillis) / 1000L).toInt()
+                                else 0
+                                exerciseStartMillis = 0L
+                                val botLevel = g.players.getOrNull(1)?.botLevel ?: 1
+                                TrainingBotLevelStorage.updateLevel501(context, botLevel, playerWon)
+                                scope.launch {
+                                    trainingRepository.insertExerciseResult(
+                                        ExerciseResult(
+                                            sessionId = trainingSessionId,
+                                            blockType = BlockType.GAME_501,
+                                            exerciseId = "game501",
+                                            score = ppr.toInt(),
+                                            dartsThrown = player?.matchDarts ?: 0,
+                                            timestamp = System.currentTimeMillis(),
+                                            durationSeconds = dur,
+                                            detailsJson = "won=$playerWon;ppr=$pprStr;dbl=$dblStr"
+                                        )
+                                    )
+                                }
+                                isTraining501 = false
+                                game501 = null
+                                game501ExistingId = 0L
+                                finishCurrentMainExercise()
+                            } else {
+                                scope.launch { game501Repository.saveGame(f, existingId = id) }
+                                game501 = f; game501ExistingId = 0L; screen = "game501_stats"
+                            }
+                        },
+                        onBack = {
+                            val wasTraining = isTraining501
+                            isTraining501 = false
+                            game501 = null; game501ExistingId = 0L
+                            screen = if (wasTraining) {
+                                if (isFreeTraining) "training_free_next" else "training_block"
+                            } else "game_select"
+                        }
+                    ) else screen = "game501_setup"
+                }
+
+                "game501_stats" -> {
+                    val g = game501
+                    if (g != null) Game501StatsScreen(
+                        game = g,
+                        onPlayAgain = { screen = "game501_setup" },
+                        onBackToMenu = { game501 = null; screen = "main" }
+                    ) else screen = "main"
+                }
+
+                "sector_setup" -> SectorSetupScreen(
+                    sectorRepository = sectorRepository,
+                    onStartGame = { s -> sectorToPlay = s; screen = "sector_game" },
+                    onOpenStats = { screen = "sector_stats" },
+                    onBack = { screen = "game_select" }
+                )
+
+                "sector_game" -> {
+                    val s = sectorToPlay
+                    if (s != null) SectorGameScreen(
+                        sector = s, repository = sectorRepository,
+                        isTrainingMode = false,
+                        onFinish = { _ -> sectorToPlay = null; screen = "game_select" },
+                        onBack = { screen = "game_select" }
+                    ) else screen = "sector_setup"
+                }
+
+                "sector_stats" -> SectorStatsScreen(
+                    repository = sectorRepository,
+                    onBack = { statsMenuKey++; screen = "stats_menu" }
+                )
+
+                "aroundclock_setup" -> AroundClockSetupScreen(
+                    playerName = SettingsStorage.getPlayerName(context),
+                    repository = aroundClockRepository,
+                    onStartGame = { t, o, h -> aroundClockTarget = t; aroundClockOrder = o; aroundClockHits = h; screen = "aroundclock_game" },
+                    onOpenStats = { screen = "aroundclock_stats" },
+                    onBack = { screen = "game_select" }
+                )
+
+                "aroundclock_game" -> {
+                    val t = aroundClockTarget; val o = aroundClockOrder
+                    if (t != null && o != null) AroundClockGameScreen(
+                        target = t, order = o, hitsRequired = aroundClockHits,
+                        repository = aroundClockRepository,
+                        onFinish = { td, c, sr ->
+                            scope.launch {
+                                aroundClockRepository.saveGame(t, o, aroundClockHits, td, c, sr)
+                            }
+                            aroundClockTarget = null; aroundClockOrder = null; aroundClockHits = 1
+                            screen = "game_select"
+                        },
+                        onBack = { screen = "game_select" }
+                    ) else screen = "aroundclock_setup"
+                }
+
+                "aroundclock_stats" -> AroundClockStatsScreen(
+                    repository = aroundClockRepository,
+                    onBack = { statsMenuKey++; screen = "stats_menu" }
+                )
+
+                "biground_setup" -> BigRoundSetupScreen(
+                    playerName = SettingsStorage.getPlayerName(context),
+                    repository = bigRoundRepository,
+                    onStartGame = { c -> bigRoundCategory = c; screen = "biground_game" },
+                    onOpenStats = { screen = "biground_stats" },
+                    onBack = { screen = "game_select" }
+                )
+
+                "biground_game" -> {
+                    val c = bigRoundCategory
+                    if (c != null) BigRoundGameScreen(
+                        category = c, repository = bigRoundRepository,
+                        isTrainingMode = false,
+                        onFinish = { _ -> bigRoundCategory = null; screen = "game_select" },
+                        onBack = { screen = "game_select" }
+                    ) else screen = "biground_setup"
+                }
+
+                "biground_stats" -> BigRoundStatsScreen(
+                    repository = bigRoundRepository,
+                    onBack = { statsMenuKey++; screen = "stats_menu" }
+                )
+
+                "scoreset_setup" -> ScoreSetSetupScreen(
+                    playerName = SettingsStorage.getPlayerName(context),
+                    repository = scoreSetRepository,
+                    onStartGame = { screen = "scoreset_game" },
+                    onOpenStats = { screen = "scoreset_stats" },
+                    onBack = { screen = "game_select" }
+                )
+
+                "scoreset_game" -> ScoreSetGameScreen(
+                    repository = scoreSetRepository,
+                    isTrainingMode = false,
+                    onFinish = { ts, ap ->
+                        scope.launch { scoreSetRepository.saveGame(ts, ap) }
+                        screen = "game_select"
+                    },
+                    onBack = { screen = "game_select" }
+                )
+
+                "scoreset_stats" -> ScoreSetStatsScreen(
+                    repository = scoreSetRepository,
+                    onBack = { statsMenuKey++; screen = "stats_menu" }
+                )
             }
         }
 
-        return result
-    }
-
-    // ─────────────────────────────────────────────
-    // РАЗМИНКА
-    // ─────────────────────────────────────────────
-
-    private fun buildWarmup(totalMinutes: Int): List<TrainingBlock> {
-        val long = totalMinutes >= 100
-        val traj = if (long) 2 else 1
-        val acc = if (long) 2 else 1
-
-        return listOf(
-            TrainingBlock(
-                ExerciseKind.WARMUP_MUSCLES,
-                "Разминка: мышцы",
-                "Вращения плечами, локтями, кистями. Растяжка.",
-                3
-            ),
-            TrainingBlock(
-                ExerciseKind.WARMUP_TRAJECTORY,
-                "Разминка: траектория",
-                "Бросай без цели, следи только за движением руки.",
-                traj
-            ),
-            TrainingBlock(
-                ExerciseKind.WARMUP_ACCURACY,
-                "Разминка: кучность",
-                "Второй и третий — тем же движением. Следи за одинаковостью.",
-                acc
-            ),
-            TrainingBlock(
-                ExerciseKind.WARMUP_AIM,
-                "Прицеливание",
-                "Теперь целься в конкретный сектор.",
-                1
+        if (isTrainingActive && screen in TRAINING_SCREENS && !showRestTimer && screen != "training_free_summary") {
+            TrainingTimerOverlay(
+                secondsLeft = if (isFreeTraining) trainingElapsedSeconds else trainingSecondsLeft,
+                isPaused = trainingPaused,
+                onTogglePause = { trainingPaused = !trainingPaused }
             )
-        )
-    }
+        }
 
-    // ─────────────────────────────────────────────
-    // БЛОКИ
-    // ─────────────────────────────────────────────
-
-    private fun buildMainBlock(type: WeaknessType, minutes: Int): TrainingBlock {
-        return when (type) {
-            WeaknessType.DOUBLES -> TrainingBlock(
-                kind = ExerciseKind.DOUBLES_ROUNDS,
-                title = "Раунды на удвоения",
-                description = "D1, D2, ..., D20, Bull. Один раз попал — переход к следующей цели.",
-                minutes = minutes,
-                isMainFocus = true
-            )
-            WeaknessType.SCORE -> TrainingBlock(
-                kind = ExerciseKind.SCORE_SET,
-                title = "Набор очков",
-                description = "10 подходов по 3 дротика. Цель — максимум очков.",
-                minutes = minutes,
-                isMainFocus = true
-            )
-            WeaknessType.ACCURACY -> TrainingBlock(
-                kind = ExerciseKind.AROUND_CLOCK_SECTORS,
-                title = "Кругосветка: Сектора",
-                description = "По порядку S1–S20. Нужно попасть 1 раз — переход к следующему.",
-                minutes = minutes,
-                isMainFocus = true
-            )
-            WeaknessType.TREBLES -> TrainingBlock(
-                kind = ExerciseKind.AROUND_CLOCK_TREBLES,
-                title = "Кругосветка: Утроения",
-                description = "По порядку T1–T20. Точность в утроения — база набора очков.",
-                minutes = minutes,
-                isMainFocus = true
+        if (showRestTimer) {
+            RestTimerOverlay(
+                totalSeconds = restTimerSeconds,
+                nextExerciseTitle = restNextTitle,
+                onSkip = {
+                    showRestTimer = false
+                    val step = pendingNextStep
+                    pendingNextStep = null
+                    restNextTitle = null
+                    step?.invoke()
+                }
             )
         }
     }
 
-    private fun buildSecondBlock(type: WeaknessType, minutes: Int): TrainingBlock {
-        return when (type) {
-            WeaknessType.DOUBLES -> TrainingBlock(
-                ExerciseKind.DOUBLES_TARGETED,
-                "Точечные удвоения",
-                "2–3 слабых дабла — точечная тренировка.",
-                minutes
-            )
-            WeaknessType.SCORE -> TrainingBlock(
-                ExerciseKind.SECTOR_20,
-                "Сектор 20",
-                "30 дротиков в 20-й сектор. Считаем сумму очков.",
-                minutes
-            )
-            WeaknessType.ACCURACY -> TrainingBlock(
-                ExerciseKind.AROUND_CLOCK_SECTORS,
-                "Кругосветка: Сектора",
-                "По порядку S1–S20, попасть 1 раз.",
-                minutes
-            )
-            WeaknessType.TREBLES -> TrainingBlock(
-                ExerciseKind.AROUND_CLOCK_TREBLES,
-                "Кругосветка: Утроения",
-                "По порядку T1–T20.",
-                minutes
-            )
-        }
-    }
-
-    private fun buildGameDescription(focus: WeaknessType?): String {
-        return when (focus) {
-            WeaknessType.DOUBLES ->
-                "Рекомендуем 501 — партия упирается в дабл, это закрепит тренировку."
-            WeaknessType.SCORE ->
-                "Рекомендуем Крикет — утроения T15–T20 и Bull подтянут набор."
-            WeaknessType.ACCURACY ->
-                "Рекомендуем 501 — точность выхода на дабл решает исход партии."
-            WeaknessType.TREBLES ->
-                "Рекомендуем Крикет — работа на утроения."
-            null ->
-                "Выбирай любую из 6 игр — просто играй в удовольствие."
-        }
-    }
-
-    // ─────────────────────────────────────────────
-    // КОНТРОЛЬНАЯ ТРЕНИРОВКА
-    // ─────────────────────────────────────────────
-
-    private fun buildControlPlan(minutes: Int): TrainingPlan {
-        val blocks = mutableListOf<TrainingBlock>()
-
-        blocks.add(
-            TrainingBlock(
-                ExerciseKind.WARMUP_MUSCLES,
-                "Разминка: мышцы",
-                "Лёгкая разминка перед экзаменом.",
-                3
-            )
-        )
-        blocks.add(
-            TrainingBlock(
-                ExerciseKind.SCORE_SET,
-                "Большой раунд",
-                "21 сектор × 3 дротика. Экзаменационный норматив.",
-                15
-            )
-        )
-        blocks.add(
-            TrainingBlock(
-                ExerciseKind.SECTOR_20,
-                "Сектор 20",
-                "30 дротиков в 20-й сектор. Экзаменационный норматив.",
-                8
-            )
-        )
-        blocks.add(
-            TrainingBlock(
-                ExerciseKind.SCORE_SET,
-                "Набор очков",
-                "10 подходов × 3 дротика. Экзаменационный норматив.",
-                8
-            )
-        )
-        blocks.add(
-            TrainingBlock(
-                ExerciseKind.GAME_501,
-                "501 против бота",
-                "Игра под давлением — результат идёт в отдельный раздел.",
-                15
-            )
-        )
-        blocks.add(
-            TrainingBlock(
-                ExerciseKind.GAME_CRICKET,
-                "Крикет против бота",
-                "Игра под давлением.",
-                15
-            )
-        )
-        blocks.add(
-            TrainingBlock(
-                ExerciseKind.STRENGTH,
-                "Силовые упражнения",
-                "Обязательны даже в контрольный день.",
-                5
-            )
-        )
-
-        return TrainingPlan(
-            blocks = blocks,
-            totalMinutes = blocks.sumOf { it.minutes },
-            focus = null,
-            isControl = true,
-            postponedDoubles = emptyList()
+    if (showExitTrainingDialog) {
+        ExitTrainingDialog(
+            onFinish = {
+                showExitTrainingDialog = false
+                resetTrainingState()
+                TrainingStateStorage.clear(context)
+                autoOpenTimeDialog = false
+                screen = "main"
+            },
+            onPostpone = {
+                showExitTrainingDialog = false
+                saveCurrentTrainingState()
+                autoOpenTimeDialog = false
+                screen = "main"
+            }
         )
     }
 
-    // ─────────────────────────────────────────────
-    // ХЕЛПЕРЫ
-    // ─────────────────────────────────────────────
+    if (showResumeDialog && pendingResume != null) {
+        val snap = pendingResume!!
+        val minutesAgo = TrainingStateStorage.minutesSinceLastUpdate(context)
+        ResumeTrainingDialog(
+            minutesAgo = minutesAgo,
+            onContinue = {
+                trainingSessionId = snap.sessionId
+                trainingMinutes = snap.minutes
+                trainingElapsedSeconds = snap.elapsedSeconds
+                currentPhase = runCatching {
+                    TrainingBlockPhase.valueOf(snap.phaseName)
+                }.getOrDefault(TrainingBlockPhase.MAIN)
+                currentExerciseIndex = snap.exerciseIndex
+                exerciseStatuses = snap.statuses.mapNotNull { (k, v) ->
+                    runCatching { k to SummaryStatus.valueOf(v) }.getOrNull()
+                }.toMap()
 
-    fun isControlSession(completedCount: Int): Boolean {
-        if (completedCount <= 0) return false
-        return completedCount % 10 == 0
+                mainExercises = if (snap.mainExerciseIds.isNotEmpty()) {
+                    val baseMap = defaultMainExercises().associateBy { it.id }
+                    snap.mainExerciseIds
+                        .mapNotNull { (id, m) -> baseMap[id]?.copy(minutes = m) }
+                        .ifEmpty { defaultMainExercises() }
+                } else {
+                    defaultMainExercises()
+                }
+                psychologyExercises = if (snap.psychologyEnabled)
+                    defaultPsychologyExercises() else emptyList()
+                strengthExercises = if (snap.strengthEnabled)
+                    defaultStrengthExercises() else emptyList()
+
+                trainingPaused = false
+                isTrainingActive = true
+                isFreeTraining = false
+                autoOpenTimeDialog = false
+                showResumeDialog = false
+                exerciseStartMillis = 0L
+                isTraining501 = false
+                isTrainingCricket = false
+                showRestTimer = false
+                pendingNextStep = null
+
+                screen = when (currentPhase) {
+                    TrainingBlockPhase.WARMUP -> "training_warmup"
+                    else -> "training_block"
+                }
+                pendingResume = null
+            },
+            onRestart = {
+                TrainingStateStorage.clear(context)
+                resetTrainingState()
+                autoOpenTimeDialog = true
+                showResumeDialog = false
+                pendingResume = null
+            }
+        )
     }
 
-    fun sessionsUntilControl(completedCount: Int): Int {
-        val remainder = completedCount % 10
-        return if (remainder == 0) 10 else 10 - remainder
+    if (showTimeUpDialog) {
+        TimeUpDialog(
+            trainingMinutes = trainingMinutes,
+            onFinish = {
+                showTimeUpDialog = false
+                resetTrainingState()
+                TrainingStateStorage.clear(context)
+                autoOpenTimeDialog = false
+                screen = "training"
+            },
+            onContinuePlus20 = {
+                showTimeUpDialog = false
+                trainingMinutes += 20
+            }
+        )
     }
 }
