@@ -103,6 +103,7 @@ import com.lodkin.dartstrainer.ui.sector.SectorSetupScreen
 import com.lodkin.dartstrainer.ui.sector.SectorStatsScreen
 import com.lodkin.dartstrainer.ui.training.BlockExerciseItem
 import com.lodkin.dartstrainer.ui.training.ExerciseSummary
+import com.lodkin.dartstrainer.ui.training.FreeTrainingSummaryScreen
 import com.lodkin.dartstrainer.ui.training.PlannedExercise
 import com.lodkin.dartstrainer.ui.training.RestTimerOverlay
 import com.lodkin.dartstrainer.ui.training.SummaryBlockType
@@ -121,6 +122,7 @@ import com.lodkin.dartstrainer.ui.training.defaultStrengthExercises
 import com.lodkin.dartstrainer.ui.training.warmupBlockItems
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import java.util.Locale
 import kotlin.random.Random
 
 private val PARENT_SCREEN: Map<String, String> = mapOf(
@@ -137,6 +139,8 @@ private val PARENT_SCREEN: Map<String, String> = mapOf(
     "training_summary" to "training",
     "training_block_exercise" to "training_summary",
     "training_extra_game" to "training_summary",
+    "training_free_next" to "main",
+    "training_free_summary" to "main",
     "game_select" to "main",
 
     "cricket_setup" to "game_select",
@@ -169,7 +173,8 @@ private val TRAINING_SCREENS: Set<String> = setOf(
     "training_block",
     "training_exercise",
     "training_block_exercise",
-    "training_extra_game"
+    "training_extra_game",
+    "training_free_next"
 )
 
 private enum class TrainingBlockPhase {
@@ -262,6 +267,10 @@ fun DartsTrainerApp() {
     var pendingResume by remember { mutableStateOf<TrainingStateStorage.Snapshot?>(null) }
     var showExitTrainingDialog by remember { mutableStateOf(false) }
 
+    // ── Свободная тренировка ──
+    var isFreeTraining by remember { mutableStateOf(false) }
+    var freeExerciseIndex by remember { mutableStateOf(0) }
+
     // ── Таймер отдыха между упражнениями ──
     var showRestTimer by remember { mutableStateOf(false) }
     var restTimerSeconds by remember { mutableStateOf(0) }
@@ -277,6 +286,7 @@ fun DartsTrainerApp() {
 
     fun saveCurrentTrainingState() {
         if (trainingSessionId <= 0L) return
+        if (isFreeTraining) return
         if (currentPhase == TrainingBlockPhase.FINISHED) return
         TrainingStateStorage.save(
             context = context,
@@ -297,18 +307,19 @@ fun DartsTrainerApp() {
         while (true) {
             delay(1000L)
             trainingElapsedSeconds += 1
-            if (trainingElapsedSeconds >= trainingMinutes * 60) {
+            if (!isFreeTraining && trainingElapsedSeconds >= trainingMinutes * 60) {
                 showTimeUpDialog = true
                 break
             }
         }
     }
-    val trainingSecondsLeft = (trainingMinutes * 60 - trainingElapsedSeconds).coerceAtLeast(0)
+    val trainingSecondsLeft = if (isFreeTraining) trainingElapsedSeconds
+        else (trainingMinutes * 60 - trainingElapsedSeconds).coerceAtLeast(0)
 
     LaunchedEffect(
         trainingSessionId, currentPhase, currentExerciseIndex, exerciseStatuses, mainExercises
     ) {
-        if (isTrainingActive && trainingSessionId > 0L) {
+        if (isTrainingActive && trainingSessionId > 0L && !isFreeTraining) {
             saveCurrentTrainingState()
         }
     }
@@ -317,7 +328,7 @@ fun DartsTrainerApp() {
         if (!isTrainingActive || screen !in TRAINING_SCREENS) return@LaunchedEffect
         while (true) {
             delay(30_000L)
-            saveCurrentTrainingState()
+            if (!isFreeTraining) saveCurrentTrainingState()
         }
     }
 
@@ -341,6 +352,8 @@ fun DartsTrainerApp() {
         restNextTitle = null
         pendingNextStep = null
         showExitTrainingDialog = false
+        isFreeTraining = false
+        freeExerciseIndex = 0
     }
 
     fun activePhases(): List<TrainingBlockPhase> {
@@ -398,42 +411,134 @@ fun DartsTrainerApp() {
         TrainingBlockPhase.FINISHED -> defaultMainBlockItems(recommendedIds)
     }
 
-    fun finishCurrentMainExercise() {
-        exerciseStatuses = exerciseStatuses.toMutableMap().apply {
-            put(currentExerciseIndex, SummaryStatus.DONE)
+    // Запуск текущего упражнения по его id — общий для обычной и свободной.
+    fun launchExercise(id: String) {
+        exerciseStartMillis = System.currentTimeMillis()
+        when (id) {
+            "game501" -> {
+                val playerName = SettingsStorage.getPlayerName(context).ifBlank { "Игрок" }
+                val botLevel = TrainingBotLevelStorage.getLevel501(context, currentLevel)
+                val players = listOf(
+                    Player501(name = playerName, isBot = false, botLevel = 0, teamIndex = 0),
+                    Player501(name = "Бот $botLevel", isBot = true, botLevel = botLevel, teamIndex = 1)
+                )
+                game501 = Game501Logic.newGame(
+                    gameType = GameType.X501,
+                    outMode = OutMode.DOUBLE_OUT,
+                    players = players,
+                    legsPerSet = 1,
+                    setsPerMatch = 1,
+                    isPairGame = false,
+                    startingTeamIndex = 0,
+                    autoOkSeconds = 0,
+                    sessionStartTime = sessionStartTime,
+                    sessionForm = sessionForm
+                )
+                game501ExistingId = 0L
+                isTraining501 = true
+                screen = "game501_game"
+            }
+            "cricket" -> {
+                val playerName = SettingsStorage.getPlayerName(context).ifBlank { "Игрок" }
+                val botLevel = TrainingBotLevelStorage.getLevelCricket(context, currentLevel)
+                val players = listOf(
+                    CricketPlayer(name = playerName, isBot = false, botLevel = 0, teamIndex = 0),
+                    CricketPlayer(name = "Бот $botLevel", isBot = true, botLevel = botLevel, teamIndex = 1)
+                )
+                cricketGame = CricketLogic.newGame(
+                    type = CricketType.AMERICAN,
+                    players = players,
+                    legsPerSet = 1,
+                    setsPerMatch = 1,
+                    isPairGame = false,
+                    startingTeamIndex = 0,
+                    autoOkSeconds = 0,
+                    sessionStartTime = sessionStartTime,
+                    sessionForm = sessionForm
+                )
+                cricketExistingId = 0L
+                isTrainingCricket = true
+                screen = "cricket_game"
+            }
+            else -> screen = "training_exercise"
         }
+    }
+
+    // Переход после завершения упражнения. Работает в обоих режимах.
+    fun advanceAfterExercise(finishedExerciseId: String) {
         val list = exercisesForPhase(TrainingBlockPhase.MAIN)
-        if (currentExerciseIndex + 1 < list.size) {
-            val nextExercise = list[currentExerciseIndex + 1]
-            val restSec = TrainingPlanner.restSecondsAfter(nextExercise.id)
-            showRestThen(restSec, nextExercise.title) {
-                currentExerciseIndex += 1
-                screen = "training_block"
+        if (isFreeTraining) {
+            val restSec = TrainingPlanner.restSecondsAfter(finishedExerciseId)
+            freeExerciseIndex += 1
+            if (freeExerciseIndex >= list.size) {
+                screen = "training_free_summary"
+            } else {
+                val nextTitle = list[freeExerciseIndex].title
+                showRestThen(restSec, nextTitle) {
+                    screen = "training_free_next"
+                }
             }
         } else {
-            screen = "training_summary"
+            if (currentExerciseIndex + 1 < list.size) {
+                val nextExercise = list[currentExerciseIndex + 1]
+                val restSec = TrainingPlanner.restSecondsAfter(finishedExerciseId)
+                showRestThen(restSec, nextExercise.title) {
+                    currentExerciseIndex += 1
+                    screen = "training_block"
+                }
+            } else {
+                screen = "training_summary"
+            }
         }
+    }
+
+    fun finishCurrentMainExercise() {
+        val finishedId = mainExercises.getOrNull(
+            if (isFreeTraining) freeExerciseIndex else currentExerciseIndex
+        )?.id ?: ""
+        if (!isFreeTraining) {
+            exerciseStatuses = exerciseStatuses.toMutableMap().apply {
+                put(currentExerciseIndex, SummaryStatus.DONE)
+            }
+        }
+        advanceAfterExercise(finishedId)
     }
 
     BackHandler(
         enabled = stage == "main" && screen != "main" && !showRestTimer && !showExitTrainingDialog
     ) {
         val isTrainingScreen = screen in TRAINING_SCREENS || screen == "training"
-        if (isTrainingScreen && isTrainingActive && trainingSessionId > 0L && screen != "training_summary") {
-            showExitTrainingDialog = true
-        } else {
-            PARENT_SCREEN[screen]?.let { parent ->
-                if (parent == "stats_menu") statsMenuKey++
-                if (parent == "main") {
+
+        when {
+            // Свободная тренировка — «Назад» → итоги (без диалога).
+            isFreeTraining -> {
+                if (screen == "training_free_summary") {
                     resetTrainingState()
                     TrainingStateStorage.clear(context)
-                    autoOpenTimeDialog = true
-                }
-                if (screen == "training_summary") return@BackHandler
-                if (screen in TRAINING_SCREENS && parent == "training") {
                     autoOpenTimeDialog = false
+                    screen = "main"
+                } else {
+                    screen = "training_free_summary"
                 }
-                screen = parent
+            }
+            // Обычная тренировка — диалог «Закончить / Отложить».
+            isTrainingScreen && isTrainingActive && trainingSessionId > 0L && screen != "training_summary" -> {
+                showExitTrainingDialog = true
+            }
+            else -> {
+                PARENT_SCREEN[screen]?.let { parent ->
+                    if (parent == "stats_menu") statsMenuKey++
+                    if (parent == "main") {
+                        resetTrainingState()
+                        TrainingStateStorage.clear(context)
+                        autoOpenTimeDialog = true
+                    }
+                    if (screen == "training_summary") return@BackHandler
+                    if (screen in TRAINING_SCREENS && parent == "training") {
+                        autoOpenTimeDialog = false
+                    }
+                    screen = parent
+                }
             }
         }
     }
@@ -461,7 +566,6 @@ fun DartsTrainerApp() {
                         val snap = TrainingStateStorage.load(context)
                         if (snap != null && snap.sessionId > 0L) {
                             if (TrainingStateStorage.isExpired(snap)) {
-                                // Просроченная (>3ч) — тихо чистим, упражнения уже в БД.
                                 TrainingStateStorage.clear(context)
                                 resetTrainingState()
                                 autoOpenTimeDialog = true
@@ -565,7 +669,6 @@ fun DartsTrainerApp() {
                             trainingPaused = false
                             showTimeUpDialog = false
 
-                            // ── Бюджет основной части ──
                             val warmupMin = if (TrainingBlocksStorage.isWarmupEnabled(context)) 6 else 0
                             val psychoMin = if (TrainingBlocksStorage.isPsychologyEnabled(context)) 8 else 0
                             val strengthMin = if (TrainingBlocksStorage.isStrengthEnabled(context)) 7 else 0
@@ -573,7 +676,6 @@ fun DartsTrainerApp() {
                             val budgetMain = (trainingMinutes - warmupMin - psychoMin - strengthMin - reserveMin)
                                 .coerceAtLeast(10)
 
-                            // ── Динамический планировщик — всегда ──
                             val dynamicIds = TrainingPlanner.buildDynamicMainExerciseIds(
                                 analysis = analysis,
                                 budgetMinutes = budgetMain,
@@ -605,6 +707,8 @@ fun DartsTrainerApp() {
                             isTraining501 = false
                             isTrainingCricket = false
                             isTrainingActive = true
+                            isFreeTraining = false
+                            freeExerciseIndex = 0
                             showRestTimer = false
                             pendingNextStep = null
 
@@ -624,6 +728,60 @@ fun DartsTrainerApp() {
                             screen = if (first == TrainingBlockPhase.WARMUP) "training_warmup" else "training_block"
                         }
                     },
+                    onStartFreeTraining = {
+                        autoOpenTimeDialog = false
+                        scope.launch {
+                            val analysis = TrainingStatsAnalyzer.analyze(trainingRepository)
+                            val completedCount = trainingRepository.getCompletedSessionCount()
+                            currentWeakness = analysis.weakestType
+                            currentLevel = analysis.level
+
+                            val session = TrainingSession(
+                                dateMillis = System.currentTimeMillis(),
+                                plannedMinutes = 0,
+                                actualMinutes = 0,
+                                levelAtStart = analysis.level,
+                                mode = TrainingMode.FLEXIBLE,
+                                focus = analysis.weakestType,
+                                isControl = false,
+                                isCompleted = false
+                            )
+                            trainingSessionId = trainingRepository.insertSession(session)
+                            trainingElapsedSeconds = 0
+                            trainingPaused = false
+                            showTimeUpDialog = false
+                            trainingMinutes = 0
+
+                            val dynamicIds = TrainingPlanner.buildDynamicMainExerciseIds(
+                                analysis = analysis,
+                                budgetMinutes = 999,
+                                completedTrainingCount = completedCount
+                            )
+                            val baseMap = defaultMainExercises().associateBy { it.id }
+                            mainExercises = dynamicIds
+                                .mapNotNull { d -> baseMap[d.id]?.copy(minutes = d.minutes) }
+                                .ifEmpty { defaultMainExercises() }
+
+                            psychologyExercises = emptyList()
+                            strengthExercises = emptyList()
+
+                            currentPhase = TrainingBlockPhase.MAIN
+                            currentExerciseIndex = 0
+                            freeExerciseIndex = 0
+                            exerciseStatuses = emptyMap()
+                            blockExerciseId = null
+                            extraGameId = null
+                            exerciseStartMillis = 0L
+                            isTraining501 = false
+                            isTrainingCricket = false
+                            isTrainingActive = true
+                            isFreeTraining = true
+                            showRestTimer = false
+                            pendingNextStep = null
+
+                            screen = "training_free_next"
+                        }
+                    },
                     onOpenSettings = {
                         autoOpenTimeDialog = false
                         screen = "training_settings"
@@ -633,7 +791,7 @@ fun DartsTrainerApp() {
                         screen = "training_progress"
                     },
                     onBack = {
-                        if (isTrainingActive && trainingSessionId > 0L) {
+                        if (isTrainingActive && trainingSessionId > 0L && !isFreeTraining) {
                             showExitTrainingDialog = true
                         } else {
                             autoOpenTimeDialog = true
@@ -674,62 +832,8 @@ fun DartsTrainerApp() {
                         exercises = list,
                         currentIndex = currentExerciseIndex,
                         onStartCurrent = {
-                            exerciseStartMillis = System.currentTimeMillis()
                             val current = list.getOrNull(currentExerciseIndex)
-                            if (currentPhase == TrainingBlockPhase.MAIN && current != null) {
-                                when (current.id) {
-                                    "game501" -> {
-                                        val playerName = SettingsStorage.getPlayerName(context)
-                                            .ifBlank { "Игрок" }
-                                        val botLevel = TrainingBotLevelStorage.getLevel501(context, currentLevel)
-                                        val players = listOf(
-                                            Player501(name = playerName, isBot = false, botLevel = 0, teamIndex = 0),
-                                            Player501(name = "Бот $botLevel", isBot = true, botLevel = botLevel, teamIndex = 1)
-                                        )
-                                        game501 = Game501Logic.newGame(
-                                            gameType = GameType.X501,
-                                            outMode = OutMode.DOUBLE_OUT,
-                                            players = players,
-                                            legsPerSet = 1,
-                                            setsPerMatch = 1,
-                                            isPairGame = false,
-                                            startingTeamIndex = 0,
-                                            autoOkSeconds = 0,
-                                            sessionStartTime = sessionStartTime,
-                                            sessionForm = sessionForm
-                                        )
-                                        game501ExistingId = 0L
-                                        isTraining501 = true
-                                        screen = "game501_game"
-                                    }
-                                    "cricket" -> {
-                                        val playerName = SettingsStorage.getPlayerName(context)
-                                            .ifBlank { "Игрок" }
-                                        val botLevel = TrainingBotLevelStorage.getLevelCricket(context, currentLevel)
-                                        val players = listOf(
-                                            CricketPlayer(name = playerName, isBot = false, botLevel = 0, teamIndex = 0),
-                                            CricketPlayer(name = "Бот $botLevel", isBot = true, botLevel = botLevel, teamIndex = 1)
-                                        )
-                                        cricketGame = CricketLogic.newGame(
-                                            type = CricketType.AMERICAN,
-                                            players = players,
-                                            legsPerSet = 1,
-                                            setsPerMatch = 1,
-                                            isPairGame = false,
-                                            startingTeamIndex = 0,
-                                            autoOkSeconds = 0,
-                                            sessionStartTime = sessionStartTime,
-                                            sessionForm = sessionForm
-                                        )
-                                        cricketExistingId = 0L
-                                        isTrainingCricket = true
-                                        screen = "cricket_game"
-                                    }
-                                    else -> screen = "training_exercise"
-                                }
-                            } else {
-                                screen = "training_exercise"
-                            }
+                            if (current != null) launchExercise(current.id)
                         },
                         onSkipCurrent = {
                             exerciseStatuses = exerciseStatuses.toMutableMap().apply {
@@ -742,11 +846,49 @@ fun DartsTrainerApp() {
                     )
                 }
 
+                "training_free_next" -> {
+                    val current = mainExercises.getOrNull(freeExerciseIndex)
+                    if (current == null) {
+                        screen = "training_free_summary"
+                    } else {
+                        FreeNextExerciseDialog(
+                            exerciseTitle = current.title,
+                            exerciseMinutes = current.minutes,
+                            exerciseNumber = freeExerciseIndex + 1,
+                            totalExercises = mainExercises.size,
+                            onPlay = { launchExercise(current.id) },
+                            onSkip = {
+                                freeExerciseIndex += 1
+                                if (freeExerciseIndex >= mainExercises.size) {
+                                    screen = "training_free_summary"
+                                }
+                                // Иначе — экран перерисуется на следующее упражнение.
+                            },
+                            onFinish = { screen = "training_free_summary" }
+                        )
+                    }
+                }
+
+                "training_free_summary" -> {
+                    FreeTrainingSummaryScreen(
+                        playerName = SettingsStorage.getPlayerName(context),
+                        sessionId = trainingSessionId,
+                        actualSeconds = trainingElapsedSeconds,
+                        repository = trainingRepository,
+                        onFinishTraining = {
+                            resetTrainingState()
+                            TrainingStateStorage.clear(context)
+                            autoOpenTimeDialog = false
+                            screen = "main"
+                        }
+                    )
+                }
+
                 "training_exercise" -> {
                     val list = exercisesForPhase(currentPhase)
                     val current = list.getOrNull(currentExerciseIndex)
                     if (current == null) {
-                        screen = "training_block"
+                        screen = if (isFreeTraining) "training_free_next" else "training_block"
                     } else if (currentPhase != TrainingBlockPhase.MAIN) {
                         TrainingExercisePlaceholder(
                             title = current.title,
@@ -781,7 +923,9 @@ fun DartsTrainerApp() {
                                     currentExerciseIndex += 1; screen = "training_block"
                                 } else screen = "training_summary"
                             },
-                            onBack = { screen = "training_block" }
+                            onBack = {
+                                screen = if (isFreeTraining) "training_free_next" else "training_block"
+                            }
                         )
                     } else {
                         MainExerciseRunner(
@@ -819,21 +963,16 @@ fun DartsTrainerApp() {
                                         lowerDartsBetter = lowerDartsBetter
                                     )
                                 }
-                                exerciseStatuses = exerciseStatuses.toMutableMap().apply {
-                                    put(currentExerciseIndex, SummaryStatus.DONE)
-                                }
-                                if (currentExerciseIndex + 1 < list.size) {
-                                    val nextExercise = list[currentExerciseIndex + 1]
-                                    val restSec = TrainingPlanner.restSecondsAfter(current.id)
-                                    showRestThen(restSec, nextExercise.title) {
-                                        currentExerciseIndex += 1
-                                        screen = "training_block"
+                                if (!isFreeTraining) {
+                                    exerciseStatuses = exerciseStatuses.toMutableMap().apply {
+                                        put(currentExerciseIndex, SummaryStatus.DONE)
                                     }
-                                } else {
-                                    screen = "training_summary"
                                 }
+                                advanceAfterExercise(current.id)
                             },
-                            onBack = { screen = "training_block" }
+                            onBack = {
+                                screen = if (isFreeTraining) "training_free_next" else "training_block"
+                            }
                         )
                     }
                 }
@@ -869,60 +1008,7 @@ fun DartsTrainerApp() {
                                 goToNextPhase()
                             }
                         },
-                        onPlayExercise = { id ->
-                            if (id == "game501") {
-                                val playerName = SettingsStorage.getPlayerName(context)
-                                    .ifBlank { "Игрок" }
-                                val botLevel = TrainingBotLevelStorage.getLevel501(context, currentLevel)
-                                val players = listOf(
-                                    Player501(name = playerName, isBot = false, botLevel = 0, teamIndex = 0),
-                                    Player501(name = "Бот $botLevel", isBot = true, botLevel = botLevel, teamIndex = 1)
-                                )
-                                game501 = Game501Logic.newGame(
-                                    gameType = GameType.X501,
-                                    outMode = OutMode.DOUBLE_OUT,
-                                    players = players,
-                                    legsPerSet = 1,
-                                    setsPerMatch = 1,
-                                    isPairGame = false,
-                                    startingTeamIndex = 0,
-                                    autoOkSeconds = 0,
-                                    sessionStartTime = sessionStartTime,
-                                    sessionForm = sessionForm
-                                )
-                                game501ExistingId = 0L
-                                isTraining501 = true
-                                exerciseStartMillis = System.currentTimeMillis()
-                                screen = "game501_game"
-                            } else if (id == "cricket") {
-                                val playerName = SettingsStorage.getPlayerName(context)
-                                    .ifBlank { "Игрок" }
-                                val botLevel = TrainingBotLevelStorage.getLevelCricket(context, currentLevel)
-                                val players = listOf(
-                                    CricketPlayer(name = playerName, isBot = false, botLevel = 0, teamIndex = 0),
-                                    CricketPlayer(name = "Бот $botLevel", isBot = true, botLevel = botLevel, teamIndex = 1)
-                                )
-                                cricketGame = CricketLogic.newGame(
-                                    type = CricketType.AMERICAN,
-                                    players = players,
-                                    legsPerSet = 1,
-                                    setsPerMatch = 1,
-                                    isPairGame = false,
-                                    startingTeamIndex = 0,
-                                    autoOkSeconds = 0,
-                                    sessionStartTime = sessionStartTime,
-                                    sessionForm = sessionForm
-                                )
-                                cricketExistingId = 0L
-                                isTrainingCricket = true
-                                exerciseStartMillis = System.currentTimeMillis()
-                                screen = "cricket_game"
-                            } else {
-                                blockExerciseId = id
-                                exerciseStartMillis = System.currentTimeMillis()
-                                screen = "training_block_exercise"
-                            }
-                        },
+                        onPlayExercise = { id -> launchExercise(id) },
                         onPlayGame = { id ->
                             extraGameId = id
                             exerciseStartMillis = System.currentTimeMillis()
@@ -1055,6 +1141,7 @@ fun DartsTrainerApp() {
                                         marks / (p.matchDartsThrown / 3f)
                                     } else 0f
                                 } ?: 0f
+                                val mprStr = String.format(Locale.US, "%.1f", mpr)
                                 val dur = if (exerciseStartMillis > 0L)
                                     ((System.currentTimeMillis() - exerciseStartMillis) / 1000L).toInt()
                                 else 0
@@ -1071,7 +1158,7 @@ fun DartsTrainerApp() {
                                             dartsThrown = player?.matchDartsThrown ?: 0,
                                             timestamp = System.currentTimeMillis(),
                                             durationSeconds = dur,
-                                            detailsJson = "won=$playerWon"
+                                            detailsJson = "won=$playerWon;mpr=$mprStr"
                                         )
                                     )
                                 }
@@ -1088,7 +1175,9 @@ fun DartsTrainerApp() {
                             val wasTraining = isTrainingCricket
                             isTrainingCricket = false
                             cricketGame = null; cricketExistingId = 0L
-                            screen = if (wasTraining) "training_block" else "game_select"
+                            screen = if (wasTraining) {
+                                if (isFreeTraining) "training_free_next" else "training_block"
+                            } else "game_select"
                         }
                     ) else screen = "cricket_setup"
                 }
@@ -1130,6 +1219,9 @@ fun DartsTrainerApp() {
                                 val playerWon = f.winnerIndex == 0
                                 val player = f.players.getOrNull(0)
                                 val ppr = player?.let { p -> Game501Logic.matchPpr(p) } ?: 0.0
+                                val dbl = player?.let { p -> Game501Logic.doublesAccuracy(p) } ?: 0.0
+                                val pprStr = String.format(Locale.US, "%.1f", ppr)
+                                val dblStr = dbl.toInt().toString()
                                 val dur = if (exerciseStartMillis > 0L)
                                     ((System.currentTimeMillis() - exerciseStartMillis) / 1000L).toInt()
                                 else 0
@@ -1146,7 +1238,7 @@ fun DartsTrainerApp() {
                                             dartsThrown = player?.matchDarts ?: 0,
                                             timestamp = System.currentTimeMillis(),
                                             durationSeconds = dur,
-                                            detailsJson = "won=$playerWon"
+                                            detailsJson = "won=$playerWon;ppr=$pprStr;dbl=$dblStr"
                                         )
                                     )
                                 }
@@ -1163,7 +1255,9 @@ fun DartsTrainerApp() {
                             val wasTraining = isTraining501
                             isTraining501 = false
                             game501 = null; game501ExistingId = 0L
-                            screen = if (wasTraining) "training_block" else "game_select"
+                            screen = if (wasTraining) {
+                                if (isFreeTraining) "training_free_next" else "training_block"
+                            } else "game_select"
                         }
                     ) else screen = "game501_setup"
                 }
@@ -1276,9 +1370,9 @@ fun DartsTrainerApp() {
             }
         }
 
-        if (isTrainingActive && screen in TRAINING_SCREENS && !showRestTimer) {
+        if (isTrainingActive && screen in TRAINING_SCREENS && !showRestTimer && screen != "training_free_summary") {
             TrainingTimerOverlay(
-                secondsLeft = trainingSecondsLeft,
+                secondsLeft = if (isFreeTraining) trainingElapsedSeconds else trainingSecondsLeft,
                 isPaused = trainingPaused,
                 onTogglePause = { trainingPaused = !trainingPaused }
             )
@@ -1299,7 +1393,7 @@ fun DartsTrainerApp() {
         }
     }
 
-    // ── Диалог «Прервать тренировку?» ──
+    // ── Диалог «Прервать тренировку?» (только для обычной) ──
     if (showExitTrainingDialog) {
         AlertDialog(
             onDismissRequest = { showExitTrainingDialog = false },
@@ -1431,7 +1525,6 @@ fun DartsTrainerApp() {
                                 runCatching { k to SummaryStatus.valueOf(v) }.getOrNull()
                             }.toMap()
 
-                            // ── Восстанавливаем список упражнений из снапшота ──
                             mainExercises = if (snap.mainExerciseIds.isNotEmpty()) {
                                 val baseMap = defaultMainExercises().associateBy { it.id }
                                 snap.mainExerciseIds
@@ -1447,6 +1540,7 @@ fun DartsTrainerApp() {
 
                             trainingPaused = false
                             isTrainingActive = true
+                            isFreeTraining = false
                             autoOpenTimeDialog = false
                             showResumeDialog = false
                             exerciseStartMillis = 0L
@@ -1504,6 +1598,133 @@ fun DartsTrainerApp() {
                 showTimeUpDialog = false; trainingMinutes += 20
             }) { Text("Продолжить +20 мин", color = GoldAccent, fontWeight = FontWeight.Bold) } }
         )
+    }
+}
+
+// ─────────────────────────────────────────────
+// Диалог «Следующее упражнение» для свободного режима
+// ─────────────────────────────────────────────
+
+@Composable
+private fun FreeNextExerciseDialog(
+    exerciseTitle: String,
+    exerciseMinutes: Int,
+    exerciseNumber: Int,
+    totalExercises: Int,
+    onPlay: () -> Unit,
+    onSkip: () -> Unit,
+    onFinish: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0xFF0D1117)),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(24.dp)
+                .clip(RoundedCornerShape(20.dp))
+                .background(TileBgDark)
+                .padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                "УПРАЖНЕНИЕ ${exerciseNumber} / $totalExercises",
+                color = Accent,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 2.sp
+            )
+            Spacer(Modifier.height(12.dp))
+            Text(
+                "Сейчас будет:",
+                color = Color.White.copy(alpha = 0.7f),
+                fontSize = 13.sp
+            )
+            Spacer(Modifier.height(6.dp))
+            Text(
+                exerciseTitle,
+                color = GoldAccent,
+                fontSize = 24.sp,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                "~$exerciseMinutes мин",
+                color = Color.White.copy(alpha = 0.55f),
+                fontSize = 13.sp
+            )
+
+            Spacer(Modifier.height(22.dp))
+
+            // «Играть»
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(Accent)
+                    .clickable { onPlay() }
+                    .padding(vertical = 16.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    "▶  Играть",
+                    color = Color(0xFF121212),
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+
+            Spacer(Modifier.height(10.dp))
+
+            // «Пропустить»
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(Color(0xFF1A2332))
+                    .clickable { onSkip() }
+                    .padding(vertical = 14.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    "Пропустить",
+                    color = Color.White.copy(alpha = 0.85f),
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Medium
+                )
+            }
+
+            Spacer(Modifier.height(16.dp))
+
+            Text(
+                "─── или ───",
+                color = Color.White.copy(alpha = 0.3f),
+                fontSize = 12.sp
+            )
+
+            Spacer(Modifier.height(16.dp))
+
+            // «Закончить тренировку»
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(ErrorColor.copy(alpha = 0.15f))
+                    .clickable { onFinish() }
+                    .padding(vertical = 14.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    "⬛  Закончить тренировку",
+                    color = ErrorColor,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        }
     }
 }
 
