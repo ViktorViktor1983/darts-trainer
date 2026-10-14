@@ -10,8 +10,7 @@ import kotlin.math.roundToInt
  *   • Уровень игрока по этим параметрам.
  *   • Слабое место (через WeaknessDetector).
  *   • Средний темп по каждому упражнению (по последним 5 записям).
- *
- * Возвращает готовый объект TrainingAnalysis — программу строит TrainingPlanner.
+ *   • Средние показатели по 501 (PPR, % удвоений) — для главного экрана.
  *
  * ВАЖНО: для кругосветок score = общее количество дротиков (чем меньше — тем лучше).
  * Для Сектор 20 / Набор / Большой раунд score = очки (чем больше — тем лучше).
@@ -29,21 +28,26 @@ object TrainingStatsAnalyzer {
      */
     data class TrainingAnalysis(
         // Средние значения по параметрам
-        val avgScore: Int?,                    // Сектор 20 / Набор очков (очки за 30 дротиков)
-        val avgBigRound: Int?,                 // Большой раунд (очки за 63 дротика)
-        val avgDoublesPercent: Float?,         // Удвоения (% попаданий)
-        val avgTreblesPercent: Float?,         // Утроения (% попаданий)
-        val avgSectorsPercent: Float?,         // Точность в сектор (% попаданий)
+        val avgScore: Int?,
+        val avgBigRound: Int?,
+        val avgDoublesPercent: Float?,
+        val avgTreblesPercent: Float?,
+        val avgSectorsPercent: Float?,
 
         // Уровни
-        val levelByScore: Int,                 // Уровень по набору (0 если нет данных)
-        val levelByBigRound: Int,              // Уровень по Большому раунду
-        val level: Int,                        // Итоговый уровень по упражнениям (среднее, вверх)
-        val potential: Int,                    // Потенциал (максимум)
-        val weakestType: WeaknessType?,        // Слабое место
+        val levelByScore: Int,
+        val levelByBigRound: Int,
+        val level: Int,
+        val potential: Int,
+        val weakestType: WeaknessType?,
 
         // Средний темп по упражнениям (в минутах)
         val avgMinutesByExercise: Map<String, Float>,
+
+        // Средние показатели 501 (для главного экрана)
+        val avg501Ppr: Float?,
+        val avg501DoublesPercent: Float?,
+        val count501Matches: Int,
 
         // Сколько записей было обработано
         val dataPointsCount: Int,
@@ -63,6 +67,9 @@ object TrainingStatsAnalyzer {
         val aroundDoublesResults = repository.getLatestExerciseResults("aroundclock_doubles", RECENT_LIMIT)
         val aroundTreblesResults = repository.getLatestExerciseResults("aroundclock_trebles", RECENT_LIMIT)
         val aroundSectorsResults = repository.getLatestExerciseResults("aroundclock_sectors", RECENT_LIMIT)
+
+        // ── Все партии 501 — для средних на главном экране ──
+        val all501Results = repository.getAllExerciseResultsByExerciseId("game501")
 
         // ── Средний набор очков (объединяем sector20 и scoreset) ──
         val scoreValues = mutableListOf<Int>()
@@ -99,7 +106,6 @@ object TrainingStatsAnalyzer {
         val levelByScore = avgScore?.let { DartsNorms.levelBySector20(it) } ?: 0
         val levelByBigRound = avgBigRound?.let { DartsNorms.levelByBigRound(it) } ?: 0
 
-        // Собираем валидные уровни для усреднения
         val validLevels = mutableListOf<Int>()
         if (levelByScore > 0) validLevels.add(levelByScore)
         if (levelByBigRound > 0) validLevels.add(levelByBigRound)
@@ -110,7 +116,7 @@ object TrainingStatsAnalyzer {
         }
         val potential = validLevels.maxOrNull() ?: level
 
-        // ── Слабое место — простая логика: параметр с наименьшим уровнем ──
+        // ── Слабое место ──
         val weakestType: WeaknessType? = run {
             val candidates = mutableListOf<Pair<WeaknessType, Int>>()
             if (levelByScore > 0) candidates.add(WeaknessType.SCORE to levelByScore)
@@ -134,11 +140,13 @@ object TrainingStatsAnalyzer {
         addTempo("aroundclock_trebles", aroundTreblesResults)
         addTempo("aroundclock_sectors", aroundSectorsResults)
 
+        // ── Средние показатели 501 (PPR, % удвоений) ──
+        val (avg501Ppr, avg501Doubles, count501) = compute501Averages(all501Results)
+
         // ── Общее количество данных ──
         val count = sector20Results.size + scoresetResults.size + bigroundResults.size +
                 aroundDoublesResults.size + aroundTreblesResults.size + aroundSectorsResults.size
 
-        // Данных достаточно, если собрано хотя бы 6 записей (по одному на 6 упражнений)
         val hasEnough = count >= 6
 
         return TrainingAnalysis(
@@ -153,9 +161,43 @@ object TrainingStatsAnalyzer {
             potential = potential,
             weakestType = weakestType,
             avgMinutesByExercise = avgMinutesByExercise,
+            avg501Ppr = avg501Ppr,
+            avg501DoublesPercent = avg501Doubles,
+            count501Matches = count501,
             dataPointsCount = count,
             hasEnoughData = hasEnough
         )
+    }
+
+    /**
+     * Средний PPR и % удвоений по партиям 501.
+     * Парсит detailsJson: "won=X;ppr=Y;dbl=Z".
+     */
+    private fun compute501Averages(
+        all501: List<ExerciseResult>
+    ): Triple<Float?, Float?, Int> {
+        val pprValues = mutableListOf<Float>()
+        val dblValues = mutableListOf<Float>()
+
+        all501.forEach { r ->
+            val details = parseDetails(r.detailsJson)
+            val ppr = details["ppr"]?.toFloatOrNull()
+            val dbl = details["dbl"]?.toFloatOrNull()
+            if (ppr != null && ppr > 0f) pprValues.add(ppr)
+            if (dbl != null && dbl >= 0f) dblValues.add(dbl)
+        }
+
+        val avgPpr = if (pprValues.isEmpty()) null else pprValues.average().toFloat()
+        val avgDbl = if (dblValues.isEmpty()) null else dblValues.average().toFloat()
+        return Triple(avgPpr, avgDbl, pprValues.size)
+    }
+
+    private fun parseDetails(s: String): Map<String, String> {
+        if (s.isBlank()) return emptyMap()
+        return s.split(";").mapNotNull { entry ->
+            val parts = entry.split("=")
+            if (parts.size == 2) parts[0].trim() to parts[1].trim() else null
+        }.toMap()
     }
 
     /**
