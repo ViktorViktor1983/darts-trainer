@@ -34,11 +34,16 @@ enum class TrainingSection {
     STRENGTH
 }
 
+/**
+ * @param autoOpenTimeDialog оставлен для совместимости с MainActivity,
+ *   но больше не используется — диалог выбора времени открывается только
+ *   по нажатию на стрелочку рядом с кнопкой «По времени».
+ */
 @Composable
 fun TrainingMenuScreen(
     playerName: String,
     repository: TrainingRepository,
-    autoOpenTimeDialog: Boolean,
+    @Suppress("UNUSED_PARAMETER") autoOpenTimeDialog: Boolean,
     onStartTraining: () -> Unit,
     onStartFreeTraining: () -> Unit,
     onOpenSettings: () -> Unit,
@@ -52,7 +57,7 @@ fun TrainingMenuScreen(
 
     val defaultMinutes = remember { SettingsStorage.getTrainingMinutes(context) }
 
-    var showTimeDialog by remember { mutableStateOf(autoOpenTimeDialog) }
+    var showTimeDialog by remember { mutableStateOf(false) }
     var selectedMinutes by remember { mutableStateOf(defaultMinutes) }
     var openedSection by remember { mutableStateOf<TrainingSection?>(null) }
 
@@ -162,60 +167,8 @@ fun TrainingMenuScreen(
 
         Spacer(Modifier.height(16.dp))
 
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(12.dp))
-                .background(TileBgDark)
-                .padding(horizontal = 14.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                "Сегодня",
-                color = Color.White.copy(alpha = 0.7f),
-                fontSize = 13.sp,
-                modifier = Modifier.weight(1f)
-            )
-            Text(
-                "$selectedMinutes мин",
-                color = Accent,
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Bold
-            )
-            Spacer(Modifier.width(12.dp))
-            Box(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(TileBg)
-                    .clickable { showTimeDialog = true }
-                    .padding(horizontal = 10.dp, vertical = 6.dp)
-            ) {
-                Text("Изменить", color = Accent, fontSize = 12.sp, fontWeight = FontWeight.Medium)
-            }
-        }
-
-        Spacer(Modifier.height(20.dp))
-
-        SectionRow("🔥", "Разминка", estimateWarmup(selectedMinutes), enabled = warmupOn) {
-            openedSection = TrainingSection.WARMUP
-        }
-        Spacer(Modifier.height(10.dp))
-        SectionRow("🎯", "Основная часть", estimateMain(selectedMinutes), enabled = true) {
-            openedSection = TrainingSection.MAIN
-        }
-        Spacer(Modifier.height(10.dp))
-        SectionRow("🧠", "Психология", estimatePsychology(selectedMinutes), enabled = psychologyOn) {
-            openedSection = TrainingSection.PSYCHOLOGY
-        }
-        Spacer(Modifier.height(10.dp))
-        SectionRow("💪", "Силовая", estimateStrength(), enabled = strengthOn) {
-            openedSection = TrainingSection.STRENGTH
-        }
-
-        Spacer(Modifier.height(24.dp))
-
         // ══════════════════════════════════════════
-        // ДВЕ КНОПКИ СТАРТА
+        // ДВЕ КНОПКИ СТАРТА (перенесены наверх)
         // ══════════════════════════════════════════
 
         // ── Свободная тренировка ──
@@ -254,7 +207,6 @@ fun TrainingMenuScreen(
                 .background(Accent),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Основная часть — старт с текущим временем
             Box(
                 modifier = Modifier
                     .weight(1f)
@@ -272,7 +224,6 @@ fun TrainingMenuScreen(
                     fontWeight = FontWeight.Bold
                 )
             }
-            // Стрелка — открывает список
             Box(
                 modifier = Modifier
                     .padding(end = 6.dp)
@@ -289,6 +240,60 @@ fun TrainingMenuScreen(
                     fontWeight = FontWeight.Bold
                 )
             }
+        }
+
+        Spacer(Modifier.height(24.dp))
+
+        // ── Плашка «Сегодня» ──
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(12.dp))
+                .background(TileBgDark)
+                .padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                "Сегодня",
+                color = Color.White.copy(alpha = 0.7f),
+                fontSize = 13.sp,
+                modifier = Modifier.weight(1f)
+            )
+            Text(
+                "$selectedMinutes мин",
+                color = Accent,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(Modifier.width(12.dp))
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(TileBg)
+                    .clickable { showTimeDialog = true }
+                    .padding(horizontal = 10.dp, vertical = 6.dp)
+            ) {
+                Text("Изменить", color = Accent, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+            }
+        }
+
+        Spacer(Modifier.height(20.dp))
+
+        // ── Карточки разделов ──
+        SectionRow("🔥", "Разминка", estimateWarmup(selectedMinutes), enabled = warmupOn) {
+            openedSection = TrainingSection.WARMUP
+        }
+        Spacer(Modifier.height(10.dp))
+        SectionRow("🎯", "Основная часть", estimateMain(selectedMinutes), enabled = true) {
+            openedSection = TrainingSection.MAIN
+        }
+        Spacer(Modifier.height(10.dp))
+        SectionRow("🧠", "Психология", estimatePsychology(selectedMinutes), enabled = psychologyOn) {
+            openedSection = TrainingSection.PSYCHOLOGY
+        }
+        Spacer(Modifier.height(10.dp))
+        SectionRow("💪", "Силовая", estimateStrength(), enabled = strengthOn) {
+            openedSection = TrainingSection.STRENGTH
         }
 
         Spacer(Modifier.height(24.dp))
