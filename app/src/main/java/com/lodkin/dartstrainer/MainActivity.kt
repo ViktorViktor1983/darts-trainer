@@ -868,7 +868,8 @@ fun DartsTrainerApp() {
 
                 "training_exercise" -> {
                     val list = exercisesForPhase(currentPhase)
-                    val current = list.getOrNull(currentExerciseIndex)
+                    val idx = if (isFreeTraining) freeExerciseIndex else currentExerciseIndex
+                    val current = list.getOrNull(idx)
                     if (current == null) {
                         screen = if (isFreeTraining) "training_free_next" else "training_block"
                     } else if (currentPhase != TrainingBlockPhase.MAIN) {
