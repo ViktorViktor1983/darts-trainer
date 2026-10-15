@@ -1,5 +1,11 @@
 package com.lodkin.dartstrainer.ui.training
 
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -27,18 +33,6 @@ import com.lodkin.dartstrainer.theme.GoldAccent
 import com.lodkin.dartstrainer.theme.TileBg
 import com.lodkin.dartstrainer.theme.TileBgDark
 
-enum class TrainingSection {
-    WARMUP,
-    MAIN,
-    PSYCHOLOGY,
-    STRENGTH
-}
-
-/**
- * @param autoOpenTimeDialog оставлен для совместимости с MainActivity,
- *   но больше не используется — диалог выбора времени открывается только
- *   по нажатию на стрелочку рядом с кнопкой «По времени».
- */
 @Composable
 fun TrainingMenuScreen(
     playerName: String,
@@ -59,16 +53,13 @@ fun TrainingMenuScreen(
 
     var showTimeDialog by remember { mutableStateOf(false) }
     var selectedMinutes by remember { mutableStateOf(defaultMinutes) }
-    var openedSection by remember { mutableStateOf<TrainingSection?>(null) }
 
-    var warmupOn by remember { mutableStateOf(TrainingBlocksStorage.isWarmupEnabled(context)) }
-    var psychologyOn by remember { mutableStateOf(TrainingBlocksStorage.isPsychologyEnabled(context)) }
-    var strengthOn by remember { mutableStateOf(TrainingBlocksStorage.isStrengthEnabled(context)) }
-
+    // Читаем флаги блоков — только чтобы понять, включены они или нет
+    // (нужно для блока «Сегодня» и для того, чтобы настройки не потерялись).
     LaunchedEffect(Unit) {
-        warmupOn = TrainingBlocksStorage.isWarmupEnabled(context)
-        psychologyOn = TrainingBlocksStorage.isPsychologyEnabled(context)
-        strengthOn = TrainingBlocksStorage.isStrengthEnabled(context)
+        TrainingBlocksStorage.isWarmupEnabled(context)
+        TrainingBlocksStorage.isPsychologyEnabled(context)
+        TrainingBlocksStorage.isStrengthEnabled(context)
         snapshot = repository.getLastPotential()
         loading = false
     }
@@ -83,14 +74,6 @@ fun TrainingMenuScreen(
                 showTimeDialog = false
             },
             onCancel = { showTimeDialog = false }
-        )
-    }
-
-    openedSection?.let { section ->
-        SectionPreviewDialog(
-            section = section,
-            minutes = selectedMinutes,
-            onClose = { openedSection = null }
         )
     }
 
@@ -167,39 +150,12 @@ fun TrainingMenuScreen(
 
         Spacer(Modifier.height(16.dp))
 
-        // ══════════════════════════════════════════
-        // ДВЕ КНОПКИ СТАРТА (перенесены наверх)
-        // ══════════════════════════════════════════
-
-        // ── Свободная тренировка ──
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(14.dp))
-                .background(TileBgDark)
-                .clickable { onStartFreeTraining() }
-                .padding(vertical = 16.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(
-                    "⏱  Свободная тренировка",
-                    color = Accent,
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Bold
-                )
-                Spacer(Modifier.height(3.dp))
-                Text(
-                    "без времени · в любой момент можно закончить",
-                    color = Color.White.copy(alpha = 0.5f),
-                    fontSize = 11.sp
-                )
-            }
-        }
+        // ── Кнопка «Свободная тренировка» с пульсацией ──
+        FreeTrainingButton(onClick = onStartFreeTraining)
 
         Spacer(Modifier.height(10.dp))
 
-        // ── По времени с выпадающим списком ──
+        // ── Кнопка «По времени с выбором» ──
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -242,7 +198,7 @@ fun TrainingMenuScreen(
             }
         }
 
-        Spacer(Modifier.height(24.dp))
+        Spacer(Modifier.height(20.dp))
 
         // ── Плашка «Сегодня» ──
         Row(
@@ -277,26 +233,50 @@ fun TrainingMenuScreen(
             }
         }
 
-        Spacer(Modifier.height(20.dp))
-
-        // ── Карточки разделов ──
-        SectionRow("🔥", "Разминка", estimateWarmup(selectedMinutes), enabled = warmupOn) {
-            openedSection = TrainingSection.WARMUP
-        }
-        Spacer(Modifier.height(10.dp))
-        SectionRow("🎯", "Основная часть", estimateMain(selectedMinutes), enabled = true) {
-            openedSection = TrainingSection.MAIN
-        }
-        Spacer(Modifier.height(10.dp))
-        SectionRow("🧠", "Психология", estimatePsychology(selectedMinutes), enabled = psychologyOn) {
-            openedSection = TrainingSection.PSYCHOLOGY
-        }
-        Spacer(Modifier.height(10.dp))
-        SectionRow("💪", "Силовая", estimateStrength(), enabled = strengthOn) {
-            openedSection = TrainingSection.STRENGTH
-        }
-
         Spacer(Modifier.height(24.dp))
+    }
+}
+
+/**
+ * Кнопка «Свободная тренировка» с мягкой пульсацией текста и значка.
+ * Период: 0,7 сек на затухание + 0,7 сек на возврат.
+ */
+@Composable
+private fun FreeTrainingButton(onClick: () -> Unit) {
+    val infiniteTransition = rememberInfiniteTransition(label = "free_pulse")
+    val alpha by infiniteTransition.animateFloat(
+        initialValue = 1f,
+        targetValue = 0.35f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 700, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "free_pulse_alpha"
+    )
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(TileBgDark)
+            .clickable { onClick() }
+            .padding(vertical = 16.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(
+                "⏱  Свободная тренировка",
+                color = Accent.copy(alpha = alpha),
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(Modifier.height(3.dp))
+            Text(
+                "без времени · в любой момент можно закончить",
+                color = Color.White.copy(alpha = 0.5f),
+                fontSize = 11.sp
+            )
+        }
     }
 }
 
@@ -406,143 +386,6 @@ private fun TimeOptionButton(
     }
 }
 
-@Composable
-private fun SectionPreviewDialog(
-    section: TrainingSection,
-    minutes: Int,
-    onClose: () -> Unit
-) {
-    val preview = when (section) {
-        TrainingSection.WARMUP -> SectionPreview(
-            icon = "🔥",
-            title = "Разминка",
-            subtitle = "Разогреваем мышцы и настраиваем технику. Внутри ${estimateWarmup(minutes)} минут.",
-            items = listOf(
-                "Мышцы — вращения плечами, локтями, кистями, растяжка",
-                "Траектория — броски без цели, фокус на движении руки",
-                "Кучность — повторяем одинаковое движение",
-                "Прицеливание — переходим к конкретным секторам"
-            )
-        )
-        TrainingSection.MAIN -> SectionPreview(
-            icon = "🎯",
-            title = "Основная часть",
-            subtitle = "Главные упражнения тренировки. Состав подбирается программой под тебя.",
-            items = listOf(
-                "Первое упражнение — из программы дня",
-                "Второе упражнение — закрепление",
-                "Игровой блок — партия на выбор (501 или Крикет)",
-                "Между упражнениями — короткие паузы"
-            )
-        )
-        TrainingSection.PSYCHOLOGY -> SectionPreview(
-            icon = "🧠",
-            title = "Психология",
-            subtitle = "Настраиваем голову: дыхание, визуализация, ритуал.",
-            items = listOf(
-                "Дыхание 4-2-6 — снимаем напряжение",
-                "Визуализация броска — настраиваемся перед важным броском",
-                "Ритуал — последовательность действий, которая помогает"
-            )
-        )
-        TrainingSection.STRENGTH -> SectionPreview(
-            icon = "💪",
-            title = "Силовая",
-            subtitle = "Укрепляем мышцы, чтобы рука не садилась в конце турнира.",
-            items = listOf(
-                "Имитация броска с гантелей",
-                "Удержание руки с гантелей",
-                "Изометрическое удержание плеча",
-                "Разгибания с эспандером",
-                "Расслабление антагониста"
-            )
-        )
-    }
-
-    AlertDialog(
-        onDismissRequest = onClose,
-        containerColor = TileBgDark,
-        title = {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(preview.icon, fontSize = 22.sp)
-                Spacer(Modifier.width(10.dp))
-                Text(
-                    preview.title,
-                    color = GoldAccent,
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-        },
-        text = {
-            Column {
-                Text(
-                    preview.subtitle,
-                    color = Color.White.copy(alpha = 0.75f),
-                    fontSize = 13.sp
-                )
-                Spacer(Modifier.height(14.dp))
-                Text(
-                    "Что будет внутри:",
-                    color = Accent,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 1.sp
-                )
-                Spacer(Modifier.height(8.dp))
-                preview.items.forEach { item ->
-                    Row(
-                        modifier = Modifier.padding(vertical = 3.dp),
-                        verticalAlignment = Alignment.Top
-                    ) {
-                        Text("•", color = Accent, fontSize = 14.sp)
-                        Spacer(Modifier.width(8.dp))
-                        Text(item, color = Color.White, fontSize = 13.sp)
-                    }
-                }
-                Spacer(Modifier.height(14.dp))
-                Text(
-                    "Начать сразу с этого раздела нельзя — тренировка идёт по программе.",
-                    color = Color.White.copy(alpha = 0.5f),
-                    fontSize = 11.sp
-                )
-            }
-        },
-        confirmButton = {
-            Text(
-                "Понятно",
-                color = Accent,
-                fontSize = 15.sp,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(Accent.copy(alpha = 0.15f))
-                    .clickable { onClose() }
-                    .padding(horizontal = 18.dp, vertical = 10.dp)
-            )
-        }
-    )
-}
-
-private data class SectionPreview(
-    val icon: String,
-    val title: String,
-    val subtitle: String,
-    val items: List<String>
-)
-
-private fun estimateWarmup(totalMinutes: Int): Int =
-    if (totalMinutes >= 100) 7 else 5
-
-private fun estimatePsychology(totalMinutes: Int): Int =
-    if (totalMinutes >= 80) 10 else 5
-
-private fun estimateStrength(): Int = 5
-
-private fun estimateMain(totalMinutes: Int): Int =
-    (totalMinutes - estimateWarmup(totalMinutes) - estimatePsychology(totalMinutes) - estimateStrength())
-        .coerceAtLeast(10)
-
 private fun saveSessionPrefs(context: android.content.Context, minutes: Int) {
     context.getSharedPreferences("training_prefs", android.content.Context.MODE_PRIVATE)
         .edit()
@@ -631,61 +474,5 @@ private fun WelcomeNoTrainingCard(playerName: String) {
             color = Accent,
             fontSize = 13.sp
         )
-    }
-}
-
-@Composable
-private fun SectionRow(
-    icon: String,
-    title: String,
-    minutes: Int,
-    enabled: Boolean,
-    onClick: () -> Unit
-) {
-    val bgColor = if (enabled) TileBgDark else TileBgDark.copy(alpha = 0.4f)
-    val iconAlpha = if (enabled) 1f else 0.35f
-    val titleColor = if (enabled) Color.White else Color.White.copy(alpha = 0.4f)
-    val minutesColor = if (enabled) Accent else Color.White.copy(alpha = 0.3f)
-
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
-            .background(bgColor)
-            .clickable(enabled = enabled) { onClick() }
-            .padding(horizontal = 16.dp, vertical = 16.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(icon, fontSize = 22.sp, color = Color.White.copy(alpha = iconAlpha))
-        Spacer(Modifier.width(14.dp))
-        Text(
-            title,
-            color = titleColor,
-            fontSize = 16.sp,
-            fontWeight = FontWeight.Medium,
-            modifier = Modifier.weight(1f)
-        )
-        if (enabled) {
-            Text(
-                "~$minutes мин",
-                color = minutesColor,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Bold
-            )
-            Spacer(Modifier.width(10.dp))
-            Text(
-                "ℹ",
-                color = Accent,
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Bold
-            )
-        } else {
-            Text(
-                "выкл",
-                color = Color.White.copy(alpha = 0.35f),
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Bold
-            )
-        }
     }
 }
