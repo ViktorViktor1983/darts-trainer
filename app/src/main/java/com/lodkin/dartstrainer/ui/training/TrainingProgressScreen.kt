@@ -21,6 +21,7 @@ import com.lodkin.dartstrainer.data.training.TrainingStatsAnalyzer
 import com.lodkin.dartstrainer.data.training.WeaknessDetector
 import com.lodkin.dartstrainer.data.training.WeaknessType
 import com.lodkin.dartstrainer.theme.Accent
+import com.lodkin.dartstrainer.theme.ErrorColor
 import com.lodkin.dartstrainer.theme.GoldAccent
 import com.lodkin.dartstrainer.theme.TileBg
 import com.lodkin.dartstrainer.theme.TileBgDark
@@ -32,12 +33,12 @@ import java.util.Locale
  * Экран «Мой прогресс».
  *
  * Показывает:
- *   • Уровень и потенциал.
- *   • 4 параметра: набор очков, точность, удвоения, утроения.
- *   • Слабое место.
- *   • Средний темп по каждому упражнению.
- *
- * В правом верхнем углу — кнопка 🏆 (закрытые чекауты).
+ *   • Итоговый уровень (максимум из двух комплексов).
+ *   • Комплекс 1 — упражнения (4 параметра).
+ *   • Комплекс 2 — игры (501 + Крикет).
+ *   • Подсказку при расхождении (даже в 1 уровень).
+ *   • Слабое место и средний темп.
+ *   • Кнопка 🏆 — закрытые чекауты.
  */
 @Composable
 fun TrainingProgressScreen(
@@ -86,7 +87,6 @@ fun TrainingProgressScreen(
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.weight(1f)
             )
-            // ── Кнопка «Закрытые чекауты» ──
             Box(
                 modifier = Modifier
                     .size(42.dp)
@@ -138,11 +138,24 @@ fun TrainingProgressScreen(
                 Spacer(Modifier.height(16.dp))
             }
 
-            LevelBlock(a)
+            // ── Итоговый уровень ──
+            FinalLevelBlock(a)
             Spacer(Modifier.height(16.dp))
 
-            SectionTitle("ПАРАМЕТРЫ")
+            // ── Подсказка при расхождении ──
+            if (a.gamesLagBehind || a.exercisesLagBehind) {
+                DivergenceCard(a)
+                Spacer(Modifier.height(16.dp))
+            }
+
+            // ── Комплекс 1: упражнения ──
+            SectionTitle("КОМПЛЕКС 1 — УПРАЖНЕНИЯ")
             Spacer(Modifier.height(10.dp))
+            ComplexHeader(
+                level = a.complex1Level,
+                subtitle = "среднее по 4 параметрам"
+            )
+            Spacer(Modifier.height(8.dp))
 
             ParamRow(
                 label = "Набор очков",
@@ -150,33 +163,60 @@ fun TrainingProgressScreen(
                 level = a.levelByScore,
                 isWeak = a.weakestType == WeaknessType.SCORE
             )
-            Spacer(Modifier.height(8.dp))
-
+            Spacer(Modifier.height(6.dp))
             ParamRow(
                 label = "Точность в сектор",
                 value = a.avgSectorsPercent?.let { formatPercent(it) + " попаданий" } ?: "нет данных",
-                level = if (a.weakestType == WeaknessType.ACCURACY) 0 else 0,
+                level = a.levelByBigRound,
                 isWeak = a.weakestType == WeaknessType.ACCURACY
             )
-            Spacer(Modifier.height(8.dp))
-
+            Spacer(Modifier.height(6.dp))
             ParamRow(
                 label = "Удвоения",
                 value = a.avgDoublesPercent?.let { formatPercent(it) + " попаданий" } ?: "нет данных",
-                level = 0,
+                level = a.levelByDoubles,
                 isWeak = a.weakestType == WeaknessType.DOUBLES
             )
-            Spacer(Modifier.height(8.dp))
-
+            Spacer(Modifier.height(6.dp))
             ParamRow(
                 label = "Утроения",
                 value = a.avgTreblesPercent?.let { formatPercent(it) + " попаданий" } ?: "нет данных",
-                level = 0,
+                level = a.levelByTrebles,
                 isWeak = a.weakestType == WeaknessType.TREBLES
             )
 
             Spacer(Modifier.height(20.dp))
 
+            // ── Комплекс 2: игры ──
+            SectionTitle("КОМПЛЕКС 2 — ИГРЫ")
+            Spacer(Modifier.height(10.dp))
+            ComplexHeader(
+                level = a.complex2Level,
+                subtitle = "среднее по 501 и Крикету"
+            )
+            Spacer(Modifier.height(8.dp))
+
+            ParamRow(
+                label = "501 — PPR",
+                value = a.avg501Ppr?.let {
+                    String.format(Locale.US, "%.1f · %d партий", it, a.count501Matches)
+                } ?: "нет данных",
+                level = a.level501,
+                isWeak = false
+            )
+            Spacer(Modifier.height(6.dp))
+            ParamRow(
+                label = "Крикет — MPR",
+                value = a.avgCricketMpr?.let {
+                    String.format(Locale.US, "%.1f · %d партий", it, a.countCricketMatches)
+                } ?: "нет данных",
+                level = a.levelCricket,
+                isWeak = false
+            )
+
+            Spacer(Modifier.height(20.dp))
+
+            // ── Слабое место ──
             if (a.weakestType != null) {
                 SectionTitle("СЛАБОЕ МЕСТО")
                 Spacer(Modifier.height(10.dp))
@@ -204,6 +244,7 @@ fun TrainingProgressScreen(
                 Spacer(Modifier.height(20.dp))
             }
 
+            // ── Твой темп ──
             if (a.avgMinutesByExercise.isNotEmpty()) {
                 SectionTitle("ТВОЙ ТЕМП")
                 Spacer(Modifier.height(10.dp))
@@ -250,7 +291,6 @@ fun TrainingProgressScreen(
         }
     }
 
-    // ── Диалог «Мои закрытые чекауты» ──
     if (showCheckouts) {
         TrainingCheckoutsDialog(
             closedCheckouts = checkoutsMap,
@@ -260,47 +300,11 @@ fun TrainingProgressScreen(
 }
 
 // ─────────────────────────────────────────────
-// Загрузка закрытых чекаутов из тренировочных партий 501
-// ─────────────────────────────────────────────
-
-/**
- * Читает все тренировочные партии 501 и складывает закрытые чекауты в Map.
- *
- * Формат detailsJson: "won=true;ppr=65.3;dbl=32;close=170,120,80"
- * Значения в close — остатки, с которых игрок закрывал лег (как в свободной игре).
- */
-private suspend fun loadTrainingCheckouts(repository: TrainingRepository): Map<Int, Int> {
-    val all501 = repository.getAllExerciseResultsByExerciseId("game501")
-    val result = mutableMapOf<Int, Int>()
-
-    all501.forEach { r ->
-        val details = parseDetails(r.detailsJson)
-        val closeStr = details["close"] ?: return@forEach
-        if (closeStr.isBlank()) return@forEach
-
-        closeStr.split(",").forEach { part ->
-            val value = part.trim().toIntOrNull() ?: return@forEach
-            result[value] = (result[value] ?: 0) + 1
-        }
-    }
-
-    return result
-}
-
-private fun parseDetails(s: String): Map<String, String> {
-    if (s.isBlank()) return emptyMap()
-    return s.split(";").mapNotNull { entry ->
-        val parts = entry.split("=", limit = 2)
-        if (parts.size == 2) parts[0].trim() to parts[1].trim() else null
-    }.toMap()
-}
-
-// ─────────────────────────────────────────────
-// Блок «Уровень»
+// Итоговый уровень
 // ─────────────────────────────────────────────
 
 @Composable
-private fun LevelBlock(a: TrainingStatsAnalyzer.TrainingAnalysis) {
+private fun FinalLevelBlock(a: TrainingStatsAnalyzer.TrainingAnalysis) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -309,7 +313,7 @@ private fun LevelBlock(a: TrainingStatsAnalyzer.TrainingAnalysis) {
             .padding(16.dp)
     ) {
         Text(
-            "УРОВЕНЬ",
+            "ТВОЙ УРОВЕНЬ",
             color = Accent,
             fontSize = 12.sp,
             fontWeight = FontWeight.Bold,
@@ -321,14 +325,14 @@ private fun LevelBlock(a: TrainingStatsAnalyzer.TrainingAnalysis) {
             Text(
                 "${a.level}",
                 color = GoldAccent,
-                fontSize = 36.sp,
+                fontSize = 42.sp,
                 fontWeight = FontWeight.Bold
             )
-            Spacer(Modifier.width(10.dp))
+            Spacer(Modifier.width(12.dp))
             Text(
                 DartsNorms.getLevelName(a.level),
                 color = Color.White,
-                fontSize = 18.sp,
+                fontSize = 20.sp,
                 fontWeight = FontWeight.Medium
             )
         }
@@ -353,6 +357,100 @@ private fun LevelBlock(a: TrainingStatsAnalyzer.TrainingAnalysis) {
         }
     }
 }
+
+// ─────────────────────────────────────────────
+// Подсказка при расхождении комплексов
+// ─────────────────────────────────────────────
+
+@Composable
+private fun DivergenceCard(a: TrainingStatsAnalyzer.TrainingAnalysis) {
+    val message = if (a.gamesLagBehind) {
+        "Упражнения дают ${a.complex1Level}-й уровень, а игры — только ${a.complex2Level}-й. " +
+                "Скорее всего, дело не в технике, а в психологии: в партии сложнее, чем " +
+                "в упражнении. Стоит подтянуть игры."
+    } else {
+        "Игры дают ${a.complex2Level}-й уровень, а упражнения — только ${a.complex1Level}-й. " +
+                "Стоит усилить тренировку базовых параметров — набора, точности, " +
+                "удвоений или утроений."
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(ErrorColor.copy(alpha = 0.10f))
+            .padding(16.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("⚠", color = ErrorColor, fontSize = 20.sp)
+            Spacer(Modifier.width(8.dp))
+            Text(
+                if (a.gamesLagBehind) "Игры отстают" else "Упражнения отстают",
+                color = ErrorColor,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
+        Spacer(Modifier.height(8.dp))
+        Text(
+            message,
+            color = Color.White.copy(alpha = 0.85f),
+            fontSize = 13.sp,
+            lineHeight = 19.sp
+        )
+    }
+}
+
+// ─────────────────────────────────────────────
+// Шапка комплекса
+// ─────────────────────────────────────────────
+
+@Composable
+private fun ComplexHeader(level: Int, subtitle: String) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(TileBg)
+            .padding(14.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                subtitle,
+                color = Color.White.copy(alpha = 0.6f),
+                fontSize = 12.sp
+            )
+            Spacer(Modifier.height(4.dp))
+            if (level > 0) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        "Уровень $level",
+                        color = GoldAccent,
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        DartsNorms.getLevelName(level),
+                        color = Color.White,
+                        fontSize = 14.sp
+                    )
+                }
+            } else {
+                Text(
+                    "нет данных",
+                    color = Color.White.copy(alpha = 0.45f),
+                    fontSize = 16.sp
+                )
+            }
+        }
+    }
+}
+
+// ─────────────────────────────────────────────
+// Строка параметра
+// ─────────────────────────────────────────────
 
 @Composable
 private fun ParamRow(
@@ -435,6 +533,36 @@ private fun SectionTitle(text: String) {
         fontWeight = FontWeight.Bold,
         letterSpacing = 2.sp
     )
+}
+
+// ─────────────────────────────────────────────
+// Загрузка закрытых чекаутов из тренировочных партий 501
+// ─────────────────────────────────────────────
+
+private suspend fun loadTrainingCheckouts(repository: TrainingRepository): Map<Int, Int> {
+    val all501 = repository.getAllExerciseResultsByExerciseId("game501")
+    val result = mutableMapOf<Int, Int>()
+
+    all501.forEach { r ->
+        val details = parseDetails(r.detailsJson)
+        val closeStr = details["close"] ?: return@forEach
+        if (closeStr.isBlank()) return@forEach
+
+        closeStr.split(",").forEach { part ->
+            val value = part.trim().toIntOrNull() ?: return@forEach
+            result[value] = (result[value] ?: 0) + 1
+        }
+    }
+
+    return result
+}
+
+private fun parseDetails(s: String): Map<String, String> {
+    if (s.isBlank()) return emptyMap()
+    return s.split(";").mapNotNull { entry ->
+        val parts = entry.split("=", limit = 2)
+        if (parts.size == 2) parts[0].trim() to parts[1].trim() else null
+    }.toMap()
 }
 
 // ─────────────────────────────────────────────
