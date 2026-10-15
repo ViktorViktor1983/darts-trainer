@@ -18,7 +18,9 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -54,8 +56,6 @@ fun TrainingMenuScreen(
     var showTimeDialog by remember { mutableStateOf(false) }
     var selectedMinutes by remember { mutableStateOf(defaultMinutes) }
 
-    // Читаем флаги блоков — только чтобы понять, включены они или нет
-    // (нужно для блока «Сегодня» и для того, чтобы настройки не потерялись).
     LaunchedEffect(Unit) {
         TrainingBlocksStorage.isWarmupEnabled(context)
         TrainingBlocksStorage.isPsychologyEnabled(context)
@@ -150,7 +150,7 @@ fun TrainingMenuScreen(
 
         Spacer(Modifier.height(16.dp))
 
-        // ── Кнопка «Свободная тренировка» с пульсацией ──
+        // ── Кнопка «Свободная тренировка» с яркой пульсацией ──
         FreeTrainingButton(onClick = onStartFreeTraining)
 
         Spacer(Modifier.height(10.dp))
@@ -238,21 +238,35 @@ fun TrainingMenuScreen(
 }
 
 /**
- * Кнопка «Свободная тренировка» с мягкой пульсацией текста и значка.
- * Период: 0,7 сек на затухание + 0,7 сек на возврат.
+ * Кнопка «Свободная тренировка» с яркой пульсацией.
+ *
+ * Пульсирует:
+ *   • цвет текста — от мягкого голубого (Accent) к яркому светлому (#B3E5FC);
+ *   • размер — лёгкое «дыхание» (100% → 108%);
+ *   • период 0,7 сек в одну сторону.
  */
 @Composable
 private fun FreeTrainingButton(onClick: () -> Unit) {
     val infiniteTransition = rememberInfiniteTransition(label = "free_pulse")
-    val alpha by infiniteTransition.animateFloat(
-        initialValue = 1f,
-        targetValue = 0.35f,
+    val pulse by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
         animationSpec = infiniteRepeatable(
             animation = tween(durationMillis = 700, easing = LinearEasing),
             repeatMode = RepeatMode.Reverse
         ),
-        label = "free_pulse_alpha"
+        label = "free_pulse_value"
     )
+
+    // Цвет текста — от Accent (#4FC3F7) к яркому светлому (#B3E5FC)
+    val textColor = lerp(
+        Color(0xFF4FC3F7),  // Accent
+        Color(0xFFB3E5FC),  // яркий светлый
+        pulse
+    )
+
+    // Плавное «дыхание» — 100% → 108%
+    val scaleFactor = 1f + pulse * 0.08f
 
     Box(
         modifier = Modifier
@@ -266,9 +280,10 @@ private fun FreeTrainingButton(onClick: () -> Unit) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text(
                 "⏱  Свободная тренировка",
-                color = Accent.copy(alpha = alpha),
+                color = textColor,
                 fontSize = 16.sp,
-                fontWeight = FontWeight.Bold
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.scale(scaleFactor)
             )
             Spacer(Modifier.height(3.dp))
             Text(
