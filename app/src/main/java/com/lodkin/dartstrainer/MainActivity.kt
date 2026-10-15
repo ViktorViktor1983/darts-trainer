@@ -1294,6 +1294,9 @@ fun DartsTrainerApp() {
                                 val dbl = player?.let { p -> Game501Logic.doublesAccuracy(p) } ?: 0.0
                                 val pprStr = String.format(Locale.US, "%.1f", ppr)
                                 val dblStr = dbl.toInt().toString()
+                                // Список закрытых чекаутов (остатков, с которых закрывал лег).
+                                val closeValues = player?.listOfCloseValues ?: emptyList()
+                                val closeStr = closeValues.joinToString(",")
                                 val dur = if (exerciseStartMillis > 0L)
                                     ((System.currentTimeMillis() - exerciseStartMillis) / 1000L).toInt()
                                 else 0
@@ -1310,7 +1313,7 @@ fun DartsTrainerApp() {
                                             dartsThrown = player?.matchDarts ?: 0,
                                             timestamp = System.currentTimeMillis(),
                                             durationSeconds = dur,
-                                            detailsJson = "won=$playerWon;ppr=$pprStr;dbl=$dblStr"
+                                            detailsJson = "won=$playerWon;ppr=$pprStr;dbl=$dblStr;close=$closeStr"
                                         )
                                     )
                                 }
@@ -1465,7 +1468,6 @@ fun DartsTrainerApp() {
         }
     }
 
-    // ── Диалог розыгрыша Bull ──
     if (showBullDraw && bullDrawExerciseId != null) {
         val id = bullDrawExerciseId!!
         val playerName = SettingsStorage.getPlayerName(context).ifBlank { "Игрок" }
