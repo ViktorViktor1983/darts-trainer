@@ -72,6 +72,7 @@ import com.lodkin.dartstrainer.ui.SettingsScreen
 import com.lodkin.dartstrainer.ui.StatsMenuScreen
 import com.lodkin.dartstrainer.ui.StatsScreen
 import com.lodkin.dartstrainer.ui.WelcomeScreen
+import com.lodkin.dartstrainer.ui.about.AboutScreen
 import com.lodkin.dartstrainer.ui.aroundclock.AroundClockGameScreen
 import com.lodkin.dartstrainer.ui.aroundclock.AroundClockSetupScreen
 import com.lodkin.dartstrainer.ui.aroundclock.AroundClockStatsScreen
@@ -133,6 +134,7 @@ private val PARENT_SCREEN: Map<String, String> = mapOf(
     "stats_cricket" to "stats_menu",
     "stats_501" to "stats_menu",
     "settings" to "main",
+    "about" to "settings",
     "training" to "main",
     "training_settings" to "training",
     "training_progress" to "training",
@@ -284,7 +286,6 @@ fun DartsTrainerApp() {
     var restNextTitle by remember { mutableStateOf<String?>(null) }
     var pendingNextStep by remember { mutableStateOf<(() -> Unit)?>(null) }
 
-    // ── Розыгрыш Bull перед тренировочной партией ──
     var showBullDraw by remember { mutableStateOf(false) }
     var bullDrawExerciseId by remember { mutableStateOf<String?>(null) }
 
@@ -316,10 +317,6 @@ fun DartsTrainerApp() {
         }
     }
 
-    /**
-     * Запуск тренировочной партии 501 или Крикета с указанным
-     * победителем розыгрыша (startingTeamIndex).
-     */
     fun startTrainingGame(exerciseId: String, startingTeamIndex: Int) {
         exerciseStartMillis = System.currentTimeMillis()
         if (exerciseId == "game501") {
@@ -372,7 +369,6 @@ fun DartsTrainerApp() {
         exerciseStartMillis = System.currentTimeMillis()
         when (id) {
             "game501", "cricket" -> {
-                // Перед партией — розыгрыш Bull.
                 bullDrawExerciseId = id
                 showBullDraw = true
             }
@@ -675,6 +671,7 @@ fun DartsTrainerApp() {
 
                 "settings" -> SettingsScreen(
                     onBack = { screen = "main" },
+                    onOpenAbout = { screen = "about" },
                     onFactoryReset = {
                         cricketGame = null; cricketExistingId = 0L
                         game501 = null; game501ExistingId = 0L
@@ -684,6 +681,10 @@ fun DartsTrainerApp() {
                         resetTrainingState(); autoOpenTimeDialog = true
                         onboardingDone = false; screen = "main"; stage = "welcome"
                     }
+                )
+
+                "about" -> AboutScreen(
+                    onBack = { screen = "settings" }
                 )
 
                 "training" -> TrainingMenuScreen(
@@ -1464,7 +1465,7 @@ fun DartsTrainerApp() {
         }
     }
 
-    // ── Диалог розыгрыша Bull перед тренировочной партией ──
+    // ── Диалог розыгрыша Bull ──
     if (showBullDraw && bullDrawExerciseId != null) {
         val id = bullDrawExerciseId!!
         val playerName = SettingsStorage.getPlayerName(context).ifBlank { "Игрок" }
@@ -1485,7 +1486,6 @@ fun DartsTrainerApp() {
             onCancel = {
                 showBullDraw = false
                 bullDrawExerciseId = null
-                // Отмену розыгрыша трактуем как «просто начать без розыгрыша».
                 startTrainingGame(id, 0)
             }
         )
