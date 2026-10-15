@@ -91,6 +91,7 @@ import com.lodkin.dartstrainer.ui.sector.SectorGameScreen
 import com.lodkin.dartstrainer.ui.sector.SectorSetupScreen
 import com.lodkin.dartstrainer.ui.sector.SectorStatsScreen
 import com.lodkin.dartstrainer.ui.training.BlockExerciseItem
+import com.lodkin.dartstrainer.ui.training.BullDrawDialog
 import com.lodkin.dartstrainer.ui.training.ExerciseSummary
 import com.lodkin.dartstrainer.ui.training.ExitTrainingDialog
 import com.lodkin.dartstrainer.ui.training.FreeRouletteScreen
@@ -283,6 +284,10 @@ fun DartsTrainerApp() {
     var restNextTitle by remember { mutableStateOf<String?>(null) }
     var pendingNextStep by remember { mutableStateOf<(() -> Unit)?>(null) }
 
+    // ── Розыгрыш Bull перед тренировочной партией ──
+    var showBullDraw by remember { mutableStateOf(false) }
+    var bullDrawExerciseId by remember { mutableStateOf<String?>(null) }
+
     fun showRestThen(restSeconds: Int, nextTitle: String?, nextStep: () -> Unit) {
         restTimerSeconds = restSeconds
         restNextTitle = nextTitle
@@ -308,6 +313,70 @@ fun DartsTrainerApp() {
         } else {
             freeCurrentId = candidates.random()
             freeRouletteKey += 1
+        }
+    }
+
+    /**
+     * Запуск тренировочной партии 501 или Крикета с указанным
+     * победителем розыгрыша (startingTeamIndex).
+     */
+    fun startTrainingGame(exerciseId: String, startingTeamIndex: Int) {
+        exerciseStartMillis = System.currentTimeMillis()
+        if (exerciseId == "game501") {
+            val playerName = SettingsStorage.getPlayerName(context).ifBlank { "Игрок" }
+            val botLevel = TrainingBotLevelStorage.getLevel501(context, currentLevel)
+            val players = listOf(
+                Player501(name = playerName, isBot = false, botLevel = 0, teamIndex = 0),
+                Player501(name = "Бот $botLevel", isBot = true, botLevel = botLevel, teamIndex = 1)
+            )
+            game501 = Game501Logic.newGame(
+                gameType = GameType.X501,
+                outMode = OutMode.DOUBLE_OUT,
+                players = players,
+                legsPerSet = 1,
+                setsPerMatch = 1,
+                isPairGame = false,
+                startingTeamIndex = startingTeamIndex,
+                autoOkSeconds = TRAINING_AUTO_OK_SECONDS,
+                sessionStartTime = sessionStartTime,
+                sessionForm = sessionForm
+            )
+            game501ExistingId = 0L
+            isTraining501 = true
+            screen = "game501_game"
+        } else if (exerciseId == "cricket") {
+            val playerName = SettingsStorage.getPlayerName(context).ifBlank { "Игрок" }
+            val botLevel = TrainingBotLevelStorage.getLevelCricket(context, currentLevel)
+            val players = listOf(
+                CricketPlayer(name = playerName, isBot = false, botLevel = 0, teamIndex = 0),
+                CricketPlayer(name = "Бот $botLevel", isBot = true, botLevel = botLevel, teamIndex = 1)
+            )
+            cricketGame = CricketLogic.newGame(
+                type = CricketType.AMERICAN,
+                players = players,
+                legsPerSet = 1,
+                setsPerMatch = 1,
+                isPairGame = false,
+                startingTeamIndex = startingTeamIndex,
+                autoOkSeconds = TRAINING_AUTO_OK_SECONDS,
+                sessionStartTime = sessionStartTime,
+                sessionForm = sessionForm
+            )
+            cricketExistingId = 0L
+            isTrainingCricket = true
+            screen = "cricket_game"
+        }
+    }
+
+    fun launchExercise(id: String) {
+        exerciseStartMillis = System.currentTimeMillis()
+        when (id) {
+            "game501", "cricket" -> {
+                // Перед партией — розыгрыш Bull.
+                bullDrawExerciseId = id
+                showBullDraw = true
+            }
+            else -> screen = "training_exercise"
         }
     }
 
@@ -387,6 +456,8 @@ fun DartsTrainerApp() {
         freeRouletteKey = 0
         freeExercisesCompleted = 0
         showFreeNewRoundDialog = false
+        showBullDraw = false
+        bullDrawExerciseId = null
     }
 
     fun activePhases(): List<TrainingBlockPhase> {
@@ -444,58 +515,6 @@ fun DartsTrainerApp() {
         TrainingBlockPhase.FINISHED -> defaultMainBlockItems(recommendedIds)
     }
 
-    fun launchExercise(id: String) {
-        exerciseStartMillis = System.currentTimeMillis()
-        when (id) {
-            "game501" -> {
-                val playerName = SettingsStorage.getPlayerName(context).ifBlank { "Игрок" }
-                val botLevel = TrainingBotLevelStorage.getLevel501(context, currentLevel)
-                val players = listOf(
-                    Player501(name = playerName, isBot = false, botLevel = 0, teamIndex = 0),
-                    Player501(name = "Бот $botLevel", isBot = true, botLevel = botLevel, teamIndex = 1)
-                )
-                game501 = Game501Logic.newGame(
-                    gameType = GameType.X501,
-                    outMode = OutMode.DOUBLE_OUT,
-                    players = players,
-                    legsPerSet = 1,
-                    setsPerMatch = 1,
-                    isPairGame = false,
-                    startingTeamIndex = 0,
-                    autoOkSeconds = TRAINING_AUTO_OK_SECONDS,
-                    sessionStartTime = sessionStartTime,
-                    sessionForm = sessionForm
-                )
-                game501ExistingId = 0L
-                isTraining501 = true
-                screen = "game501_game"
-            }
-            "cricket" -> {
-                val playerName = SettingsStorage.getPlayerName(context).ifBlank { "Игрок" }
-                val botLevel = TrainingBotLevelStorage.getLevelCricket(context, currentLevel)
-                val players = listOf(
-                    CricketPlayer(name = playerName, isBot = false, botLevel = 0, teamIndex = 0),
-                    CricketPlayer(name = "Бот $botLevel", isBot = true, botLevel = botLevel, teamIndex = 1)
-                )
-                cricketGame = CricketLogic.newGame(
-                    type = CricketType.AMERICAN,
-                    players = players,
-                    legsPerSet = 1,
-                    setsPerMatch = 1,
-                    isPairGame = false,
-                    startingTeamIndex = 0,
-                    autoOkSeconds = TRAINING_AUTO_OK_SECONDS,
-                    sessionStartTime = sessionStartTime,
-                    sessionForm = sessionForm
-                )
-                cricketExistingId = 0L
-                isTrainingCricket = true
-                screen = "cricket_game"
-            }
-            else -> screen = "training_exercise"
-        }
-    }
-
     fun advanceAfterExercise(finishedExerciseId: String) {
         if (isFreeTraining) {
             freeExercisesCompleted += 1
@@ -535,7 +554,7 @@ fun DartsTrainerApp() {
     }
 
     BackHandler(
-        enabled = stage == "main" && screen != "main" && !showRestTimer && !showExitTrainingDialog
+        enabled = stage == "main" && screen != "main" && !showRestTimer && !showExitTrainingDialog && !showBullDraw
     ) {
         val isTrainingScreen = screen in TRAINING_SCREENS || screen == "training"
 
@@ -1443,6 +1462,33 @@ fun DartsTrainerApp() {
                 }
             )
         }
+    }
+
+    // ── Диалог розыгрыша Bull перед тренировочной партией ──
+    if (showBullDraw && bullDrawExerciseId != null) {
+        val id = bullDrawExerciseId!!
+        val playerName = SettingsStorage.getPlayerName(context).ifBlank { "Игрок" }
+        val botLevel = if (id == "game501") {
+            TrainingBotLevelStorage.getLevel501(context, currentLevel)
+        } else {
+            TrainingBotLevelStorage.getLevelCricket(context, currentLevel)
+        }
+        BullDrawDialog(
+            playerName = playerName,
+            botName = "Бот $botLevel",
+            botLevel = botLevel,
+            onWinnerChosen = { winner ->
+                showBullDraw = false
+                startTrainingGame(id, winner)
+                bullDrawExerciseId = null
+            },
+            onCancel = {
+                showBullDraw = false
+                bullDrawExerciseId = null
+                // Отмену розыгрыша трактуем как «просто начать без розыгрыша».
+                startTrainingGame(id, 0)
+            }
+        )
     }
 
     if (showExitTrainingDialog) {
