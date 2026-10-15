@@ -24,18 +24,20 @@ import com.lodkin.dartstrainer.theme.Accent
 import com.lodkin.dartstrainer.theme.GoldAccent
 import com.lodkin.dartstrainer.theme.TileBg
 import com.lodkin.dartstrainer.theme.TileBgDark
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.util.Locale
 
 /**
  * Экран «Мой прогресс».
  *
  * Показывает:
- *   • Уровень и потенциал (по накопленным данным).
+ *   • Уровень и потенциал.
  *   • 4 параметра: набор очков, точность, удвоения, утроения.
  *   • Слабое место.
  *   • Средний темп по каждому упражнению.
  *
- * Если данных мало — предупреждение вместо цифр.
+ * В правом верхнем углу — кнопка 🏆 (закрытые чекауты).
  */
 @Composable
 fun TrainingProgressScreen(
@@ -45,8 +47,14 @@ fun TrainingProgressScreen(
     var analysis by remember { mutableStateOf<TrainingStatsAnalyzer.TrainingAnalysis?>(null) }
     var loading by remember { mutableStateOf(true) }
 
+    var checkoutsMap by remember { mutableStateOf<Map<Int, Int>>(emptyMap()) }
+    var showCheckouts by remember { mutableStateOf(false) }
+
     LaunchedEffect(Unit) {
         analysis = TrainingStatsAnalyzer.analyze(repository)
+        checkoutsMap = withContext(Dispatchers.IO) {
+            loadTrainingCheckouts(repository)
+        }
         loading = false
     }
 
@@ -75,8 +83,20 @@ fun TrainingProgressScreen(
                 "Мой прогресс",
                 color = GoldAccent,
                 fontSize = 22.sp,
-                fontWeight = FontWeight.Bold
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.weight(1f)
             )
+            // ── Кнопка «Закрытые чекауты» ──
+            Box(
+                modifier = Modifier
+                    .size(42.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(Accent.copy(alpha = 0.18f))
+                    .clickable { showCheckouts = true },
+                contentAlignment = Alignment.Center
+            ) {
+                Text("🏆", fontSize = 20.sp)
+            }
         }
 
         Spacer(Modifier.height(20.dp))
@@ -118,11 +138,9 @@ fun TrainingProgressScreen(
                 Spacer(Modifier.height(16.dp))
             }
 
-            // ── Уровень ──
             LevelBlock(a)
             Spacer(Modifier.height(16.dp))
 
-            // ── 4 параметра ──
             SectionTitle("ПАРАМЕТРЫ")
             Spacer(Modifier.height(10.dp))
 
@@ -159,7 +177,6 @@ fun TrainingProgressScreen(
 
             Spacer(Modifier.height(20.dp))
 
-            // ── Слабое место ──
             if (a.weakestType != null) {
                 SectionTitle("СЛАБОЕ МЕСТО")
                 Spacer(Modifier.height(10.dp))
@@ -187,7 +204,6 @@ fun TrainingProgressScreen(
                 Spacer(Modifier.height(20.dp))
             }
 
-            // ── Средний темп ──
             if (a.avgMinutesByExercise.isNotEmpty()) {
                 SectionTitle("ТВОЙ ТЕМП")
                 Spacer(Modifier.height(10.dp))
@@ -233,6 +249,50 @@ fun TrainingProgressScreen(
             Spacer(Modifier.height(16.dp))
         }
     }
+
+    // ── Диалог «Мои закрытые чекауты» ──
+    if (showCheckouts) {
+        TrainingCheckoutsDialog(
+            closedCheckouts = checkoutsMap,
+            onDismiss = { showCheckouts = false }
+        )
+    }
+}
+
+// ─────────────────────────────────────────────
+// Загрузка закрытых чекаутов из тренировочных партий 501
+// ─────────────────────────────────────────────
+
+/**
+ * Читает все тренировочные партии 501 и складывает закрытые чекауты в Map.
+ *
+ * Формат detailsJson: "won=true;ppr=65.3;dbl=32;close=170,120,80"
+ * Значения в close — остатки, с которых игрок закрывал лег (как в свободной игре).
+ */
+private suspend fun loadTrainingCheckouts(repository: TrainingRepository): Map<Int, Int> {
+    val all501 = repository.getAllExerciseResultsByExerciseId("game501")
+    val result = mutableMapOf<Int, Int>()
+
+    all501.forEach { r ->
+        val details = parseDetails(r.detailsJson)
+        val closeStr = details["close"] ?: return@forEach
+        if (closeStr.isBlank()) return@forEach
+
+        closeStr.split(",").forEach { part ->
+            val value = part.trim().toIntOrNull() ?: return@forEach
+            result[value] = (result[value] ?: 0) + 1
+        }
+    }
+
+    return result
+}
+
+private fun parseDetails(s: String): Map<String, String> {
+    if (s.isBlank()) return emptyMap()
+    return s.split(";").mapNotNull { entry ->
+        val parts = entry.split("=", limit = 2)
+        if (parts.size == 2) parts[0].trim() to parts[1].trim() else null
+    }.toMap()
 }
 
 // ─────────────────────────────────────────────
@@ -294,10 +354,6 @@ private fun LevelBlock(a: TrainingStatsAnalyzer.TrainingAnalysis) {
     }
 }
 
-// ─────────────────────────────────────────────
-// Строка параметра
-// ─────────────────────────────────────────────
-
 @Composable
 private fun ParamRow(
     label: String,
@@ -344,10 +400,6 @@ private fun ParamRow(
         }
     }
 }
-
-// ─────────────────────────────────────────────
-// Инфо-карточка
-// ─────────────────────────────────────────────
 
 @Composable
 private fun InfoCard(title: String, text: String) {
