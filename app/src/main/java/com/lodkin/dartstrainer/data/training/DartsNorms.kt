@@ -10,16 +10,16 @@ package com.lodkin.dartstrainer.data.training
  *   • Уровень 16 (Легенда)   = уровень Люка Литтлера
  *
  * Остальные уровни — промежуточные ступени для мотивации игрока.
- * Числа между известными точками распределены пропорционально.
  *
- * Пол и возраст не спрашиваем — используем мужские нормативы.
- *
- * ЧЕТЫРЕ ПАРАМЕТРА:
+ * ЧЕТЫРЕ ПАРАМЕТРА (комплекс 1 — упражнения):
  *   • sector20 / scoreSet / bigRound — основные нормативные упражнения
  *   • doublesPercent — процент попадания в удвоения
  *   • treblePercent  — процент попадания в утроения
+ *
+ * ДВЕ ШКАЛЫ (комплекс 2 — игры):
+ *   • PPR — средний набор за подход в 501
+ *   • MPR — средний набор за подход в Крикете
  */
-
 data class LevelNorm(
     val level: Int,
     val name: String,
@@ -120,6 +120,27 @@ object DartsNorms {
     )
 
     // ─────────────────────────────────────────────
+    // Шкала PPR (501) и MPR (Крикет)
+    // Нижняя граница диапазона бота = порог уровня.
+    // ─────────────────────────────────────────────
+
+    /** Минимальный PPR для каждого уровня (1..16). */
+    private val pprThresholds: List<Pair<Int, Float>> = listOf(
+        1 to 22f, 2 to 28f, 3 to 33f, 4 to 38f,
+        5 to 43f, 6 to 49f, 7 to 52f, 8 to 55f,
+        9 to 61f, 10 to 66f, 11 to 71f, 12 to 80f,
+        13 to 87f, 14 to 93f, 15 to 99f, 16 to 104f
+    )
+
+    /** Минимальный MPR для каждого уровня (1..16). */
+    private val mprThresholds: List<Pair<Int, Float>> = listOf(
+        1 to 5f, 2 to 8f, 3 to 11f, 4 to 14f,
+        5 to 17f, 6 to 20f, 7 to 22f, 8 to 25f,
+        9 to 28f, 10 to 31f, 11 to 34f, 12 to 37f,
+        13 to 40f, 14 to 43f, 15 to 47f, 16 to 52f
+    )
+
+    // ─────────────────────────────────────────────
     // Хелперы
     // ─────────────────────────────────────────────
 
@@ -165,6 +186,18 @@ object DartsNorms {
      */
     fun levelByTrebles(percent: Float): Int =
         levels.lastOrNull { percent >= it.treblePercent }?.level ?: 1
+
+    /**
+     * Определить уровень по среднему PPR (501).
+     */
+    fun levelByPpr(ppr: Float): Int =
+        pprThresholds.lastOrNull { ppr >= it.second }?.first ?: 1
+
+    /**
+     * Определить уровень по среднему MPR (Крикет).
+     */
+    fun levelByMpr(mpr: Float): Int =
+        mprThresholds.lastOrNull { mpr >= it.second }?.first ?: 1
 
     /**
      * Русское название параметра — для UI.
