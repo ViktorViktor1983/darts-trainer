@@ -121,6 +121,12 @@ import kotlinx.coroutines.launch
 import java.util.Locale
 import kotlin.random.Random
 
+/**
+ * Авто-OK в тренировочных партиях 501 и Крикета.
+ * Всегда включён, чтобы игрок не тратил время на подтверждение каждого подхода.
+ */
+private const val TRAINING_AUTO_OK_SECONDS = 3
+
 private val PARENT_SCREEN: Map<String, String> = mapOf(
     "stats_menu" to "main",
     "stats_cricket" to "stats_menu",
@@ -263,7 +269,6 @@ fun DartsTrainerApp() {
     var pendingResume by remember { mutableStateOf<TrainingStateStorage.Snapshot?>(null) }
     var showExitTrainingDialog by remember { mutableStateOf(false) }
 
-    // ── Свободная тренировка (рулетка) ──
     var isFreeTraining by remember { mutableStateOf(false) }
     var freeNoRepeat by remember { mutableStateOf(false) }
     var freeCompletedIds by remember { mutableStateOf<Set<String>>(emptySet()) }
@@ -273,7 +278,6 @@ fun DartsTrainerApp() {
     var freeExercisesCompleted by remember { mutableStateOf(0) }
     var showFreeNewRoundDialog by remember { mutableStateOf(false) }
 
-    // ── Таймер отдыха ──
     var showRestTimer by remember { mutableStateOf(false) }
     var restTimerSeconds by remember { mutableStateOf(0) }
     var restNextTitle by remember { mutableStateOf<String?>(null) }
@@ -458,7 +462,7 @@ fun DartsTrainerApp() {
                     setsPerMatch = 1,
                     isPairGame = false,
                     startingTeamIndex = 0,
-                    autoOkSeconds = 0,
+                    autoOkSeconds = TRAINING_AUTO_OK_SECONDS,
                     sessionStartTime = sessionStartTime,
                     sessionForm = sessionForm
                 )
@@ -480,7 +484,7 @@ fun DartsTrainerApp() {
                     setsPerMatch = 1,
                     isPairGame = false,
                     startingTeamIndex = 0,
-                    autoOkSeconds = 0,
+                    autoOkSeconds = TRAINING_AUTO_OK_SECONDS,
                     sessionStartTime = sessionStartTime,
                     sessionForm = sessionForm
                 )
