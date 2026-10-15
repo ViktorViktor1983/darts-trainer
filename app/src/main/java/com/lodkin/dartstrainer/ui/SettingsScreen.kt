@@ -21,6 +21,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.lodkin.dartstrainer.theme.Accent
 import com.lodkin.dartstrainer.theme.ErrorColor
+import com.lodkin.dartstrainer.theme.GoldAccent
+import com.lodkin.dartstrainer.theme.TileBg
 import com.lodkin.dartstrainer.theme.TileBgDark
 import java.io.File
 
@@ -28,13 +30,14 @@ import java.io.File
  * Общие настройки приложения.
  *
  * Здесь только то, что касается всего приложения:
- * сброс данных, темы, язык (позже).
+ * сброс данных, «О программе», темы и язык (позже).
  *
  * Настройки тренировки — в TrainingSettingsScreen (кнопка ⚙ на экране тренировки).
  */
 @Composable
 fun SettingsScreen(
     onBack: () -> Unit,
+    onOpenAbout: () -> Unit,
     onFactoryReset: () -> Unit
 ) {
     val context = LocalContext.current
@@ -74,11 +77,37 @@ fun SettingsScreen(
                 .weight(1f)
                 .verticalScroll(rememberScrollState())
         ) {
-            // В будущем: темы, язык
+            // ── Кнопка «О программе» ──
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(TileBg)
+                    .clickable { onOpenAbout() }
+                    .padding(vertical = 16.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        "ℹ  О программе",
+                        color = GoldAccent,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        "как всё устроено и зачем это нужно",
+                        color = Color.White.copy(alpha = 0.5f),
+                        fontSize = 11.sp
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(20.dp))
 
             Text(
-                "Скоро появятся: выбор темы (тёмная / светлая), выбор языка, дополнительные " +
-                        "настройки звука и уведомлений.",
+                "Скоро появятся: выбор темы (тёмная / светлая), выбор языка, " +
+                        "дополнительные настройки звука и уведомлений.",
                 color = Color.White.copy(alpha = 0.4f),
                 fontSize = 11.sp
             )
