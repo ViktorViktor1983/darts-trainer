@@ -28,6 +28,7 @@ import androidx.compose.ui.unit.sp
 import com.lodkin.dartstrainer.data.game501.CheckoutTable
 import com.lodkin.dartstrainer.theme.Accent
 import com.lodkin.dartstrainer.theme.GoldAccent
+import com.lodkin.dartstrainer.theme.TileBg
 
 private val CheckoutGray = Color(0xFF455A64)
 private val CheckoutGreen = Color(0xFF4CAF50)
@@ -62,7 +63,6 @@ private fun checkoutColor(count: Int): Pair<Color, Color> {
  *
  * Логика полностью совпадает с диалогом из свободной игры (StatsScreen.kt):
  * та же сетка 2–170, та же цветовая легенда, тот же подсчёт.
- * Отличие только в источнике данных — сюда приходит Map из тренировочных партий 501.
  *
  * @param closedCheckouts Map: значение чекаута → сколько раз закрыто.
  */
@@ -83,7 +83,7 @@ internal fun TrainingCheckoutsDialog(
         title = {
             Column {
                 Text(
-                    "Мои закрытые чекауты",
+                    "🏆 Мои закрытые чекауты",
                     color = Color.White,
                     fontSize = 20.sp,
                     fontWeight = FontWeight.Bold
@@ -105,6 +105,27 @@ internal fun TrainingCheckoutsDialog(
         },
         text = {
             Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+
+                // ── Мотивационная шапка ──
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(TileBg)
+                        .padding(12.dp)
+                ) {
+                    Text(
+                        "Это твой личный дневник побед. Чем больше закрытий на числе — " +
+                                "тем увереннее рука на этом чекауте в следующий раз.",
+                        color = Color.White.copy(alpha = 0.85f),
+                        fontSize = 12.sp,
+                        lineHeight = 17.sp
+                    )
+                }
+
+                Spacer(Modifier.height(12.dp))
+
+                // ── Сетка чекаутов ──
                 VALID_CHECKOUTS.chunked(5).forEach { row ->
                     Row(
                         modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
