@@ -51,56 +51,73 @@ fun CelebrationOverlay(
                 .fillMaxSize()
                 .background(Color.Black.copy(alpha = 0.6f))
         ) {
-            Column(
-                modifier = Modifier
-                    .align(Alignment.Center)
-                    .padding(20.dp)
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(20.dp))
-                    .background(TileBgDark)
-                    .padding(20.dp)
-                    .verticalScroll(rememberScrollState()),
-                horizontalAlignment = Alignment.CenterHorizontally
+            BoxWithConstraints(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
             ) {
-                content()
+                // Ограничиваем высоту карточки, чтобы она не вылезала за экран.
+                val maxCardHeight = maxHeight - 40.dp
 
-                Spacer(Modifier.height(18.dp))
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                Column(
+                    modifier = Modifier
+                        .padding(20.dp)
+                        .fillMaxWidth()
+                        .heightIn(max = maxCardHeight)
+                        .clip(RoundedCornerShape(20.dp))
+                        .background(TileBgDark)
+                        .padding(20.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Box(
+                    // ── Прокручиваемый контент (занимает всё свободное место) ──
+                    Column(
                         modifier = Modifier
-                            .weight(1f)
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(TileBg)
-                            .clickable { onUndo() }
-                            .padding(vertical = 14.dp),
-                        contentAlignment = Alignment.Center
+                            .fillMaxWidth()
+                            .weight(1f, fill = false)
+                            .verticalScroll(rememberScrollState()),
+                        horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        Text(
-                            "↶ Отменить",
-                            color = ErrorColor,
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Bold
-                        )
+                        content()
                     }
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(Accent)
-                            .clickable { onConfirm() }
-                            .padding(vertical = 14.dp),
-                        contentAlignment = Alignment.Center
+
+                    Spacer(Modifier.height(18.dp))
+
+                    // ── Фиксированные кнопки внизу — всегда видны ──
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        Text(
-                            "Продолжить",
-                            color = Color(0xFF121212),
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Bold
-                        )
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(TileBg)
+                                .clickable { onUndo() }
+                                .padding(vertical = 14.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                "↶ Отменить",
+                                color = ErrorColor,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(Accent)
+                                .clickable { onConfirm() }
+                                .padding(vertical = 14.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                "Продолжить",
+                                color = Color(0xFF121212),
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
                     }
                 }
             }
@@ -135,7 +152,7 @@ private fun CelebrationCanvas() {
         val t = elapsedMs / 1000f
         val totalSec = 4.5f
 
-        // ── Конфетти (крупнее и ярче) ──
+        // ── Конфетти ──
         confetti.forEach { c ->
             val x = c.startX * size.width + c.vx * t * 180f
             val y = c.startY * size.height + c.vy * t * 180f + 0.5f * 500f * t * t
@@ -159,24 +176,20 @@ private fun CelebrationCanvas() {
             val startY = size.height + 40f
             val targetY = r.targetY * size.height
 
-            // Фаза 1: взлёт
             if (local < r.riseDuration) {
                 val riseProgress = local / r.riseDuration
                 val curY = startY + (targetY - startY) * riseProgress
 
-                // Яркая голова ракеты
                 drawCircle(
                     color = Color.White.copy(alpha = 1f),
                     radius = 8f,
                     center = Offset(startX, curY)
                 )
-                // Свечение вокруг головы
                 drawCircle(
                     color = r.color.copy(alpha = 0.5f),
                     radius = 16f,
                     center = Offset(startX, curY)
                 )
-                // Хвост
                 drawCircle(
                     color = r.color.copy(alpha = 0.75f),
                     radius = 6f,
@@ -193,7 +206,6 @@ private fun CelebrationCanvas() {
                     center = Offset(startX, curY + 66f)
                 )
             } else {
-                // Фаза 2: взрыв
                 val explosionLocal = local - r.riseDuration
                 val explosionDuration = 2.0f
                 if (explosionLocal <= explosionDuration) {
@@ -203,7 +215,6 @@ private fun CelebrationCanvas() {
                     val radius = maxRadius * progress
                     val center = Offset(startX, targetY)
 
-                    // Яркая центральная вспышка (первые 0,6 сек)
                     if (progress < 0.6f) {
                         val cf = (1f - progress / 0.6f).coerceIn(0f, 1f)
                         drawCircle(
@@ -218,7 +229,6 @@ private fun CelebrationCanvas() {
                         )
                     }
 
-                    // Лучи (24 штуки) — ярче, крупнее
                     val rayCount = 24
                     for (i in 0 until rayCount) {
                         val angle = (i.toFloat() / rayCount) * 2f * Math.PI.toFloat()
@@ -227,13 +237,11 @@ private fun CelebrationCanvas() {
                         val dotX = center.x + dx
                         val dotY = center.y + dy
 
-                        // Внешний яркий шар
                         drawCircle(
                             color = r.color.copy(alpha = fade),
                             radius = 10f + (1f - progress) * 8f,
                             center = Offset(dotX, dotY)
                         )
-                        // Ядро луча
                         drawCircle(
                             color = Color.White.copy(alpha = fade * 0.9f),
                             radius = 4f + (1f - progress) * 3f,
@@ -241,7 +249,6 @@ private fun CelebrationCanvas() {
                         )
                     }
 
-                    // Второй слой лучей (на полпути между центром и краем) — для плотности
                     if (progress > 0.15f && progress < 0.85f) {
                         val innerRadius = radius * 0.55f
                         for (i in 0 until rayCount) {
