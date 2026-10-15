@@ -153,7 +153,6 @@ private fun ExpandableCard(
             .clip(RoundedCornerShape(14.dp))
             .background(TileBg)
     ) {
-        // Шапка
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -178,7 +177,6 @@ private fun ExpandableCard(
             )
         }
 
-        // Контент
         AnimatedVisibility(
             visible = expanded,
             enter = fadeIn(tween(200)) + expandVertically(tween(200)),
@@ -412,6 +410,23 @@ private fun TrainingContent() {
     Paragraph(
         "В тренировочных партиях 501 и Крикет авто-OK всегда включён на 3 секунды. " +
                 "Не нужно жать ОК после каждого подхода — партия идёт бодрее."
+    )
+
+    Spacer(Modifier.height(14.dp))
+
+    Text(
+        "Закрытые чекауты",
+        color = GoldAccent,
+        fontSize = 14.sp,
+        fontWeight = FontWeight.Bold
+    )
+    Spacer(Modifier.height(6.dp))
+    Paragraph(
+        "В разделе «Мой прогресс» есть кнопка 🏆 — там отмечено, какие чекауты " +
+                "(остатки 2–170) ты закрывал в тренировочных партиях 501. " +
+                "Чем больше раз закрыт остаток — тем ярче клетка на сетке. " +
+                "Это твой личный дневник побед: видишь, что уже делал это раньше — " +
+                "значит, сможешь и сейчас. Уверенность работает на результат."
     )
 }
 
