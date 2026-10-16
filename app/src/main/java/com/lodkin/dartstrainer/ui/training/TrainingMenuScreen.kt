@@ -35,13 +35,22 @@ import com.lodkin.dartstrainer.theme.GoldAccent
 import com.lodkin.dartstrainer.theme.TileBg
 import com.lodkin.dartstrainer.theme.TileBgDark
 
+/**
+ * Главный экран тренировки.
+ *
+ * @param normativesAvailable — true, если доступна сдача нормативов
+ *   (после 10+ тренировок или если есть незавершённые нормативы).
+ * @param onStartNormatives — колбэк запуска нормативов.
+ */
 @Composable
 fun TrainingMenuScreen(
     playerName: String,
     repository: TrainingRepository,
     @Suppress("UNUSED_PARAMETER") autoOpenTimeDialog: Boolean,
+    normativesAvailable: Boolean = false,
     onStartTraining: () -> Unit,
     onStartFreeTraining: () -> Unit,
+    onStartNormatives: () -> Unit = {},
     onOpenSettings: () -> Unit,
     onOpenProgress: () -> Unit,
     onBack: () -> Unit
@@ -150,6 +159,12 @@ fun TrainingMenuScreen(
 
         Spacer(Modifier.height(16.dp))
 
+        // ── Плашка «Пора сдать нормативы» ──
+        if (normativesAvailable) {
+            NormativesCallCard(onClick = onStartNormatives)
+            Spacer(Modifier.height(16.dp))
+        }
+
         // ── Кнопка «Свободная тренировка» с яркой пульсацией ──
         FreeTrainingButton(onClick = onStartFreeTraining)
 
@@ -237,13 +252,44 @@ fun TrainingMenuScreen(
     }
 }
 
+// ─────────────────────────────────────────────
+// Плашка «Пора сдать нормативы»
+// ─────────────────────────────────────────────
+
+@Composable
+private fun NormativesCallCard(onClick: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(GoldAccent.copy(alpha = 0.12f))
+            .clickable { onClick() }
+            .padding(16.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("📋", fontSize = 22.sp)
+            Spacer(Modifier.width(10.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    "Пора сдать нормативы",
+                    color = GoldAccent,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    "5 упражнений · проверь свой уровень",
+                    color = Color.White.copy(alpha = 0.7f),
+                    fontSize = 12.sp
+                )
+            }
+            Text("→", color = GoldAccent, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+        }
+    }
+}
+
 /**
  * Кнопка «Свободная тренировка» с яркой пульсацией.
- *
- * Пульсирует:
- *   • цвет текста — от мягкого голубого (Accent) к яркому светлому (#B3E5FC);
- *   • размер — лёгкое «дыхание» (100% → 108%);
- *   • период 0,7 сек в одну сторону.
  */
 @Composable
 private fun FreeTrainingButton(onClick: () -> Unit) {
@@ -258,14 +304,11 @@ private fun FreeTrainingButton(onClick: () -> Unit) {
         label = "free_pulse_value"
     )
 
-    // Цвет текста — от Accent (#4FC3F7) к яркому светлому (#B3E5FC)
     val textColor = lerp(
-        Color(0xFF4FC3F7),  // Accent
-        Color(0xFFB3E5FC),  // яркий светлый
+        Color(0xFF4FC3F7),
+        Color(0xFFB3E5FC),
         pulse
     )
-
-    // Плавное «дыхание» — 100% → 108%
     val scaleFactor = 1f + pulse * 0.08f
 
     Box(
@@ -485,7 +528,7 @@ private fun WelcomeNoTrainingCard(playerName: String) {
         )
         Spacer(Modifier.height(10.dp))
         Text(
-            "Каждые 10 тренировок — экзамен, на котором подтвердишь свой уровень.",
+            "Каждые 10 тренировок — сдача нормативов для подтверждения уровня.",
             color = Accent,
             fontSize = 13.sp
         )
