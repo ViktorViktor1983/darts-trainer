@@ -344,9 +344,6 @@ fun DartsTrainerApp() {
         }
     }
 
-    /**
-     * Название бота = название уровня. "Бот 8" → "Турнирный".
-     */
     fun botNameFor(level: Int): String = DartsNorms.getLevelName(level.coerceIn(1, 16))
 
     fun startTrainingGame(exerciseId: String, startingTeamIndex: Int) {
@@ -431,22 +428,24 @@ fun DartsTrainerApp() {
     // ─────────────────────────────────────────────
 
     fun saveNormativesSnapshot() {
+        val g501Results = mutableListOf<Boolean>()
+        repeat(normatives501PlayerWins) { g501Results.add(true) }
+        repeat(normatives501BotWins) { g501Results.add(false) }
+
+        val crResults = mutableListOf<Boolean>()
+        repeat(normativesCricketPlayerWins) { crResults.add(true) }
+        repeat(normativesCricketBotWins) { crResults.add(false) }
+
         NormativesStateStorage.save(
             context = context,
             completedSteps = normativesCompletedSteps,
             game501Levels = normatives501Levels,
-            game501Results = List(normatives501PlayerWins) { true } +
-                    List(normatives501BotWins) { false },
+            game501Results = g501Results,
             cricketLevels = normativesCricketLevels,
-            cricketResults = List(normativesCricketPlayerWins) { true } +
-                    List(normativesCricketBotWins) { false }
+            cricketResults = crResults
         )
     }
 
-    /**
-     * Лестница уровней ботов для 5 легов: −1, =, +1, −1, =.
-     * На краях (уровень 1 и 16) — все леги равные.
-     */
     fun buildBotLadder(startLevel: Int): List<Int> {
         return if (startLevel in 2..15) {
             listOf(
@@ -467,7 +466,6 @@ fun DartsTrainerApp() {
             val startLvl = analysis.level.coerceAtLeast(1)
             normativesStartLevel = startLvl
 
-            // Создаём тренировочную сессию для нормативов
             val session = TrainingSession(
                 dateMillis = System.currentTimeMillis(),
                 plannedMinutes = 30,
@@ -506,8 +504,34 @@ fun DartsTrainerApp() {
         NormativeStep.entries.firstOrNull { it.id !in normativesCompletedSteps }
 
     /**
-     * Запуск текущего шага нормативов.
+     * Оценка нормативов и завершение.
      */
+    fun evaluateAndFinishNormatives() {
+        scope.launch {
+            val analysis = TrainingStatsAnalyzer.analyze(trainingRepository)
+            val newLvl = analysis.level
+            val startLvl = normativesStartLevel
+
+            normativesNewLevel = if (newLvl > startLvl) newLvl else startLvl
+
+            if (newLvl > startLvl) {
+                trainingRepository.clearStatisticsAfterNormatives()
+                TrainingStateStorage.clear(context)
+                NormativesStateStorage.clear(context)
+                isTrainingActive = false
+                trainingSessionId = 0L
+            } else {
+                NormativesStateStorage.clear(context)
+                isTrainingActive = false
+                trainingSessionId = 0L
+            }
+
+            normativesActive = false
+            isNormativesExercise = false
+            screen = "normatives"
+        }
+    }
+
     fun launchNormativesStep(step: NormativeStep) {
         when (step) {
             NormativeStep.GAME_501 -> {
@@ -566,7 +590,6 @@ fun DartsTrainerApp() {
             NormativeStep.SCORE_SET -> {
                 isNormativesExercise = true
                 exerciseStartMillis = System.currentTimeMillis()
-                // Запускаем упражнение через обычный runner, но вернёмся в нормативы.
                 when (step) {
                     NormativeStep.SECTOR_20 -> sectorToPlay = 20
                     NormativeStep.BIG_ROUND -> bigRoundCategory = BigRoundCategory.MALE
@@ -609,38 +632,9 @@ fun DartsTrainerApp() {
             saveNormativesSnapshot()
         }
 
-        // Если все 5 шагов пройдены — оценка.
         if (normativesCompletedSteps.size == NormativeStep.entries.size) {
             evaluateAndFinishNormatives()
         } else {
-            screen = "normatives"
-        }
-    }
-
-    fun evaluateAndFinishNormatives() {
-        scope.launch {
-            val analysis = TrainingStatsAnalyzer.analyze(trainingRepository)
-            val newLvl = analysis.level
-            val startLvl = normativesStartLevel
-
-            normativesNewLevel = if (newLvl > startLvl) newLvl else startLvl
-
-            if (newLvl > startLvl) {
-                // Сдал — обнуляем статистику периода, но оставляем рекорды и чекауты.
-                trainingRepository.clearStatisticsAfterNormatives()
-                TrainingStateStorage.clear(context)
-                NormativesStateStorage.clear(context)
-                isTrainingActive = false
-                trainingSessionId = 0L
-            } else {
-                // Не сдал — статистика остаётся.
-                NormativesStateStorage.clear(context)
-                isTrainingActive = false
-                trainingSessionId = 0L
-            }
-
-            normativesActive = false
-            isNormativesExercise = false
             screen = "normatives"
         }
     }
@@ -652,7 +646,6 @@ fun DartsTrainerApp() {
         normativesNewLevel = null
         isNormativesExercise = false
         isTrainingActive = false
-        // Сессию нормативов не удаляем — результаты остаются в статистике.
         trainingSessionId = 0L
         screen = "training"
     }
@@ -831,11 +824,9 @@ fun DartsTrainerApp() {
 
         when {
             screen == "normatives" -> {
-                // Из норм-экрана назад → закрыть нормативы (с диалогом уже внутри экрана)
                 cancelNormatives()
             }
             screen == "normatives_exercise" -> {
-                // Из упражнения нормативов назад → вернуть в норм-экран (шаг не засчитан)
                 isNormativesExercise = false
                 sectorToPlay = null
                 bigRoundCategory = null
@@ -892,7 +883,6 @@ fun DartsTrainerApp() {
             "main" -> when (screen) {
                 "main" -> MainMenuScreen(
                     onTraining = {
-                        // Проверяем незавершённые нормативы (24 часа)
                         val snapN = NormativesStateStorage.load(context)
                         if (snapN != null) {
                             if (NormativesStateStorage.isExpired(snapN)) {
@@ -904,7 +894,6 @@ fun DartsTrainerApp() {
                                 autoOpenTimeDialog = false
                             }
                         }
-                        // Проверяем незавершённую тренировку
                         val snap = TrainingStateStorage.load(context)
                         if (snap != null && snap.sessionId > 0L) {
                             if (TrainingStateStorage.isExpired(snap)) {
@@ -919,7 +908,6 @@ fun DartsTrainerApp() {
                         } else {
                             autoOpenTimeDialog = true
                         }
-                        // Проверяем доступность нормативов
                         scope.launch {
                             val completed = trainingRepository.getCompletedSessionCount()
                             normativesAvailable = completed >= NORMATIVES_THRESHOLD
@@ -2012,7 +2000,6 @@ fun DartsTrainerApp() {
         )
     }
 
-    // ── Диалог «Незавершённые нормативы» ──
     if (showResumeNormativesDialog && pendingNormativesResume != null) {
         val snap = pendingNormativesResume!!
         val minutesAgo = NormativesStateStorage.minutesSinceLastUpdate(context)
@@ -2037,7 +2024,6 @@ fun DartsTrainerApp() {
             },
             confirmButton = {
                 TextButton(onClick = {
-                    // Восстанавливаем состояние
                     normativesCompletedSteps = snap.completedSteps
                     normatives501Levels = snap.game501Levels
                     normativesCricketLevels = snap.cricketLevels
