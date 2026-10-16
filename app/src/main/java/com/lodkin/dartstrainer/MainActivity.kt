@@ -48,7 +48,9 @@ import com.lodkin.dartstrainer.data.scoreset.ScoreSetRepository
 import com.lodkin.dartstrainer.data.sector.SectorDatabase
 import com.lodkin.dartstrainer.data.sector.SectorRepository
 import com.lodkin.dartstrainer.data.training.BlockType
+import com.lodkin.dartstrainer.data.training.DartsNorms
 import com.lodkin.dartstrainer.data.training.ExerciseResult
+import com.lodkin.dartstrainer.data.training.NormativesStateStorage
 import com.lodkin.dartstrainer.data.training.TrainingBlocksStorage
 import com.lodkin.dartstrainer.data.training.TrainingBotLevelStorage
 import com.lodkin.dartstrainer.data.training.TrainingDatabase
@@ -98,6 +100,8 @@ import com.lodkin.dartstrainer.ui.training.ExitTrainingDialog
 import com.lodkin.dartstrainer.ui.training.FreeRouletteScreen
 import com.lodkin.dartstrainer.ui.training.FreeTrainingSummaryScreen
 import com.lodkin.dartstrainer.ui.training.MainExerciseRunner
+import com.lodkin.dartstrainer.ui.training.NormativeStep
+import com.lodkin.dartstrainer.ui.training.NormativesScreen
 import com.lodkin.dartstrainer.ui.training.PlannedExercise
 import com.lodkin.dartstrainer.ui.training.RestTimerOverlay
 import com.lodkin.dartstrainer.ui.training.ResumeTrainingDialog
@@ -128,6 +132,11 @@ import kotlin.random.Random
  */
 private const val TRAINING_AUTO_OK_SECONDS = 3
 
+/**
+ * Порог, после которого предлагается сдача нормативов.
+ */
+private const val NORMATIVES_THRESHOLD = 10
+
 private val PARENT_SCREEN: Map<String, String> = mapOf(
     "stats_menu" to "main",
     "stats_cricket" to "stats_menu",
@@ -145,6 +154,7 @@ private val PARENT_SCREEN: Map<String, String> = mapOf(
     "training_extra_game" to "training_summary",
     "training_free_next" to "main",
     "training_free_summary" to "main",
+    "normatives" to "training",
     "game_select" to "main",
 
     "cricket_setup" to "game_select",
@@ -288,6 +298,24 @@ fun DartsTrainerApp() {
     var showBullDraw by remember { mutableStateOf(false) }
     var bullDrawExerciseId by remember { mutableStateOf<String?>(null) }
 
+    // ── Нормативы ──
+    var normativesAvailable by remember { mutableStateOf(false) }
+    var normativesActive by remember { mutableStateOf(false) }
+    var normativesCompletedSteps by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var normatives501Levels by remember { mutableStateOf<List<Int>>(emptyList()) }
+    var normatives501PlayerWins by remember { mutableStateOf(0) }
+    var normatives501BotWins by remember { mutableStateOf(0) }
+    var normatives501CurrentLeg by remember { mutableStateOf(0) }
+    var normativesCricketLevels by remember { mutableStateOf<List<Int>>(emptyList()) }
+    var normativesCricketPlayerWins by remember { mutableStateOf(0) }
+    var normativesCricketBotWins by remember { mutableStateOf(0) }
+    var normativesCricketCurrentLeg by remember { mutableStateOf(0) }
+    var normativesStartLevel by remember { mutableStateOf(1) }
+    var normativesNewLevel by remember { mutableStateOf<Int?>(null) }
+    var showResumeNormativesDialog by remember { mutableStateOf(false) }
+    var pendingNormativesResume by remember { mutableStateOf<NormativesStateStorage.Snapshot?>(null) }
+    var isNormativesExercise by remember { mutableStateOf(false) }
+
     fun showRestThen(restSeconds: Int, nextTitle: String?, nextStep: () -> Unit) {
         restTimerSeconds = restSeconds
         restNextTitle = nextTitle
@@ -316,6 +344,11 @@ fun DartsTrainerApp() {
         }
     }
 
+    /**
+     * Название бота = название уровня. "Бот 8" → "Турнирный".
+     */
+    fun botNameFor(level: Int): String = DartsNorms.getLevelName(level.coerceIn(1, 16))
+
     fun startTrainingGame(exerciseId: String, startingTeamIndex: Int) {
         exerciseStartMillis = System.currentTimeMillis()
         if (exerciseId == "game501") {
@@ -323,7 +356,7 @@ fun DartsTrainerApp() {
             val botLevel = TrainingBotLevelStorage.getLevel501(context, currentLevel)
             val players = listOf(
                 Player501(name = playerName, isBot = false, botLevel = 0, teamIndex = 0),
-                Player501(name = "Бот $botLevel", isBot = true, botLevel = botLevel, teamIndex = 1)
+                Player501(name = botNameFor(botLevel), isBot = true, botLevel = botLevel, teamIndex = 1)
             )
             game501 = Game501Logic.newGame(
                 gameType = GameType.X501,
@@ -345,7 +378,7 @@ fun DartsTrainerApp() {
             val botLevel = TrainingBotLevelStorage.getLevelCricket(context, currentLevel)
             val players = listOf(
                 CricketPlayer(name = playerName, isBot = false, botLevel = 0, teamIndex = 0),
-                CricketPlayer(name = "Бот $botLevel", isBot = true, botLevel = botLevel, teamIndex = 1)
+                CricketPlayer(name = botNameFor(botLevel), isBot = true, botLevel = botLevel, teamIndex = 1)
             )
             cricketGame = CricketLogic.newGame(
                 type = CricketType.AMERICAN,
@@ -393,12 +426,243 @@ fun DartsTrainerApp() {
         )
     }
 
+    // ─────────────────────────────────────────────
+    // НОРМАТИВЫ
+    // ─────────────────────────────────────────────
+
+    fun saveNormativesSnapshot() {
+        NormativesStateStorage.save(
+            context = context,
+            completedSteps = normativesCompletedSteps,
+            game501Levels = normatives501Levels,
+            game501Results = List(normatives501PlayerWins) { true } +
+                    List(normatives501BotWins) { false },
+            cricketLevels = normativesCricketLevels,
+            cricketResults = List(normativesCricketPlayerWins) { true } +
+                    List(normativesCricketBotWins) { false }
+        )
+    }
+
+    /**
+     * Лестница уровней ботов для 5 легов: −1, =, +1, −1, =.
+     * На краях (уровень 1 и 16) — все леги равные.
+     */
+    fun buildBotLadder(startLevel: Int): List<Int> {
+        return if (startLevel in 2..15) {
+            listOf(
+                startLevel - 1,
+                startLevel,
+                startLevel + 1,
+                startLevel - 1,
+                startLevel
+            ).map { it.coerceIn(1, 16) }
+        } else {
+            List(5) { startLevel.coerceIn(1, 16) }
+        }
+    }
+
+    fun startNewNormatives() {
+        scope.launch {
+            val analysis = TrainingStatsAnalyzer.analyze(trainingRepository)
+            val startLvl = analysis.level.coerceAtLeast(1)
+            normativesStartLevel = startLvl
+
+            // Создаём тренировочную сессию для нормативов
+            val session = TrainingSession(
+                dateMillis = System.currentTimeMillis(),
+                plannedMinutes = 30,
+                actualMinutes = 0,
+                levelAtStart = startLvl,
+                mode = TrainingMode.FLEXIBLE,
+                focus = null,
+                isControl = true,
+                isCompleted = false
+            )
+            trainingSessionId = trainingRepository.insertSession(session)
+            trainingElapsedSeconds = 0
+            trainingPaused = false
+
+            normativesActive = true
+            normativesCompletedSteps = emptySet()
+            normatives501Levels = buildBotLadder(startLvl)
+            normatives501PlayerWins = 0
+            normatives501BotWins = 0
+            normatives501CurrentLeg = 0
+            normativesCricketLevels = buildBotLadder(startLvl)
+            normativesCricketPlayerWins = 0
+            normativesCricketBotWins = 0
+            normativesCricketCurrentLeg = 0
+            normativesNewLevel = null
+            isNormativesExercise = false
+            isTrainingActive = true
+            isFreeTraining = false
+
+            saveNormativesSnapshot()
+            screen = "normatives"
+        }
+    }
+
+    fun currentNormativeStep(): NormativeStep? =
+        NormativeStep.entries.firstOrNull { it.id !in normativesCompletedSteps }
+
+    /**
+     * Запуск текущего шага нормативов.
+     */
+    fun launchNormativesStep(step: NormativeStep) {
+        when (step) {
+            NormativeStep.GAME_501 -> {
+                val leg = normatives501CurrentLeg
+                val botLevel = normatives501Levels.getOrNull(leg) ?: normativesStartLevel
+                val playerName = SettingsStorage.getPlayerName(context).ifBlank { "Игрок" }
+                val players = listOf(
+                    Player501(name = playerName, isBot = false, botLevel = 0, teamIndex = 0),
+                    Player501(name = botNameFor(botLevel), isBot = true, botLevel = botLevel, teamIndex = 1)
+                )
+                game501 = Game501Logic.newGame(
+                    gameType = GameType.X501,
+                    outMode = OutMode.DOUBLE_OUT,
+                    players = players,
+                    legsPerSet = 1,
+                    setsPerMatch = 1,
+                    isPairGame = false,
+                    startingTeamIndex = 0,
+                    autoOkSeconds = TRAINING_AUTO_OK_SECONDS,
+                    sessionStartTime = sessionStartTime,
+                    sessionForm = sessionForm
+                )
+                game501ExistingId = 0L
+                isTraining501 = true
+                isNormativesExercise = true
+                exerciseStartMillis = System.currentTimeMillis()
+                screen = "game501_game"
+            }
+            NormativeStep.CRICKET -> {
+                val leg = normativesCricketCurrentLeg
+                val botLevel = normativesCricketLevels.getOrNull(leg) ?: normativesStartLevel
+                val playerName = SettingsStorage.getPlayerName(context).ifBlank { "Игрок" }
+                val players = listOf(
+                    CricketPlayer(name = playerName, isBot = false, botLevel = 0, teamIndex = 0),
+                    CricketPlayer(name = botNameFor(botLevel), isBot = true, botLevel = botLevel, teamIndex = 1)
+                )
+                cricketGame = CricketLogic.newGame(
+                    type = CricketType.AMERICAN,
+                    players = players,
+                    legsPerSet = 1,
+                    setsPerMatch = 1,
+                    isPairGame = false,
+                    startingTeamIndex = 0,
+                    autoOkSeconds = TRAINING_AUTO_OK_SECONDS,
+                    sessionStartTime = sessionStartTime,
+                    sessionForm = sessionForm
+                )
+                cricketExistingId = 0L
+                isTrainingCricket = true
+                isNormativesExercise = true
+                exerciseStartMillis = System.currentTimeMillis()
+                screen = "cricket_game"
+            }
+            NormativeStep.SECTOR_20,
+            NormativeStep.BIG_ROUND,
+            NormativeStep.SCORE_SET -> {
+                isNormativesExercise = true
+                exerciseStartMillis = System.currentTimeMillis()
+                // Запускаем упражнение через обычный runner, но вернёмся в нормативы.
+                when (step) {
+                    NormativeStep.SECTOR_20 -> sectorToPlay = 20
+                    NormativeStep.BIG_ROUND -> bigRoundCategory = BigRoundCategory.MALE
+                    else -> Unit
+                }
+                screen = "normatives_exercise"
+            }
+        }
+    }
+
+    /**
+     * После одного лега партии 501/Крикета в нормативах.
+     */
+    fun afterNormativesLeg(playerWon: Boolean, isGame501: Boolean) {
+        if (isGame501) {
+            if (playerWon) normatives501PlayerWins += 1
+            else normatives501BotWins += 1
+            normatives501CurrentLeg += 1
+
+            val finished = normatives501PlayerWins >= 3 ||
+                    normatives501BotWins >= 3 ||
+                    normatives501CurrentLeg >= 5
+
+            if (finished) {
+                normativesCompletedSteps = normativesCompletedSteps + NormativeStep.GAME_501.id
+            }
+            saveNormativesSnapshot()
+        } else {
+            if (playerWon) normativesCricketPlayerWins += 1
+            else normativesCricketBotWins += 1
+            normativesCricketCurrentLeg += 1
+
+            val finished = normativesCricketPlayerWins >= 3 ||
+                    normativesCricketBotWins >= 3 ||
+                    normativesCricketCurrentLeg >= 5
+
+            if (finished) {
+                normativesCompletedSteps = normativesCompletedSteps + NormativeStep.CRICKET.id
+            }
+            saveNormativesSnapshot()
+        }
+
+        // Если все 5 шагов пройдены — оценка.
+        if (normativesCompletedSteps.size == NormativeStep.entries.size) {
+            evaluateAndFinishNormatives()
+        } else {
+            screen = "normatives"
+        }
+    }
+
+    fun evaluateAndFinishNormatives() {
+        scope.launch {
+            val analysis = TrainingStatsAnalyzer.analyze(trainingRepository)
+            val newLvl = analysis.level
+            val startLvl = normativesStartLevel
+
+            normativesNewLevel = if (newLvl > startLvl) newLvl else startLvl
+
+            if (newLvl > startLvl) {
+                // Сдал — обнуляем статистику периода, но оставляем рекорды и чекауты.
+                trainingRepository.clearStatisticsAfterNormatives()
+                TrainingStateStorage.clear(context)
+                NormativesStateStorage.clear(context)
+                isTrainingActive = false
+                trainingSessionId = 0L
+            } else {
+                // Не сдал — статистика остаётся.
+                NormativesStateStorage.clear(context)
+                isTrainingActive = false
+                trainingSessionId = 0L
+            }
+
+            normativesActive = false
+            isNormativesExercise = false
+            screen = "normatives"
+        }
+    }
+
+    fun cancelNormatives() {
+        NormativesStateStorage.clear(context)
+        normativesActive = false
+        normativesCompletedSteps = emptySet()
+        normativesNewLevel = null
+        isNormativesExercise = false
+        isTrainingActive = false
+        // Сессию нормативов не удаляем — результаты остаются в статистике.
+        trainingSessionId = 0L
+        screen = "training"
+    }
+
     LaunchedEffect(isTrainingActive, trainingPaused, screen) {
         if (!isTrainingActive || trainingPaused || screen !in TRAINING_SCREENS) return@LaunchedEffect
         while (true) {
             delay(1000L)
             trainingElapsedSeconds += 1
-            if (!isFreeTraining && trainingElapsedSeconds >= trainingMinutes * 60) {
+            if (!isFreeTraining && !normativesActive && trainingElapsedSeconds >= trainingMinutes * 60) {
                 showTimeUpDialog = true
                 break
             }
@@ -410,7 +674,7 @@ fun DartsTrainerApp() {
     LaunchedEffect(
         trainingSessionId, currentPhase, currentExerciseIndex, exerciseStatuses, mainExercises
     ) {
-        if (isTrainingActive && trainingSessionId > 0L && !isFreeTraining) {
+        if (isTrainingActive && trainingSessionId > 0L && !isFreeTraining && !normativesActive) {
             saveCurrentTrainingState()
         }
     }
@@ -419,7 +683,7 @@ fun DartsTrainerApp() {
         if (!isTrainingActive || screen !in TRAINING_SCREENS) return@LaunchedEffect
         while (true) {
             delay(30_000L)
-            if (!isFreeTraining) saveCurrentTrainingState()
+            if (!isFreeTraining && !normativesActive) saveCurrentTrainingState()
         }
     }
 
@@ -453,6 +717,18 @@ fun DartsTrainerApp() {
         showFreeNewRoundDialog = false
         showBullDraw = false
         bullDrawExerciseId = null
+        normativesActive = false
+        normativesCompletedSteps = emptySet()
+        normatives501Levels = emptyList()
+        normatives501PlayerWins = 0
+        normatives501BotWins = 0
+        normatives501CurrentLeg = 0
+        normativesCricketLevels = emptyList()
+        normativesCricketPlayerWins = 0
+        normativesCricketBotWins = 0
+        normativesCricketCurrentLeg = 0
+        normativesNewLevel = null
+        isNormativesExercise = false
     }
 
     fun activePhases(): List<TrainingBlockPhase> {
@@ -554,6 +830,17 @@ fun DartsTrainerApp() {
         val isTrainingScreen = screen in TRAINING_SCREENS || screen == "training"
 
         when {
+            screen == "normatives" -> {
+                // Из норм-экрана назад → закрыть нормативы (с диалогом уже внутри экрана)
+                cancelNormatives()
+            }
+            screen == "normatives_exercise" -> {
+                // Из упражнения нормативов назад → вернуть в норм-экран (шаг не засчитан)
+                isNormativesExercise = false
+                sectorToPlay = null
+                bigRoundCategory = null
+                screen = "normatives"
+            }
             isFreeTraining -> {
                 if (screen == "training_free_summary") {
                     resetTrainingState()
@@ -564,7 +851,7 @@ fun DartsTrainerApp() {
                     screen = "training_free_summary"
                 }
             }
-            isTrainingScreen && isTrainingActive && trainingSessionId > 0L && screen != "training_summary" -> {
+            isTrainingScreen && isTrainingActive && trainingSessionId > 0L && screen != "training_summary" && !normativesActive -> {
                 showExitTrainingDialog = true
             }
             else -> {
@@ -605,6 +892,19 @@ fun DartsTrainerApp() {
             "main" -> when (screen) {
                 "main" -> MainMenuScreen(
                     onTraining = {
+                        // Проверяем незавершённые нормативы (24 часа)
+                        val snapN = NormativesStateStorage.load(context)
+                        if (snapN != null) {
+                            if (NormativesStateStorage.isExpired(snapN)) {
+                                NormativesStateStorage.clear(context)
+                                pendingNormativesResume = null
+                            } else {
+                                pendingNormativesResume = snapN
+                                showResumeNormativesDialog = true
+                                autoOpenTimeDialog = false
+                            }
+                        }
+                        // Проверяем незавершённую тренировку
                         val snap = TrainingStateStorage.load(context)
                         if (snap != null && snap.sessionId > 0L) {
                             if (TrainingStateStorage.isExpired(snap)) {
@@ -618,6 +918,11 @@ fun DartsTrainerApp() {
                             }
                         } else {
                             autoOpenTimeDialog = true
+                        }
+                        // Проверяем доступность нормативов
+                        scope.launch {
+                            val completed = trainingRepository.getCompletedSessionCount()
+                            normativesAvailable = completed >= NORMATIVES_THRESHOLD
                         }
                         screen = "training"
                     },
@@ -677,6 +982,7 @@ fun DartsTrainerApp() {
                         sectorToPlay = null
                         aroundClockTarget = null; aroundClockOrder = null; aroundClockHits = 1
                         bigRoundCategory = null
+                        NormativesStateStorage.clear(context)
                         resetTrainingState(); autoOpenTimeDialog = true
                         onboardingDone = false; screen = "main"; stage = "welcome"
                     }
@@ -690,6 +996,7 @@ fun DartsTrainerApp() {
                     playerName = SettingsStorage.getPlayerName(context),
                     repository = trainingRepository,
                     autoOpenTimeDialog = autoOpenTimeDialog,
+                    normativesAvailable = normativesAvailable,
                     onStartTraining = {
                         autoOpenTimeDialog = false
                         trainingMinutes = context
@@ -835,6 +1142,7 @@ fun DartsTrainerApp() {
                             screen = "training_free_next"
                         }
                     },
+                    onStartNormatives = { startNewNormatives() },
                     onOpenSettings = {
                         autoOpenTimeDialog = false
                         screen = "training_settings"
@@ -844,7 +1152,7 @@ fun DartsTrainerApp() {
                         screen = "training_progress"
                     },
                     onBack = {
-                        if (isTrainingActive && trainingSessionId > 0L && !isFreeTraining) {
+                        if (isTrainingActive && trainingSessionId > 0L && !isFreeTraining && !normativesActive) {
                             showExitTrainingDialog = true
                         } else {
                             autoOpenTimeDialog = true
@@ -852,6 +1160,179 @@ fun DartsTrainerApp() {
                         }
                     }
                 )
+
+                "normatives" -> {
+                    NormativesScreen(
+                        playerName = SettingsStorage.getPlayerName(context),
+                        currentLevel = normativesStartLevel,
+                        completedSteps = normativesCompletedSteps,
+                        currentStep = currentNormativeStep(),
+                        newLevel = normativesNewLevel,
+                        onStartStep = { step -> launchNormativesStep(step) },
+                        onFinish = {
+                            normativesActive = false
+                            normativesNewLevel = null
+                            normativesCompletedSteps = emptySet()
+                            isNormativesExercise = false
+                            isTrainingActive = false
+                            trainingSessionId = 0L
+                            screen = "training"
+                        },
+                        onCancel = { cancelNormatives() }
+                    )
+                }
+
+                "normatives_exercise" -> {
+                    val step = currentNormativeStep()
+                    if (step == null) {
+                        screen = "normatives"
+                    } else {
+                        when (step) {
+                            NormativeStep.SECTOR_20 -> SectorGameScreen(
+                                sector = 20,
+                                repository = sectorRepository,
+                                isTrainingMode = true,
+                                trainingRepository = trainingRepository,
+                                trainingRecordKey = "sector20",
+                                onFinish = { score ->
+                                    val duration = if (exerciseStartMillis > 0L)
+                                        ((System.currentTimeMillis() - exerciseStartMillis) / 1000L).toInt()
+                                    else 0
+                                    exerciseStartMillis = 0L
+                                    scope.launch {
+                                        trainingRepository.insertExerciseResult(
+                                            ExerciseResult(
+                                                sessionId = trainingSessionId,
+                                                blockType = BlockType.SCORE,
+                                                exerciseId = "sector20",
+                                                score = score,
+                                                dartsThrown = 30,
+                                                timestamp = System.currentTimeMillis(),
+                                                durationSeconds = duration,
+                                                detailsJson = ""
+                                            )
+                                        )
+                                        trainingRepository.updateTrainingRecordIfBetter(
+                                            exerciseId = "sector20",
+                                            score = score,
+                                            darts = 30,
+                                            lowerDartsBetter = false
+                                        )
+                                        normativesCompletedSteps = normativesCompletedSteps + NormativeStep.SECTOR_20.id
+                                        saveNormativesSnapshot()
+                                        if (normativesCompletedSteps.size == NormativeStep.entries.size) {
+                                            evaluateAndFinishNormatives()
+                                        } else {
+                                            isNormativesExercise = false
+                                            sectorToPlay = null
+                                            screen = "normatives"
+                                        }
+                                    }
+                                },
+                                onBack = {
+                                    isNormativesExercise = false
+                                    sectorToPlay = null
+                                    screen = "normatives"
+                                }
+                            )
+                            NormativeStep.BIG_ROUND -> BigRoundGameScreen(
+                                category = BigRoundCategory.MALE,
+                                repository = bigRoundRepository,
+                                isTrainingMode = true,
+                                trainingRepository = trainingRepository,
+                                trainingRecordKey = "biground",
+                                onFinish = { score ->
+                                    val duration = if (exerciseStartMillis > 0L)
+                                        ((System.currentTimeMillis() - exerciseStartMillis) / 1000L).toInt()
+                                    else 0
+                                    exerciseStartMillis = 0L
+                                    scope.launch {
+                                        trainingRepository.insertExerciseResult(
+                                            ExerciseResult(
+                                                sessionId = trainingSessionId,
+                                                blockType = BlockType.SECTOR,
+                                                exerciseId = "biground",
+                                                score = score,
+                                                dartsThrown = 63,
+                                                timestamp = System.currentTimeMillis(),
+                                                durationSeconds = duration,
+                                                detailsJson = ""
+                                            )
+                                        )
+                                        trainingRepository.updateTrainingRecordIfBetter(
+                                            exerciseId = "biground",
+                                            score = score,
+                                            darts = 63,
+                                            lowerDartsBetter = false
+                                        )
+                                        normativesCompletedSteps = normativesCompletedSteps + NormativeStep.BIG_ROUND.id
+                                        saveNormativesSnapshot()
+                                        if (normativesCompletedSteps.size == NormativeStep.entries.size) {
+                                            evaluateAndFinishNormatives()
+                                        } else {
+                                            isNormativesExercise = false
+                                            bigRoundCategory = null
+                                            screen = "normatives"
+                                        }
+                                    }
+                                },
+                                onBack = {
+                                    isNormativesExercise = false
+                                    bigRoundCategory = null
+                                    screen = "normatives"
+                                }
+                            )
+                            NormativeStep.SCORE_SET -> ScoreSetGameScreen(
+                                repository = scoreSetRepository,
+                                isTrainingMode = true,
+                                trainingRepository = trainingRepository,
+                                trainingRecordKey = "scoreset",
+                                onFinish = { totalScore, approaches ->
+                                    val duration = if (exerciseStartMillis > 0L)
+                                        ((System.currentTimeMillis() - exerciseStartMillis) / 1000L).toInt()
+                                    else 0
+                                    exerciseStartMillis = 0L
+                                    scope.launch {
+                                        trainingRepository.insertExerciseResult(
+                                            ExerciseResult(
+                                                sessionId = trainingSessionId,
+                                                blockType = BlockType.SCORE,
+                                                exerciseId = "scoreset",
+                                                score = totalScore,
+                                                dartsThrown = approaches * 3,
+                                                timestamp = System.currentTimeMillis(),
+                                                durationSeconds = duration,
+                                                detailsJson = ""
+                                            )
+                                        )
+                                        trainingRepository.updateTrainingRecordIfBetter(
+                                            exerciseId = "scoreset",
+                                            score = totalScore,
+                                            darts = approaches * 3,
+                                            lowerDartsBetter = false
+                                        )
+                                        normativesCompletedSteps = normativesCompletedSteps + NormativeStep.SCORE_SET.id
+                                        saveNormativesSnapshot()
+                                        if (normativesCompletedSteps.size == NormativeStep.entries.size) {
+                                            evaluateAndFinishNormatives()
+                                        } else {
+                                            isNormativesExercise = false
+                                            screen = "normatives"
+                                        }
+                                    }
+                                },
+                                onBack = {
+                                    isNormativesExercise = false
+                                    screen = "normatives"
+                                }
+                            )
+                            else -> {
+                                isNormativesExercise = false
+                                screen = "normatives"
+                            }
+                        }
+                    }
+                }
 
                 "training_settings" -> TrainingSettingsScreen(
                     repository = trainingRepository,
@@ -1219,6 +1700,7 @@ fun DartsTrainerApp() {
                                 exerciseStartMillis = 0L
                                 val botLevel = g.players.getOrNull(1)?.botLevel ?: 1
                                 TrainingBotLevelStorage.updateLevelCricket(context, botLevel, playerWon)
+                                val isNorm = isNormativesExercise
                                 scope.launch {
                                     trainingRepository.insertExerciseResult(
                                         ExerciseResult(
@@ -1236,7 +1718,12 @@ fun DartsTrainerApp() {
                                 isTrainingCricket = false
                                 cricketGame = null
                                 cricketExistingId = 0L
-                                finishCurrentMainExercise()
+
+                                if (isNorm) {
+                                    afterNormativesLeg(playerWon, isGame501 = false)
+                                } else {
+                                    finishCurrentMainExercise()
+                                }
                             } else {
                                 scope.launch { cricketRepository.saveGame(f, existingId = id) }
                                 cricketGame = f; cricketExistingId = 0L; screen = "cricket_stats"
@@ -1244,11 +1731,15 @@ fun DartsTrainerApp() {
                         },
                         onBack = {
                             val wasTraining = isTrainingCricket
+                            val wasNorm = isNormativesExercise
                             isTrainingCricket = false
+                            isNormativesExercise = false
                             cricketGame = null; cricketExistingId = 0L
-                            screen = if (wasTraining) {
-                                if (isFreeTraining) "training_free_next" else "training_block"
-                            } else "game_select"
+                            screen = when {
+                                wasNorm -> "normatives"
+                                wasTraining -> if (isFreeTraining) "training_free_next" else "training_block"
+                                else -> "game_select"
+                            }
                         }
                     ) else screen = "cricket_setup"
                 }
@@ -1293,7 +1784,6 @@ fun DartsTrainerApp() {
                                 val dbl = player?.let { p -> Game501Logic.doublesAccuracy(p) } ?: 0.0
                                 val pprStr = String.format(Locale.US, "%.1f", ppr)
                                 val dblStr = dbl.toInt().toString()
-                                // Список закрытых чекаутов из этой партии.
                                 val closeValues = player?.listOfCloseValues ?: emptyList()
                                 val dur = if (exerciseStartMillis > 0L)
                                     ((System.currentTimeMillis() - exerciseStartMillis) / 1000L).toInt()
@@ -1301,8 +1791,8 @@ fun DartsTrainerApp() {
                                 exerciseStartMillis = 0L
                                 val botLevel = g.players.getOrNull(1)?.botLevel ?: 1
                                 TrainingBotLevelStorage.updateLevel501(context, botLevel, playerWon)
+                                val isNorm = isNormativesExercise
                                 scope.launch {
-                                    // Записываем результаты упражнения (без close — он идёт отдельно).
                                     trainingRepository.insertExerciseResult(
                                         ExerciseResult(
                                             sessionId = trainingSessionId,
@@ -1315,7 +1805,6 @@ fun DartsTrainerApp() {
                                             detailsJson = "won=$playerWon;ppr=$pprStr;dbl=$dblStr"
                                         )
                                     )
-                                    // Записываем чекауты в отдельную таблицу (переживают нормативы).
                                     closeValues.forEach { value ->
                                         trainingRepository.recordCheckout(value)
                                     }
@@ -1323,7 +1812,12 @@ fun DartsTrainerApp() {
                                 isTraining501 = false
                                 game501 = null
                                 game501ExistingId = 0L
-                                finishCurrentMainExercise()
+
+                                if (isNorm) {
+                                    afterNormativesLeg(playerWon, isGame501 = true)
+                                } else {
+                                    finishCurrentMainExercise()
+                                }
                             } else {
                                 scope.launch { game501Repository.saveGame(f, existingId = id) }
                                 game501 = f; game501ExistingId = 0L; screen = "game501_stats"
@@ -1331,11 +1825,15 @@ fun DartsTrainerApp() {
                         },
                         onBack = {
                             val wasTraining = isTraining501
+                            val wasNorm = isNormativesExercise
                             isTraining501 = false
+                            isNormativesExercise = false
                             game501 = null; game501ExistingId = 0L
-                            screen = if (wasTraining) {
-                                if (isFreeTraining) "training_free_next" else "training_block"
-                            } else "game_select"
+                            screen = when {
+                                wasNorm -> "normatives"
+                                wasTraining -> if (isFreeTraining) "training_free_next" else "training_block"
+                                else -> "game_select"
+                            }
                         }
                     ) else screen = "game501_setup"
                 }
@@ -1448,7 +1946,7 @@ fun DartsTrainerApp() {
             }
         }
 
-        if (isTrainingActive && screen in TRAINING_SCREENS && !showRestTimer && screen != "training_free_summary") {
+        if (isTrainingActive && screen in TRAINING_SCREENS && !showRestTimer && screen != "training_free_summary" && !normativesActive) {
             TrainingTimerOverlay(
                 secondsLeft = if (isFreeTraining) trainingElapsedSeconds else trainingSecondsLeft,
                 isPaused = trainingPaused,
@@ -1481,7 +1979,7 @@ fun DartsTrainerApp() {
         }
         BullDrawDialog(
             playerName = playerName,
-            botName = "Бот $botLevel",
+            botName = botNameFor(botLevel),
             botLevel = botLevel,
             onWinnerChosen = { winner ->
                 showBullDraw = false
@@ -1510,6 +2008,68 @@ fun DartsTrainerApp() {
                 saveCurrentTrainingState()
                 autoOpenTimeDialog = false
                 screen = "main"
+            }
+        )
+    }
+
+    // ── Диалог «Незавершённые нормативы» ──
+    if (showResumeNormativesDialog && pendingNormativesResume != null) {
+        val snap = pendingNormativesResume!!
+        val minutesAgo = NormativesStateStorage.minutesSinceLastUpdate(context)
+        AlertDialog(
+            onDismissRequest = { },
+            containerColor = TileBgDark,
+            title = {
+                Text(
+                    "Незавершённые нормативы",
+                    color = GoldAccent,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Text(
+                    "У тебя есть незавершённая сдача нормативов. " +
+                            if (minutesAgo > 0) "Прошло $minutesAgo мин." else "Только что прервана.",
+                    color = Color.White.copy(alpha = 0.85f),
+                    fontSize = 14.sp
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    // Восстанавливаем состояние
+                    normativesCompletedSteps = snap.completedSteps
+                    normatives501Levels = snap.game501Levels
+                    normativesCricketLevels = snap.cricketLevels
+                    normatives501PlayerWins = snap.game501Results.count { it }
+                    normatives501BotWins = snap.game501Results.count { !it }
+                    normatives501CurrentLeg = snap.game501Results.size
+                    normativesCricketPlayerWins = snap.cricketResults.count { it }
+                    normativesCricketBotWins = snap.cricketResults.count { !it }
+                    normativesCricketCurrentLeg = snap.cricketResults.size
+
+                    scope.launch {
+                        val analysis = TrainingStatsAnalyzer.analyze(trainingRepository)
+                        normativesStartLevel = analysis.level.coerceAtLeast(1)
+                    }
+                    normativesActive = true
+                    normativesNewLevel = null
+                    showResumeNormativesDialog = false
+                    pendingNormativesResume = null
+                    screen = "normatives"
+                }) {
+                    Text("Продолжить", color = Accent, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    NormativesStateStorage.clear(context)
+                    showResumeNormativesDialog = false
+                    pendingNormativesResume = null
+                    autoOpenTimeDialog = true
+                }) {
+                    Text("Начать заново", color = Color.White.copy(alpha = 0.75f))
+                }
             }
         )
     }
