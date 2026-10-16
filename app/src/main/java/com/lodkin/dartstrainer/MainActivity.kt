@@ -298,7 +298,6 @@ fun DartsTrainerApp() {
     var showBullDraw by remember { mutableStateOf(false) }
     var bullDrawExerciseId by remember { mutableStateOf<String?>(null) }
 
-    // ── Нормативы ──
     var normativesAvailable by remember { mutableStateOf(false) }
     var normativesActive by remember { mutableStateOf(false) }
     var normativesCompletedSteps by remember { mutableStateOf<Set<String>>(emptySet()) }
@@ -423,10 +422,6 @@ fun DartsTrainerApp() {
         )
     }
 
-    // ─────────────────────────────────────────────
-    // НОРМАТИВЫ
-    // ─────────────────────────────────────────────
-
     fun saveNormativesSnapshot() {
         val g501Results = mutableListOf<Boolean>()
         repeat(normatives501PlayerWins) { g501Results.add(true) }
@@ -503,9 +498,6 @@ fun DartsTrainerApp() {
     fun currentNormativeStep(): NormativeStep? =
         NormativeStep.entries.firstOrNull { it.id !in normativesCompletedSteps }
 
-    /**
-     * Оценка нормативов и завершение.
-     */
     fun evaluateAndFinishNormatives() {
         scope.launch {
             val analysis = TrainingStatsAnalyzer.analyze(trainingRepository)
@@ -600,9 +592,6 @@ fun DartsTrainerApp() {
         }
     }
 
-    /**
-     * После одного лега партии 501/Крикета в нормативах.
-     */
     fun afterNormativesLeg(playerWon: Boolean, isGame501: Boolean) {
         if (isGame501) {
             if (playerWon) normatives501PlayerWins += 1
@@ -1280,6 +1269,7 @@ fun DartsTrainerApp() {
                                         ((System.currentTimeMillis() - exerciseStartMillis) / 1000L).toInt()
                                     else 0
                                     exerciseStartMillis = 0L
+                                    val dartsCount = approaches.size * 3
                                     scope.launch {
                                         trainingRepository.insertExerciseResult(
                                             ExerciseResult(
@@ -1287,7 +1277,7 @@ fun DartsTrainerApp() {
                                                 blockType = BlockType.SCORE,
                                                 exerciseId = "scoreset",
                                                 score = totalScore,
-                                                dartsThrown = approaches * 3,
+                                                dartsThrown = dartsCount,
                                                 timestamp = System.currentTimeMillis(),
                                                 durationSeconds = duration,
                                                 detailsJson = ""
@@ -1296,7 +1286,7 @@ fun DartsTrainerApp() {
                                         trainingRepository.updateTrainingRecordIfBetter(
                                             exerciseId = "scoreset",
                                             score = totalScore,
-                                            darts = approaches * 3,
+                                            darts = dartsCount,
                                             lowerDartsBetter = false
                                         )
                                         normativesCompletedSteps = normativesCompletedSteps + NormativeStep.SCORE_SET.id
