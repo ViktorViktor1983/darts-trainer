@@ -31,14 +31,6 @@ import java.util.Locale
 
 /**
  * Экран «Мой прогресс».
- *
- * Показывает:
- *   • Итоговый уровень (максимум из двух комплексов).
- *   • Комплекс 1 — упражнения (4 параметра).
- *   • Комплекс 2 — игры (501 + Крикет).
- *   • Подсказку при расхождении (даже в 1 уровень).
- *   • Слабое место и средний темп.
- *   • Кнопка 🏆 — закрытые чекауты.
  */
 @Composable
 fun TrainingProgressScreen(
@@ -54,7 +46,7 @@ fun TrainingProgressScreen(
     LaunchedEffect(Unit) {
         analysis = TrainingStatsAnalyzer.analyze(repository)
         checkoutsMap = withContext(Dispatchers.IO) {
-            loadTrainingCheckouts(repository)
+            repository.getAllCheckouts()
         }
         loading = false
     }
@@ -65,7 +57,6 @@ fun TrainingProgressScreen(
             .background(Color(0xFF0D1117))
             .padding(16.dp)
     ) {
-        // ── Верхняя панель ──
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
@@ -138,17 +129,14 @@ fun TrainingProgressScreen(
                 Spacer(Modifier.height(16.dp))
             }
 
-            // ── Итоговый уровень ──
             FinalLevelBlock(a)
             Spacer(Modifier.height(16.dp))
 
-            // ── Подсказка при расхождении ──
             if (a.gamesLagBehind || a.exercisesLagBehind) {
                 DivergenceCard(a)
                 Spacer(Modifier.height(16.dp))
             }
 
-            // ── Комплекс 1: упражнения ──
             SectionTitle("КОМПЛЕКС 1 — УПРАЖНЕНИЯ")
             Spacer(Modifier.height(10.dp))
             ComplexHeader(
@@ -187,7 +175,6 @@ fun TrainingProgressScreen(
 
             Spacer(Modifier.height(20.dp))
 
-            // ── Комплекс 2: игры ──
             SectionTitle("КОМПЛЕКС 2 — ИГРЫ")
             Spacer(Modifier.height(10.dp))
             ComplexHeader(
@@ -216,7 +203,6 @@ fun TrainingProgressScreen(
 
             Spacer(Modifier.height(20.dp))
 
-            // ── Слабое место ──
             if (a.weakestType != null) {
                 SectionTitle("СЛАБОЕ МЕСТО")
                 Spacer(Modifier.height(10.dp))
@@ -244,7 +230,6 @@ fun TrainingProgressScreen(
                 Spacer(Modifier.height(20.dp))
             }
 
-            // ── Твой темп ──
             if (a.avgMinutesByExercise.isNotEmpty()) {
                 SectionTitle("ТВОЙ ТЕМП")
                 Spacer(Modifier.height(10.dp))
@@ -359,7 +344,7 @@ private fun FinalLevelBlock(a: TrainingStatsAnalyzer.TrainingAnalysis) {
 }
 
 // ─────────────────────────────────────────────
-// Подсказка при расхождении комплексов
+// Подсказка при расхождении
 // ─────────────────────────────────────────────
 
 @Composable
@@ -400,10 +385,6 @@ private fun DivergenceCard(a: TrainingStatsAnalyzer.TrainingAnalysis) {
         )
     }
 }
-
-// ─────────────────────────────────────────────
-// Шапка комплекса
-// ─────────────────────────────────────────────
 
 @Composable
 private fun ComplexHeader(level: Int, subtitle: String) {
@@ -447,10 +428,6 @@ private fun ComplexHeader(level: Int, subtitle: String) {
         }
     }
 }
-
-// ─────────────────────────────────────────────
-// Строка параметра
-// ─────────────────────────────────────────────
 
 @Composable
 private fun ParamRow(
@@ -533,36 +510,6 @@ private fun SectionTitle(text: String) {
         fontWeight = FontWeight.Bold,
         letterSpacing = 2.sp
     )
-}
-
-// ─────────────────────────────────────────────
-// Загрузка закрытых чекаутов из тренировочных партий 501
-// ─────────────────────────────────────────────
-
-private suspend fun loadTrainingCheckouts(repository: TrainingRepository): Map<Int, Int> {
-    val all501 = repository.getAllExerciseResultsByExerciseId("game501")
-    val result = mutableMapOf<Int, Int>()
-
-    all501.forEach { r ->
-        val details = parseDetails(r.detailsJson)
-        val closeStr = details["close"] ?: return@forEach
-        if (closeStr.isBlank()) return@forEach
-
-        closeStr.split(",").forEach { part ->
-            val value = part.trim().toIntOrNull() ?: return@forEach
-            result[value] = (result[value] ?: 0) + 1
-        }
-    }
-
-    return result
-}
-
-private fun parseDetails(s: String): Map<String, String> {
-    if (s.isBlank()) return emptyMap()
-    return s.split(";").mapNotNull { entry ->
-        val parts = entry.split("=", limit = 2)
-        if (parts.size == 2) parts[0].trim() to parts[1].trim() else null
-    }.toMap()
 }
 
 // ─────────────────────────────────────────────
