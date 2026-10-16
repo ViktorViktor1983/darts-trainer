@@ -775,6 +775,7 @@ fun DartsTrainerApp() {
             freeCurrentId = null
             val restSec = TrainingPlanner.restSecondsAfter(finishedExerciseId)
             showRestThen(restSec, null) {
+                pickNextFreeExercise()
                 screen = "training_free_next"
             }
         } else {
@@ -1362,7 +1363,7 @@ fun DartsTrainerApp() {
                     val current = mainExercises.firstOrNull { it.id == freeCurrentId }
 
                     if (current == null) {
-                        LaunchedEffect(freeCurrentId) {
+                        LaunchedEffect(freeCurrentId, showFreeNewRoundDialog) {
                             if (freeCurrentId == null && !showFreeNewRoundDialog) {
                                 pickNextFreeExercise()
                             }
