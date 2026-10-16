@@ -17,8 +17,11 @@ import androidx.sqlite.db.SupportSQLiteDatabase
  * База данных тренировочного раздела.
  *
  * Версия 3 (13.10.2026) — добавлена таблица training_records.
- * Версия 4 (14.10.2026) — в training_records добавлены поля
- * bestFloat и extraInt для рекордов 501 и Крикета.
+ * Версия 4 (14.10.2026) — в training_records добавлены поля bestFloat и extraInt.
+ * Версия 5 (16.10.2026) — добавлена таблица training_checkouts
+ *   (закрытые чекауты из тренировочных партий 501).
+ *   Чекауты НЕ сбрасываются после сдачи нормативов — они переживают
+ *   сброс статистики, как и рекорды.
  */
 
 @Entity(tableName = "training_sessions")
@@ -108,6 +111,21 @@ data class TrainingRecordEntity(
     val achievedAt: Long
 )
 
+/**
+ * Закрытый чекаут в тренировочной партии 501.
+ *
+ * Одна запись = один остаток, с которого игрок закрывал лег.
+ * Несколько закрытий одного остатка → счётчик count растёт.
+ *
+ * Эти записи НЕ сбрасываются после сдачи нормативов — как рекорды.
+ */
+@Entity(tableName = "training_checkouts")
+data class TrainingCheckoutEntity(
+    @PrimaryKey val value: Int,       // остаток 2..170
+    val count: Int,                   // сколько раз закрыт
+    val lastUpdated: Long             // когда последний раз закрывал
+)
+
 // ============================================================
 // DAO
 // ============================================================
@@ -150,7 +168,6 @@ interface ExerciseResultDao {
     @Query("SELECT * FROM exercise_results WHERE exerciseId = :exerciseId ORDER BY timestamp DESC LIMIT :limit")
     suspend fun getLatestByExercise(exerciseId: String, limit: Int): List<ExerciseResultEntity>
 
-    /** Все записи по упражнению — без лимита. */
     @Query("SELECT * FROM exercise_results WHERE exerciseId = :exerciseId ORDER BY timestamp ASC")
     suspend fun getAllByExercise(exerciseId: String): List<ExerciseResultEntity>
 
@@ -245,6 +262,24 @@ interface TrainingRecordDao {
     suspend fun clearAll()
 }
 
+@Dao
+interface TrainingCheckoutDao {
+    @Insert
+    suspend fun insert(item: TrainingCheckoutEntity)
+
+    @Update
+    suspend fun update(item: TrainingCheckoutEntity)
+
+    @Query("SELECT * FROM training_checkouts WHERE value = :value LIMIT 1")
+    suspend fun getByValue(value: Int): TrainingCheckoutEntity?
+
+    @Query("SELECT * FROM training_checkouts ORDER BY value ASC")
+    suspend fun getAll(): List<TrainingCheckoutEntity>
+
+    @Query("DELETE FROM training_checkouts")
+    suspend fun clearAll()
+}
+
 // ============================================================
 // DATABASE
 // ============================================================
@@ -257,9 +292,10 @@ interface TrainingRecordDao {
         WeaknessSnapshotEntity::class,
         PotentialSnapshotEntity::class,
         ControlMatchEntity::class,
-        TrainingRecordEntity::class
+        TrainingRecordEntity::class,
+        TrainingCheckoutEntity::class
     ],
-    version = 4,
+    version = 5,
     exportSchema = false
 )
 abstract class TrainingDatabase : RoomDatabase() {
@@ -270,6 +306,7 @@ abstract class TrainingDatabase : RoomDatabase() {
     abstract fun potentialDao(): PotentialSnapshotDao
     abstract fun controlDao(): ControlMatchDao
     abstract fun recordDao(): TrainingRecordDao
+    abstract fun checkoutDao(): TrainingCheckoutDao
 
     companion object {
         @Volatile
@@ -306,6 +343,17 @@ abstract class TrainingDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS training_checkouts (" +
+                            "value INTEGER NOT NULL PRIMARY KEY, " +
+                            "count INTEGER NOT NULL DEFAULT 0, " +
+                            "lastUpdated INTEGER NOT NULL DEFAULT 0)"
+                )
+            }
+        }
+
         fun getInstance(context: Context): TrainingDatabase {
             return INSTANCE ?: synchronized(this) {
                 INSTANCE ?: Room.databaseBuilder(
@@ -313,7 +361,7 @@ abstract class TrainingDatabase : RoomDatabase() {
                     TrainingDatabase::class.java,
                     "training_database"
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
                     .build()
                     .also { INSTANCE = it }
             }
@@ -367,7 +415,6 @@ class TrainingRepository(private val db: TrainingDatabase) {
         return db.exerciseDao().getLatestByExercise(exerciseId, limit).map { it.toModel() }
     }
 
-    /** Все записи по упражнению — без лимита. Для средних по всем партиям. */
     suspend fun getAllExerciseResultsByExerciseId(exerciseId: String): List<ExerciseResult> {
         return db.exerciseDao().getAllByExercise(exerciseId).map { it.toModel() }
     }
@@ -426,6 +473,33 @@ class TrainingRepository(private val db: TrainingDatabase) {
 
     suspend fun getAllControlMatches(): List<ControlMatch> {
         return db.controlDao().getAll().map { it.toModel() }
+    }
+
+    // ---------- Закрытые чекауты тренировки ----------
+
+    /**
+     * Записать закрытый чекаут в тренировочной партии 501.
+     * Если такой остаток уже был — увеличиваем счётчик.
+     * Эти записи НЕ сбрасываются после нормативов.
+     */
+    suspend fun recordCheckout(value: Int) {
+        if (value < 2 || value > 170) return
+        val existing = db.checkoutDao().getByValue(value)
+        val now = System.currentTimeMillis()
+        if (existing == null) {
+            db.checkoutDao().insert(
+                TrainingCheckoutEntity(value = value, count = 1, lastUpdated = now)
+            )
+        } else {
+            db.checkoutDao().update(
+                existing.copy(count = existing.count + 1, lastUpdated = now)
+            )
+        }
+    }
+
+    /** Все закрытые чекауты из тренировок — Map(value → count). */
+    suspend fun getAllCheckouts(): Map<Int, Int> {
+        return db.checkoutDao().getAll().associate { it.value to it.count }
     }
 
     // ---------- Рекорды тренировки (общие) ----------
@@ -597,6 +671,11 @@ class TrainingRepository(private val db: TrainingDatabase) {
 
     // ---------- Полный сброс ----------
 
+    /**
+     * Полный сброс тренировочных данных.
+     * Используется в TrainingSettingsScreen («Сбросить всё»).
+     * Чистит ВСЁ, включая рекорды и чекауты.
+     */
     suspend fun clearAllTrainingData() {
         db.exerciseDao().clearAll()
         db.sessionDao().clearAll()
@@ -605,6 +684,28 @@ class TrainingRepository(private val db: TrainingDatabase) {
         db.potentialDao().clearAll()
         db.controlDao().clearAll()
         db.recordDao().clearAll()
+        db.checkoutDao().clearAll()
+    }
+
+    /**
+     * Сброс статистики после сдачи нормативов.
+     *
+     * Чистит всю накопленную статистику периода (сессии, результаты,
+     * снапшоты, отложенные даблы), но СОХРАНЯЕТ:
+     *   • рекорды (training_records)
+     *   • закрытые чекауты (training_checkouts)
+     *
+     * После сдачи нормативов начинается новый период.
+     */
+    suspend fun clearStatisticsAfterNormatives() {
+        db.exerciseDao().clearAll()
+        db.sessionDao().clearAll()
+        db.postponedDao().clearAll()
+        db.weaknessDao().clearAll()
+        db.potentialDao().clearAll()
+        db.controlDao().clearAll()
+        // training_records — НЕ трогаем
+        // training_checkouts — НЕ трогаем
     }
 }
 
