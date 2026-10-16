@@ -106,6 +106,11 @@ fun AboutScreen(onBack: () -> Unit) {
             title = "Уровень и рекорды",
             content = { LevelAndRecordsContent() }
         )
+        ExpandableCard(
+            icon = "📋",
+            title = "Сдача нормативов",
+            content = { NormativesContent() }
+        )
         Spacer(Modifier.height(10.dp))
         ExpandableCard(
             icon = "🤖",
@@ -307,6 +312,84 @@ private fun LevelAndRecordsContent() {
                 "Если побил — покажем салют. Если был близок (не хватило до 10%) — " +
                 "скажем «почти рекорд». Рекорды не влияют на уровень — это отдельная " +
                 "радость и мотивация."
+    )
+}
+
+@Composable
+private fun NormativesContent() {
+    Text(
+        "Что это такое",
+        color = GoldAccent,
+        fontSize = 14.sp,
+        fontWeight = FontWeight.Bold
+    )
+    Spacer(Modifier.height(6.dp))
+    Paragraph(
+        "Раз в 10 тренировок программа предлагает сдать нормативы. " +
+                "Это пять упражнений, которые проверяют твой реальный уровень " +
+                "по всем параметрам. Если рост есть — уровень обновится."
+    )
+
+    Spacer(Modifier.height(14.dp))
+
+    Text(
+        "Из чего состоят нормативы",
+        color = GoldAccent,
+        fontSize = 14.sp,
+        fontWeight = FontWeight.Bold
+    )
+    Spacer(Modifier.height(6.dp))
+    Bullet("501 против бота — до 3 побед.")
+    Bullet("Крикет против бота — до 3 побед.")
+    Bullet("Сектор 20 — 30 дротиков.")
+    Bullet("Большой раунд — 21 сектор.")
+    Bullet("Набор очков — 10 подходов.")
+
+    Spacer(Modifier.height(14.dp))
+
+    Text(
+        "Лестница ботов",
+        color = GoldAccent,
+        fontSize = 14.sp,
+        fontWeight = FontWeight.Bold
+    )
+    Spacer(Modifier.height(6.dp))
+    Paragraph(
+        "В партиях 501 и Крикета бот меняется по лестнице: чуть слабее, " +
+                "равный, чуть сильнее, снова слабее, равный. Это проверяет не только " +
+                "технику, но и умение держать уровень против разной силы соперника. " +
+                "Всего можно сыграть максимум 5 легов — партия идёт до 3 побед."
+    )
+
+    Spacer(Modifier.height(14.dp))
+
+    Text(
+        "Что происходит после",
+        color = GoldAccent,
+        fontSize = 14.sp,
+        fontWeight = FontWeight.Bold
+    )
+    Spacer(Modifier.height(6.dp))
+    Bullet("Если хотя бы один комплекс подрос — уровень обновляется.")
+    Bullet("Если уровень не изменился — он подтверждён.")
+    Bullet("При росте статистика этого периода обнуляется, начинается новый.")
+    Bullet("Рекорды и закрытые чекауты сохраняются всегда.")
+
+    Spacer(Modifier.height(14.dp))
+
+    Text(
+        "Можно не спешить",
+        color = GoldAccent,
+        fontSize = 14.sp,
+        fontWeight = FontWeight.Bold
+    )
+    Spacer(Modifier.height(6.dp))
+    Paragraph(
+        "Сдавать нормативы не обязательно сразу после напоминания. " +
+                "Можно продолжать тренироваться — плашка «Пора сдать нормативы» " +
+                "будет висеть и напомнит, когда будешь готов. " +
+                "Если прервёшь сдачу — прогресс сохранится на 24 часа, " +
+                "и можно будет продолжить с того же места."
     )
 }
 
