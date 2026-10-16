@@ -125,7 +125,6 @@ import kotlin.random.Random
 
 /**
  * Авто-OK в тренировочных партиях 501 и Крикета.
- * Всегда включён, чтобы игрок не тратил время на подтверждение каждого подхода.
  */
 private const val TRAINING_AUTO_OK_SECONDS = 3
 
@@ -1294,9 +1293,8 @@ fun DartsTrainerApp() {
                                 val dbl = player?.let { p -> Game501Logic.doublesAccuracy(p) } ?: 0.0
                                 val pprStr = String.format(Locale.US, "%.1f", ppr)
                                 val dblStr = dbl.toInt().toString()
-                                // Список закрытых чекаутов (остатков, с которых закрывал лег).
+                                // Список закрытых чекаутов из этой партии.
                                 val closeValues = player?.listOfCloseValues ?: emptyList()
-                                val closeStr = closeValues.joinToString(",")
                                 val dur = if (exerciseStartMillis > 0L)
                                     ((System.currentTimeMillis() - exerciseStartMillis) / 1000L).toInt()
                                 else 0
@@ -1304,6 +1302,7 @@ fun DartsTrainerApp() {
                                 val botLevel = g.players.getOrNull(1)?.botLevel ?: 1
                                 TrainingBotLevelStorage.updateLevel501(context, botLevel, playerWon)
                                 scope.launch {
+                                    // Записываем результаты упражнения (без close — он идёт отдельно).
                                     trainingRepository.insertExerciseResult(
                                         ExerciseResult(
                                             sessionId = trainingSessionId,
@@ -1313,9 +1312,13 @@ fun DartsTrainerApp() {
                                             dartsThrown = player?.matchDarts ?: 0,
                                             timestamp = System.currentTimeMillis(),
                                             durationSeconds = dur,
-                                            detailsJson = "won=$playerWon;ppr=$pprStr;dbl=$dblStr;close=$closeStr"
+                                            detailsJson = "won=$playerWon;ppr=$pprStr;dbl=$dblStr"
                                         )
                                     )
+                                    // Записываем чекауты в отдельную таблицу (переживают нормативы).
+                                    closeValues.forEach { value ->
+                                        trainingRepository.recordCheckout(value)
+                                    }
                                 }
                                 isTraining501 = false
                                 game501 = null
