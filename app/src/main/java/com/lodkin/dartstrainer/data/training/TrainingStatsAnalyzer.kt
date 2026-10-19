@@ -18,7 +18,8 @@ import kotlin.math.roundToInt
  *   • парсит detailsJson Кругосветки-Сектора формата "1:2,2:1,3:4"
  *     (сектор : дротиков_потрачено), где hitsRequired = 1;
  *   • считает средний процент попаданий по каждому сектору;
- *   • сравнивает его с общим средним и возвращает топ-3 худших сектора.
+ *   • сравнивает его с общим средним и возвращает только ПРОБЛЕМНЫЕ
+ *     сектора (отставание > MIN_DEVIATION_PERCENT).
  */
 object TrainingStatsAnalyzer {
 
@@ -28,14 +29,21 @@ object TrainingStatsAnalyzer {
     /** Минимум записей (завершённых Кругосветок), чтобы сектор попал в отчёт. */
     private const val MIN_SECTOR_ENTRIES = 5
 
-    /** Сколько худших секторов показываем. */
+    /** Сколько худших секторов максимум показываем. */
     private const val WORST_SECTORS_TOP = 3
 
     /**
-     * Один слабый сектор.
+     * Минимальное отклонение от среднего (в процентах), при котором
+     * сектор считается проблемным и попадает в отчёт.
+     * Сектора, которые лучше среднего (отрицательное отклонение), не показываем.
+     */
+    private const val MIN_DEVIATION_PERCENT = 25f
+
+    /**
+     * Один проблемный сектор.
      * @param sector номер сектора (1..20, 25 = Bull).
      * @param percent средний процент попаданий по сектору (hits / darts * 100).
-     * @param deviation относительное отклонение от общего среднего, в процентах (может быть отрицательным, если сектор лучше среднего).
+     * @param deviation относительное отклонение от общего среднего, в процентах (положительное — хуже среднего).
      * @param count сколько завершённых Кругосветок содержали этот сектор.
      */
     data class SectorWeakness(
@@ -90,8 +98,13 @@ object TrainingStatsAnalyzer {
         val avgCricketMpr: Float?,
         val countCricketMatches: Int,
 
-        // Топ худших секторов (по убыванию отклонения). Пусто, если данных мало.
+        // Только проблемные сектора (отставание > MIN_DEVIATION_PERCENT),
+        // отсортированы по убыванию отклонения. Может быть пусто.
         val worstSectors: List<SectorWeakness>,
+
+        // true, если накоплено достаточно данных по секторам (≥ MIN_SECTOR_ENTRIES записей),
+        // чтобы отчёт вообще имел смысл. Нужен, чтобы отличить «мало данных» от «всё в норме».
+        val sectorsDataAvailable: Boolean,
 
         val dataPointsCount: Int,
         val hasEnoughData: Boolean
@@ -226,8 +239,8 @@ object TrainingStatsAnalyzer {
         addTempo("aroundclock_trebles", aroundTreblesResults)
         addTempo("aroundclock_sectors", aroundSectorsResults)
 
-        // ── Топ худших секторов (детальная статистика Кругосветки-Сектора) ──
-        val worstSectors = computeWorstSectors(allSectorsResults)
+        // ── Проблемные сектора (детальная статистика Кругосветки-Сектора) ──
+        val sectorsReport = computeWorstSectors(allSectorsResults)
 
         // ── Общее количество данных ──
         val count = sector20Results.size + scoresetResults.size + bigroundResults.size +
@@ -260,29 +273,38 @@ object TrainingStatsAnalyzer {
             count501Matches = count501,
             avgCricketMpr = avgCricketMpr,
             countCricketMatches = countCricket,
-            worstSectors = worstSectors,
+            worstSectors = sectorsReport.problemSectors,
+            sectorsDataAvailable = sectorsReport.dataAvailable,
             dataPointsCount = count,
             hasEnoughData = hasEnough
         )
     }
 
+    /** Результат анализа секторов: список проблемных + флаг «данных вообще достаточно». */
+    private data class SectorsReport(
+        val problemSectors: List<SectorWeakness>,
+        val dataAvailable: Boolean
+    )
+
     /**
-     * Считает худшие сектора по данным Кругосветки-Сектора.
+     * Считает проблемные сектора по данным Кругосветки-Сектора.
      *
      * Логика:
      *   • Каждая запись exercise_results с непустым detailsJson парсится как
      *     "1:2,2:1,3:4" (сектор : дротиков_потрачено).
      *   • hitsRequired = 1, значит hits[S] = count[S] (по одной записи = одно попадание).
-     *   • Фильтр: сектор попадает в отчёт, если он встречался в ≥ MIN_SECTOR_ENTRIES записях.
+     *   • Фильтр 1: сектор попадает в отчёт, если он встречался в ≥ MIN_SECTOR_ENTRIES записях.
      *   • sectorPercent = count / sumDarts * 100.
-     *   • generalPercent = Σcount / ΣsumDarts * 100 (по прошедшим фильтр).
+     *   • generalPercent = Σcount / ΣsumDarts * 100 (по прошедшим фильтр 1).
      *   • deviation = (generalPercent − sectorPercent) / generalPercent * 100 (относительное).
+     *   • Фильтр 2: в итоговый список попадают только сектора с deviation > MIN_DEVIATION_PERCENT.
+     *     Сектора, которые лучше среднего, не показываем — они не проблема.
      *   • Сортировка по deviation по убыванию (худшие сверху), берём топ WORST_SECTORS_TOP.
      */
     private fun computeWorstSectors(
         allSectors: List<ExerciseResult>
-    ): List<SectorWeakness> {
-        if (allSectors.isEmpty()) return emptyList()
+    ): SectorsReport {
+        if (allSectors.isEmpty()) return SectorsReport(emptyList(), false)
 
         val sumDarts = mutableMapOf<Int, Int>()
         val countSector = mutableMapOf<Int, Int>()
@@ -298,17 +320,18 @@ object TrainingStatsAnalyzer {
             }
         }
 
-        // Фильтр: только сектора с достаточным количеством записей
+        // Фильтр 1: только сектора с достаточным количеством записей
         val filtered = sumDarts.keys.filter { (countSector[it] ?: 0) >= MIN_SECTOR_ENTRIES }
-        if (filtered.isEmpty()) return emptyList()
+        if (filtered.isEmpty()) return SectorsReport(emptyList(), false)
 
-        // Общий средний процент по прошедшим фильтр
+        // Общий средний процент по прошедшим фильтр 1
         val totalCount = filtered.sumOf { countSector[it] ?: 0 }
         val totalDarts = filtered.sumOf { sumDarts[it] ?: 0 }
-        if (totalDarts <= 0 || totalCount <= 0) return emptyList()
+        if (totalDarts <= 0 || totalCount <= 0) return SectorsReport(emptyList(), false)
         val generalPercent = totalCount.toDouble() / totalDarts.toDouble() * 100.0
 
-        return filtered
+        // Считаем отклонения и оставляем только проблемные (deviation > MIN_DEVIATION_PERCENT)
+        val problems = filtered
             .map { sector ->
                 val c = countSector[sector] ?: 0
                 val d = sumDarts[sector] ?: 0
@@ -323,8 +346,11 @@ object TrainingStatsAnalyzer {
                     count = c
                 )
             }
+            .filter { it.deviation > MIN_DEVIATION_PERCENT }
             .sortedByDescending { it.deviation }
             .take(WORST_SECTORS_TOP)
+
+        return SectorsReport(problems, true)
     }
 
     /**
