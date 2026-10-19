@@ -104,7 +104,7 @@ fun CricketSetupScreen(
 
     fun plateFor(slot: PlayerSlot): String? {
         return when {
-            slot.isBot -> "ср. ${slot.bot.averageMin}–${slot.bot.averageMax}"
+            slot.isBot -> "ср. ${slot.bot.averageMinLabel}–${slot.bot.averageMaxLabel}"
             slot.name.equals(playerName, ignoreCase = true) && myAvgMpr != null -> "ср. $myAvgMpr"
             else -> null
         }
@@ -697,7 +697,7 @@ private fun PlayerDropdown(
                 text = {
                     Column {
                         Text("${b.id}. ${b.name}", color = Color.White, fontWeight = FontWeight.Medium)
-                        Text("ср. ${b.averageMin}–${b.averageMax}", color = Accent, fontSize = 11.sp)
+                        Text("ср. ${b.averageMinLabel}–${b.averageMaxLabel}", color = Accent, fontSize = 11.sp)
                     }
                 },
                 onClick = { onSlotChange(slot.copy(isBot = true, bot = b)); onClose() })
