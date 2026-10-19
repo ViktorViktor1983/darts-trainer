@@ -15,6 +15,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.lodkin.dartstrainer.data.aroundclock.AroundClockTarget
 import com.lodkin.dartstrainer.data.training.DartsNorms
 import com.lodkin.dartstrainer.data.training.TrainingRepository
 import com.lodkin.dartstrainer.data.training.TrainingStatsAnalyzer
@@ -234,7 +235,26 @@ fun TrainingProgressScreen(
             Spacer(Modifier.height(10.dp))
             WorstSectorsBlock(
                 sectors = a.worstSectors,
-                dataAvailable = a.sectorsDataAvailable
+                dataAvailable = a.sectorsDataAvailable,
+                target = AroundClockTarget.SINGLE
+            )
+            Spacer(Modifier.height(20.dp))
+
+            SectionTitle("ХУДШИЕ УДВОЕНИЯ")
+            Spacer(Modifier.height(10.dp))
+            WorstSectorsBlock(
+                sectors = a.worstDoubles,
+                dataAvailable = a.doublesDataAvailable,
+                target = AroundClockTarget.DOUBLE
+            )
+            Spacer(Modifier.height(20.dp))
+
+            SectionTitle("ХУДШИЕ УТРОЕНИЯ")
+            Spacer(Modifier.height(10.dp))
+            WorstSectorsBlock(
+                sectors = a.worstTrebles,
+                dataAvailable = a.treblesDataAvailable,
+                target = AroundClockTarget.TRIPLE
             )
             Spacer(Modifier.height(20.dp))
 
@@ -293,14 +313,13 @@ fun TrainingProgressScreen(
 }
 
 /**
- * Блок «Худшие сектора».
+ * Блок «Худшие сектора/удвоения/утроения».
  *
  * Показывает ТОЛЬКО проблемные сектора (отставание от среднего > 25%).
- * Сектора, которые идут нормально или лучше среднего, не показываются —
- * они не тянут статистику вниз.
+ * Сектора, которые идут нормально или лучше среднего, не показываются.
  *
  * Три состояния:
- *   1. Данных мало (Кругосветку-Сектора прошёл < 5 раз) → подсказка.
+ *   1. Данных мало (Кругосветку прошёл < 5 раз) → подсказка.
  *   2. Данных достаточно, проблемных секторов нет → «всё в норме».
  *   3. Есть проблемные сектора → список топ-3 худших с индикацией:
  *      🔴 отставание > 50%
@@ -309,7 +328,8 @@ fun TrainingProgressScreen(
 @Composable
 private fun WorstSectorsBlock(
     sectors: List<TrainingStatsAnalyzer.SectorWeakness>,
-    dataAvailable: Boolean
+    dataAvailable: Boolean,
+    target: AroundClockTarget
 ) {
     Column(
         modifier = Modifier
@@ -322,7 +342,7 @@ private fun WorstSectorsBlock(
             !dataAvailable -> {
                 Text(
                     "Пока не хватает данных. Чтобы увидеть слабые сектора, нужно пройти " +
-                            "Кругосветку-Сектора минимум 5 раз.",
+                            "эту Кругосветку минимум 5 раз.",
                     color = Color.White.copy(alpha = 0.75f),
                     fontSize = 13.sp,
                     lineHeight = 19.sp
@@ -334,7 +354,7 @@ private fun WorstSectorsBlock(
                     Text("✅", fontSize = 18.sp)
                     Spacer(Modifier.width(8.dp))
                     Text(
-                        "Все сектора в норме",
+                        "Все в норме",
                         color = GoldAccent,
                         fontSize = 15.sp,
                         fontWeight = FontWeight.Bold
@@ -373,7 +393,7 @@ private fun WorstSectorsBlock(
                         Spacer(Modifier.width(10.dp))
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                sectorName(s.sector),
+                                sectorName(s.sector, target),
                                 color = Color.White,
                                 fontSize = 15.sp,
                                 fontWeight = FontWeight.Bold
@@ -418,9 +438,21 @@ private fun sectorIndicator(deviation: Float): String = when {
     else -> "🟡"
 }
 
-/** Название сектора: 1..20 — «Сектор N», 25 — «Bull (25)». */
-private fun sectorName(sector: Int): String =
-    if (sector == 25) "Bull (25)" else "Сектор $sector"
+/** Название сектора: 1..20 — «Сектор N», 25 — «Bull». */
+private fun sectorName(sector: Int, target: AroundClockTarget): String {
+    if (sector == 25) {
+        return when (target) {
+            AroundClockTarget.SINGLE -> "Bull (25)"
+            AroundClockTarget.DOUBLE -> "D-Bull (50)"
+            AroundClockTarget.TRIPLE -> "T-Bull (50)"
+        }
+    }
+    return when (target) {
+        AroundClockTarget.SINGLE -> "Сектор $sector"
+        AroundClockTarget.DOUBLE -> "Удвоение D$sector"
+        AroundClockTarget.TRIPLE -> "Утроение T$sector"
+    }
+}
 
 @Composable
 private fun FinalLevelBlock(a: TrainingStatsAnalyzer.TrainingAnalysis) {
