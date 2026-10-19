@@ -125,11 +125,6 @@ import kotlin.random.Random
  */
 private const val TRAINING_AUTO_OK_SECONDS = 3
 
-/**
- * Порог, после которого предлагается сдача нормативов.
- */
-private const val NORMATIVES_THRESHOLD = 10
-
 private val PARENT_SCREEN: Map<String, String> = mapOf(
     "stats_menu" to "main",
     "stats_cricket" to "stats_menu",
@@ -896,8 +891,8 @@ fun DartsTrainerApp() {
                             autoOpenTimeDialog = true
                         }
                         scope.launch {
-                            val completed = trainingRepository.getCompletedSessionCount()
-                            normativesAvailable = completed >= NORMATIVES_THRESHOLD
+                            val analysis = TrainingStatsAnalyzer.analyze(trainingRepository)
+                            normativesAvailable = analysis.isReadyForNormatives
                         }
                         screen = "training"
                     },
