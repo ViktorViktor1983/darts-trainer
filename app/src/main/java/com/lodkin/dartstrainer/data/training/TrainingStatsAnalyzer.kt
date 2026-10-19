@@ -20,7 +20,9 @@ import kotlin.math.roundToInt
  *   • считает средний процент попаданий по каждому сектору;
  *   • сравнивает его с общим средним и возвращает топ-3 худших;
  *   • формирует список целей для точечной работы (targetPracticeGoals);
- *   • проверяет, было ли уже упражнение "targeted_practice" в этом периоде.
+ *   • проверяет, было ли уже упражнение "targeted_practice" в этом периоде;
+ *   • считает прогресс накопления статистики (от 0 до 100%) по каждому
+ *     из 8 упражнений и общий прогресс. Экзамен доступен, когда все 8 по 100%.
  */
 object TrainingStatsAnalyzer {
 
@@ -39,6 +41,9 @@ object TrainingStatsAnalyzer {
      */
     private const val MIN_DEVIATION_PERCENT = 25f
 
+    /** Цель по количеству записей для каждого упражнения для открытия экзамена. */
+    private const val EXERCISE_GOAL = 5
+
     /**
      * Один проблемный сектор.
      */
@@ -48,6 +53,19 @@ object TrainingStatsAnalyzer {
         val deviation: Float,
         val count: Int
     )
+
+    /**
+     * Прогресс накопления данных по одному упражнению.
+     */
+    data class ExerciseProgress(
+        val id: String,
+        val title: String,
+        val count: Int,
+        val goal: Int
+    ) {
+        val percent: Float
+            get() = (count.toFloat() / goal).coerceAtMost(1f)
+    }
 
     data class TrainingAnalysis(
         // Средние значения по 4 параметрам
@@ -112,6 +130,11 @@ object TrainingStatsAnalyzer {
         // Было ли уже выполнено упражнение "targeted_practice" в этом периоде
         val hasTargetedPracticeThisPeriod: Boolean,
 
+        // Прогресс накопления данных по упражнениям (для экзамена)
+        val exercisesProgress: List<ExerciseProgress>,
+        val overallProgress: Float,
+        val isReadyForNormatives: Boolean,
+
         val dataPointsCount: Int,
         val hasEnoughData: Boolean
     )
@@ -137,6 +160,20 @@ object TrainingStatsAnalyzer {
         // ── Проверяем, было ли упражнение "targeted_practice" в этом периоде ──
         val allTargetedResults = repository.getAllExerciseResultsByExerciseId("targeted_practice")
         val hasTargetedPractice = allTargetedResults.isNotEmpty()
+
+        // ── Считаем прогресс накопления данных по 8 упражнениям ──
+        val progressList = listOf(
+            ExerciseProgress("game501", "501", all501Results.size, EXERCISE_GOAL),
+            ExerciseProgress("cricket", "Крикет", allCricketResults.size, EXERCISE_GOAL),
+            ExerciseProgress("aroundclock_sectors", "Кругосветка: Сектора", allSectorsResults.size, EXERCISE_GOAL),
+            ExerciseProgress("aroundclock_doubles", "Кругосветка: Удвоения", allDoublesResults.size, EXERCISE_GOAL),
+            ExerciseProgress("aroundclock_trebles", "Кругосветка: Утроения", allTreblesResults.size, EXERCISE_GOAL),
+            ExerciseProgress("sector20", "Сектор 20", sector20Results.size, EXERCISE_GOAL),
+            ExerciseProgress("biground", "Большой раунд", bigroundResults.size, EXERCISE_GOAL),
+            ExerciseProgress("scoreset", "Набор очков", scoresetResults.size, EXERCISE_GOAL)
+        )
+        val overallProgress = progressList.map { it.percent }.average().toFloat()
+        val isReadyForNormatives = progressList.all { it.count >= EXERCISE_GOAL }
 
         // ── Средний набор очков (Сектор 20 + Набор) ──
         val scoreValues = mutableListOf<Int>()
@@ -258,15 +295,12 @@ object TrainingStatsAnalyzer {
         // ── Сборка списка целей для точечной работы ──
         val goals = mutableListOf<String>()
         
-        // Сектора
         sectorsReport.problemSectors.take(3).forEach { 
             goals.add(if (it.sector == 25) "Bull" else "S${it.sector}")
         }
-        // Удвоения
         doublesReport.problemSectors.take(3).forEach { 
             goals.add(if (it.sector == 25) "D-Bull" else "D${it.sector}")
         }
-        // Утроения
         treblesReport.problemSectors.take(3).forEach { 
             goals.add(if (it.sector == 25) "T-Bull" else "T${it.sector}")
         }
@@ -310,6 +344,9 @@ object TrainingStatsAnalyzer {
             treblesDataAvailable = treblesReport.dataAvailable,
             targetPracticeGoals = goals,
             hasTargetedPracticeThisPeriod = hasTargetedPractice,
+            exercisesProgress = progressList,
+            overallProgress = overallProgress,
+            isReadyForNormatives = isReadyForNormatives,
             dataPointsCount = count,
             hasEnoughData = hasEnough
         )
