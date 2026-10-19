@@ -230,6 +230,11 @@ fun TrainingProgressScreen(
                 Spacer(Modifier.height(20.dp))
             }
 
+            SectionTitle("ХУДШИЕ СЕКТОРА")
+            Spacer(Modifier.height(10.dp))
+            WorstSectorsBlock(a.worstSectors)
+            Spacer(Modifier.height(20.dp))
+
             if (a.avgMinutesByExercise.isNotEmpty()) {
                 SectionTitle("ТВОЙ ТЕМП")
                 Spacer(Modifier.height(10.dp))
@@ -282,6 +287,114 @@ fun TrainingProgressScreen(
             onDismiss = { showCheckouts = false }
         )
     }
+}
+
+/**
+ * Блок «Худшие сектора».
+ *
+ * Показывает топ-3 сектора с наибольшим отставанием от общего среднего.
+ * Цветовая индикация:
+ *   🔴 > 50% отклонения
+ *   🟡 > 25% отклонения
+ *   🟢 ≤ 25% (в норме)
+ *
+ * Если данных мало (меньше 5 завершённых Кругосветок на сектор),
+ * показываем подсказку, что нужно накопить данные.
+ */
+@Composable
+private fun WorstSectorsBlock(sectors: List<TrainingStatsAnalyzer.SectorWeakness>) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(TileBgDark)
+            .padding(14.dp)
+    ) {
+        if (sectors.isEmpty()) {
+            Text(
+                "Пока не хватает данных. Чтобы увидеть слабые сектора, нужно пройти " +
+                        "Кругосветку-Сектора минимум 5 раз.",
+                color = Color.White.copy(alpha = 0.75f),
+                fontSize = 13.sp,
+                lineHeight = 19.sp
+            )
+        } else {
+            Text(
+                "Сектора с самым большим отставанием от твоего среднего уровня.",
+                color = Color.White.copy(alpha = 0.6f),
+                fontSize = 12.sp
+            )
+            Spacer(Modifier.height(10.dp))
+
+            sectors.forEachIndexed { index, s ->
+                if (index > 0) {
+                    Spacer(Modifier.height(10.dp))
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        sectorIndicator(s.deviation),
+                        fontSize = 18.sp
+                    )
+                    Spacer(Modifier.width(10.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            sectorName(s.sector),
+                            color = Color.White,
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(Modifier.height(2.dp))
+                        Text(
+                            deviationText(s.deviation),
+                            color = Color.White.copy(alpha = 0.65f),
+                            fontSize = 12.sp
+                        )
+                    }
+                    Column(horizontalAlignment = Alignment.End) {
+                        Text(
+                            formatPercent(s.percent),
+                            color = GoldAccent,
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            "${s.count}×",
+                            color = Color.White.copy(alpha = 0.5f),
+                            fontSize = 11.sp
+                        )
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(10.dp))
+            Text(
+                "🔴 >50% · 🟡 >25% · 🟢 в норме",
+                color = Color.White.copy(alpha = 0.45f),
+                fontSize = 11.sp
+            )
+        }
+    }
+}
+
+/** Цветовой индикатор отклонения от среднего. */
+private fun sectorIndicator(deviation: Float): String = when {
+    deviation > 50f -> "🔴"
+    deviation > 25f -> "🟡"
+    else -> "🟢"
+}
+
+/** Название сектора: 1..20 — «Сектор N», 25 — «Bull (25)». */
+private fun sectorName(sector: Int): String =
+    if (sector == 25) "Bull (25)" else "Сектор $sector"
+
+/** Текст отклонения: ниже/выше/на уровне среднего. */
+private fun deviationText(deviation: Float): String = when {
+    deviation > 0.5f -> "ниже среднего на ${formatPercent(deviation)}"
+    deviation < -0.5f -> "выше среднего на ${formatPercent(-deviation)}"
+    else -> "на уровне среднего"
 }
 
 @Composable
