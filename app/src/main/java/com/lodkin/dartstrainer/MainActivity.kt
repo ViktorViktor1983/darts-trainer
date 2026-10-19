@@ -79,6 +79,7 @@ import com.lodkin.dartstrainer.ui.game501.Game501SetupScreen
 import com.lodkin.dartstrainer.ui.game501.Game501StatsScreen
 import com.lodkin.dartstrainer.ui.scoreset.ScoreSetSetupScreen
 import com.lodkin.dartstrainer.ui.scoreset.ScoreSetStatsScreen
+import com.lodkin.dartstrainer.ui.sector.SectorGameScreen
 import com.lodkin.dartstrainer.ui.sector.SectorSetupScreen
 import com.lodkin.dartstrainer.ui.sector.SectorStatsScreen
 import com.lodkin.dartstrainer.ui.training.BlockExerciseItem
