@@ -232,7 +232,10 @@ fun TrainingProgressScreen(
 
             SectionTitle("ХУДШИЕ СЕКТОРА")
             Spacer(Modifier.height(10.dp))
-            WorstSectorsBlock(a.worstSectors)
+            WorstSectorsBlock(
+                sectors = a.worstSectors,
+                dataAvailable = a.sectorsDataAvailable
+            )
             Spacer(Modifier.height(20.dp))
 
             if (a.avgMinutesByExercise.isNotEmpty()) {
@@ -292,17 +295,22 @@ fun TrainingProgressScreen(
 /**
  * Блок «Худшие сектора».
  *
- * Показывает топ-3 сектора с наибольшим отставанием от общего среднего.
- * Цветовая индикация:
- *   🔴 > 50% отклонения
- *   🟡 > 25% отклонения
- *   🟢 ≤ 25% (в норме)
+ * Показывает ТОЛЬКО проблемные сектора (отставание от среднего > 25%).
+ * Сектора, которые идут нормально или лучше среднего, не показываются —
+ * они не тянут статистику вниз.
  *
- * Если данных мало (меньше 5 завершённых Кругосветок на сектор),
- * показываем подсказку, что нужно накопить данные.
+ * Три состояния:
+ *   1. Данных мало (Кругосветку-Сектора прошёл < 5 раз) → подсказка.
+ *   2. Данных достаточно, проблемных секторов нет → «всё в норме».
+ *   3. Есть проблемные сектора → список топ-3 худших с индикацией:
+ *      🔴 отставание > 50%
+ *      🟡 отставание > 25%
  */
 @Composable
-private fun WorstSectorsBlock(sectors: List<TrainingStatsAnalyzer.SectorWeakness>) {
+private fun WorstSectorsBlock(
+    sectors: List<TrainingStatsAnalyzer.SectorWeakness>,
+    dataAvailable: Boolean
+) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -310,71 +318,96 @@ private fun WorstSectorsBlock(sectors: List<TrainingStatsAnalyzer.SectorWeakness
             .background(TileBgDark)
             .padding(14.dp)
     ) {
-        if (sectors.isEmpty()) {
-            Text(
-                "Пока не хватает данных. Чтобы увидеть слабые сектора, нужно пройти " +
-                        "Кругосветку-Сектора минимум 5 раз.",
-                color = Color.White.copy(alpha = 0.75f),
-                fontSize = 13.sp,
-                lineHeight = 19.sp
-            )
-        } else {
-            Text(
-                "Сектора с самым большим отставанием от твоего среднего уровня.",
-                color = Color.White.copy(alpha = 0.6f),
-                fontSize = 12.sp
-            )
-            Spacer(Modifier.height(10.dp))
-
-            sectors.forEachIndexed { index, s ->
-                if (index > 0) {
-                    Spacer(Modifier.height(10.dp))
-                }
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        sectorIndicator(s.deviation),
-                        fontSize = 18.sp
-                    )
-                    Spacer(Modifier.width(10.dp))
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            sectorName(s.sector),
-                            color = Color.White,
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Spacer(Modifier.height(2.dp))
-                        Text(
-                            deviationText(s.deviation),
-                            color = Color.White.copy(alpha = 0.65f),
-                            fontSize = 12.sp
-                        )
-                    }
-                    Column(horizontalAlignment = Alignment.End) {
-                        Text(
-                            formatPercent(s.percent),
-                            color = GoldAccent,
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Text(
-                            "${s.count}×",
-                            color = Color.White.copy(alpha = 0.5f),
-                            fontSize = 11.sp
-                        )
-                    }
-                }
+        when {
+            !dataAvailable -> {
+                Text(
+                    "Пока не хватает данных. Чтобы увидеть слабые сектора, нужно пройти " +
+                            "Кругосветку-Сектора минимум 5 раз.",
+                    color = Color.White.copy(alpha = 0.75f),
+                    fontSize = 13.sp,
+                    lineHeight = 19.sp
+                )
             }
 
-            Spacer(Modifier.height(10.dp))
-            Text(
-                "🔴 >50% · 🟡 >25% · 🟢 в норме",
-                color = Color.White.copy(alpha = 0.45f),
-                fontSize = 11.sp
-            )
+            sectors.isEmpty() -> {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("✅", fontSize = 18.sp)
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        "Все сектора в норме",
+                        color = GoldAccent,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    "Ни один сектор не отстаёт от твоего среднего больше чем на 25%. " +
+                            "Продолжай в том же духе.",
+                    color = Color.White.copy(alpha = 0.75f),
+                    fontSize = 13.sp,
+                    lineHeight = 19.sp
+                )
+            }
+
+            else -> {
+                Text(
+                    "Сектора, которые тянут статистику вниз.",
+                    color = Color.White.copy(alpha = 0.6f),
+                    fontSize = 12.sp
+                )
+                Spacer(Modifier.height(10.dp))
+
+                sectors.forEachIndexed { index, s ->
+                    if (index > 0) {
+                        Spacer(Modifier.height(10.dp))
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            sectorIndicator(s.deviation),
+                            fontSize = 18.sp
+                        )
+                        Spacer(Modifier.width(10.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                sectorName(s.sector),
+                                color = Color.White,
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Spacer(Modifier.height(2.dp))
+                            Text(
+                                "ниже среднего на ${formatPercent(s.deviation)}",
+                                color = Color.White.copy(alpha = 0.65f),
+                                fontSize = 12.sp
+                            )
+                        }
+                        Column(horizontalAlignment = Alignment.End) {
+                            Text(
+                                formatPercent(s.percent),
+                                color = GoldAccent,
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                "${s.count}×",
+                                color = Color.White.copy(alpha = 0.5f),
+                                fontSize = 11.sp
+                            )
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(10.dp))
+                Text(
+                    "🔴 >50% · 🟡 >25%",
+                    color = Color.White.copy(alpha = 0.45f),
+                    fontSize = 11.sp
+                )
+            }
         }
     }
 }
@@ -382,20 +415,12 @@ private fun WorstSectorsBlock(sectors: List<TrainingStatsAnalyzer.SectorWeakness
 /** Цветовой индикатор отклонения от среднего. */
 private fun sectorIndicator(deviation: Float): String = when {
     deviation > 50f -> "🔴"
-    deviation > 25f -> "🟡"
-    else -> "🟢"
+    else -> "🟡"
 }
 
 /** Название сектора: 1..20 — «Сектор N», 25 — «Bull (25)». */
 private fun sectorName(sector: Int): String =
     if (sector == 25) "Bull (25)" else "Сектор $sector"
-
-/** Текст отклонения: ниже/выше/на уровне среднего. */
-private fun deviationText(deviation: Float): String = when {
-    deviation > 0.5f -> "ниже среднего на ${formatPercent(deviation)}"
-    deviation < -0.5f -> "выше среднего на ${formatPercent(-deviation)}"
-    else -> "на уровне среднего"
-}
 
 @Composable
 private fun FinalLevelBlock(a: TrainingStatsAnalyzer.TrainingAnalysis) {
