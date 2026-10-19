@@ -3,8 +3,12 @@ package com.lodkin.dartstrainer.ui
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -32,6 +36,9 @@ import java.util.Locale
  * ВАЖНО: этот экран сам читает статистику 501 из тренировочной БД
  * и показывает средний PPR + % удвоений на карточке «Тренировка».
  * MainActivity его трогать не нужно.
+ *
+ * Также здесь показывается общая шкала прогресса до экзамена (0–100%).
+ * При нажатии на неё открывается окно с детализацией по всем 8 упражнениям.
  */
 @Composable
 fun MainMenuScreen(
@@ -49,6 +56,12 @@ fun MainMenuScreen(
     var avgDbl by remember { mutableStateOf<Float?>(null) }
     var count501 by remember { mutableStateOf(0) }
 
+    var overallProgress by remember { mutableStateOf(0f) }
+    var exercisesProgress by remember { mutableStateOf<List<TrainingStatsAnalyzer.ExerciseProgress>>(emptyList()) }
+    var isReadyForNormatives by remember { mutableStateOf(false) }
+
+    var showProgressDialog by remember { mutableStateOf(false) }
+
     LaunchedEffect(Unit) {
         val analysis = withContext(Dispatchers.IO) {
             TrainingStatsAnalyzer.analyze(repository)
@@ -56,6 +69,9 @@ fun MainMenuScreen(
         avgPpr = analysis.avg501Ppr
         avgDbl = analysis.avg501DoublesPercent
         count501 = analysis.count501Matches
+        overallProgress = analysis.overallProgress
+        exercisesProgress = analysis.exercisesProgress
+        isReadyForNormatives = analysis.isReadyForNormatives
     }
 
     Column(
@@ -107,6 +123,9 @@ fun MainMenuScreen(
             avg501Ppr = avgPpr,
             avg501DoublesPercent = avgDbl,
             count501Matches = count501,
+            overallProgress = overallProgress,
+            isReadyForNormatives = isReadyForNormatives,
+            onProgressClick = { showProgressDialog = true },
             onClick = onTraining
         )
 
@@ -121,11 +140,19 @@ fun MainMenuScreen(
             onStatsClick = onStatsClick
         )
     }
+
+    if (showProgressDialog) {
+        ExamProgressDialog(
+            overallProgress = overallProgress,
+            exercises = exercisesProgress,
+            onDismiss = { showProgressDialog = false }
+        )
+    }
 }
 
 /**
  * Карточка «Тренировка».
- * Сверху — заголовок. Снизу, если есть данные по 501 — плашка с PPR и % удвоений.
+ * Сверху — заголовок. Снизу — плашка с PPR/удвоениями и шкала прогресса.
  */
 @Composable
 private fun TrainingCard(
@@ -133,6 +160,9 @@ private fun TrainingCard(
     avg501Ppr: Float?,
     avg501DoublesPercent: Float?,
     count501Matches: Int,
+    overallProgress: Float,
+    isReadyForNormatives: Boolean,
+    onProgressClick: () -> Unit,
     onClick: () -> Unit
 ) {
     Box(
@@ -215,8 +245,179 @@ private fun TrainingCard(
                     fontSize = 10.sp
                 )
             }
+
+            // ── ШКАЛА ПРОГРЕССА ДО ЭКЗАМЕНА ──
+            Spacer(Modifier.height(20.dp))
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth(0.8f)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(TileBgDark)
+                    .clickable { onProgressClick() }
+                    .padding(12.dp)
+            ) {
+                Column {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = if (isReadyForNormatives) "Пора сдавать экзамен!" else "До экзамена",
+                            color = if (isReadyForNormatives) GoldAccent else Color.White,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = "${(overallProgress * 100).toInt()}%",
+                            color = GoldAccent,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    // Полоска прогресса
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(8.dp)
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(Color.Black.copy(alpha = 0.3f))
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth(overallProgress)
+                                .fillMaxHeight()
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(if (isReadyForNormatives) GoldAccent else Accent)
+                        )
+                    }
+                }
+            }
         }
     }
+}
+
+/**
+ * Всплывающее окно с детализацией прогресса по всем 8 упражнениям.
+ */
+@Composable
+private fun ExamProgressDialog(
+    overallProgress: Float,
+    exercises: List<TrainingStatsAnalyzer.ExerciseProgress>,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = TileBgDark,
+        title = {
+            Text(
+                "Прогресс до экзамена",
+                color = GoldAccent,
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Bold
+            )
+        },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+            ) {
+                // Общая шкала
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        "Общий прогресс",
+                        color = Color.White,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        "${(overallProgress * 100).toInt()}%",
+                        color = GoldAccent,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+                Spacer(Modifier.height(6.dp))
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(10.dp)
+                        .clip(RoundedCornerShape(5.dp))
+                        .background(Color.Black.copy(alpha = 0.3f))
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth(overallProgress)
+                            .fillMaxHeight()
+                            .clip(RoundedCornerShape(5.dp))
+                            .background(if (overallProgress >= 1f) GoldAccent else Accent)
+                    )
+                }
+
+                Spacer(Modifier.height(20.dp))
+                Text(
+                    "ДЕТАЛИ ПО УПРАЖНЕНИЯМ",
+                    color = Accent,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 1.sp
+                )
+                Spacer(Modifier.height(10.dp))
+
+                // Список всех 8 упражнений
+                exercises.forEach { ex ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            ex.title,
+                            color = Color.White.copy(alpha = 0.9f),
+                            fontSize = 13.sp,
+                            modifier = Modifier.weight(1f)
+                        )
+                        Text(
+                            "${(ex.percent * 100).toInt()}%",
+                            color = if (ex.percent >= 1f) GoldAccent else Accent,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.width(40.dp),
+                            textAlign = TextAlign.End
+                        )
+                    }
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(6.dp)
+                            .clip(RoundedCornerShape(3.dp))
+                            .background(Color.Black.copy(alpha = 0.3f))
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth(ex.percent)
+                                .fillMaxHeight()
+                                .clip(RoundedCornerShape(3.dp))
+                                .background(if (ex.percent >= 1f) GoldAccent else Accent)
+                        )
+                    }
+                    Spacer(Modifier.height(8.dp))
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("ЗАКРЫТЬ", color = Accent, fontWeight = FontWeight.Bold)
+            }
+        }
+    )
 }
 
 private fun plural501Matches(n: Int): String {
