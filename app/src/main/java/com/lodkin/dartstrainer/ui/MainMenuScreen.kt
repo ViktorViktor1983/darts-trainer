@@ -32,20 +32,14 @@ import java.util.Locale
 
 /**
  * Главное меню.
- *
- * ВАЖНО: этот экран сам читает статистику 501 из тренировочной БД
- * и показывает средний PPR + % удвоений на карточке «Тренировка».
- * MainActivity его трогать не нужно.
- *
- * Также здесь показывается общая шкала прогресса до экзамена (0–100%).
- * При нажатии на неё открывается окно с детализацией по всем 8 упражнениям.
  */
 @Composable
 fun MainMenuScreen(
     onTraining: () -> Unit,
     onFreePlay: () -> Unit,
     onStatsClick: () -> Unit,
-    onSettingsClick: () -> Unit
+    onSettingsClick: () -> Unit,
+    onPlayExercise: (String) -> Unit = {} // Новый колбэк для быстрого запуска
 ) {
     val context = LocalContext.current
     val repository = remember {
@@ -145,6 +139,10 @@ fun MainMenuScreen(
         ExamProgressDialog(
             overallProgress = overallProgress,
             exercises = exercisesProgress,
+            onPlayExercise = { id ->
+                showProgressDialog = false
+                onPlayExercise(id)
+            },
             onDismiss = { showProgressDialog = false }
         )
     }
@@ -152,7 +150,6 @@ fun MainMenuScreen(
 
 /**
  * Карточка «Тренировка».
- * Сверху — заголовок. Снизу — плашка с PPR/удвоениями и шкала прогресса.
  */
 @Composable
 private fun TrainingCard(
@@ -305,6 +302,7 @@ private fun TrainingCard(
 private fun ExamProgressDialog(
     overallProgress: Float,
     exercises: List<TrainingStatsAnalyzer.ExerciseProgress>,
+    onPlayExercise: (String) -> Unit,
     onDismiss: () -> Unit
 ) {
     AlertDialog(
@@ -384,6 +382,21 @@ private fun ExamProgressDialog(
                             fontSize = 13.sp,
                             modifier = Modifier.weight(1f)
                         )
+                        
+                        // Кнопка "Играть", если не 100%
+                        if (ex.percent < 1f) {
+                            Box(
+                                modifier = Modifier
+                                    .padding(end = 8.dp)
+                                    .clip(RoundedCornerShape(4.dp))
+                                    .background(Accent.copy(alpha = 0.2f))
+                                    .clickable { onPlayExercise(ex.id) }
+                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                            ) {
+                                Text("▶", color = Accent, fontSize = 10.sp)
+                            }
+                        }
+
                         Text(
                             "${(ex.percent * 100).toInt()}%",
                             color = if (ex.percent >= 1f) GoldAccent else Accent,
