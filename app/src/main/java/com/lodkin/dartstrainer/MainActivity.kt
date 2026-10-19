@@ -1467,7 +1467,7 @@ fun DartsTrainerApp() {
                             scoreSetRepository = scoreSetRepository,
                             bigRoundRepository = bigRoundRepository,
                             trainingRepository = trainingRepository,
-                            onFinish = { blockType, score, darts ->
+                            onFinish = { blockType, score, darts, details ->
                                 val duration = if (exerciseStartMillis > 0L)
                                     ((System.currentTimeMillis() - exerciseStartMillis) / 1000L).toInt()
                                 else 0
@@ -1483,7 +1483,7 @@ fun DartsTrainerApp() {
                                             dartsThrown = darts,
                                             timestamp = System.currentTimeMillis(),
                                             durationSeconds = duration,
-                                            detailsJson = ""
+                                            detailsJson = details
                                         )
                                     )
                                     val lowerDartsBetter = current.id.startsWith("aroundclock_")
@@ -1590,7 +1590,7 @@ fun DartsTrainerApp() {
                             scoreSetRepository = scoreSetRepository,
                             bigRoundRepository = bigRoundRepository,
                             trainingRepository = trainingRepository,
-                            onFinish = { blockType, score, darts ->
+                            onFinish = { blockType, score, darts, details ->
                                 val duration = if (exerciseStartMillis > 0L)
                                     ((System.currentTimeMillis() - exerciseStartMillis) / 1000L).toInt()
                                 else 0
@@ -1606,7 +1606,7 @@ fun DartsTrainerApp() {
                                             dartsThrown = darts,
                                             timestamp = System.currentTimeMillis(),
                                             durationSeconds = duration,
-                                            detailsJson = ""
+                                            detailsJson = details
                                         )
                                     )
                                     val lowerDartsBetter = gameId.startsWith("aroundclock_")
