@@ -271,6 +271,7 @@ fun DartsTrainerApp() {
     var showExitTrainingDialog by remember { mutableStateOf(false) }
 
     var isFreeTraining by remember { mutableStateOf(false) }
+    var isSingleExercisePlay by remember { mutableStateOf(false) } // Новый флаг для одиночного запуска
     var freeNoRepeat by remember { mutableStateOf(false) }
     var freeCompletedIds by remember { mutableStateOf<Set<String>>(emptySet()) }
     var freeSkippedIds by remember { mutableStateOf<Set<String>>(emptySet()) }
@@ -679,6 +680,7 @@ fun DartsTrainerApp() {
         pendingNextStep = null
         showExitTrainingDialog = false
         isFreeTraining = false
+        isSingleExercisePlay = false
         freeNoRepeat = false
         freeCompletedIds = emptySet()
         freeSkippedIds = emptySet()
@@ -761,6 +763,15 @@ fun DartsTrainerApp() {
     }
 
     fun advanceAfterExercise(finishedExerciseId: String) {
+        if (isSingleExercisePlay) {
+            isSingleExercisePlay = false
+            isTrainingActive = false
+            trainingSessionId = 0L
+            isFreeTraining = false
+            screen = "main"
+            return
+        }
+
         if (isFreeTraining) {
             freeExercisesCompleted += 1
             freeCompletedIds = freeCompletedIds + finishedExerciseId
@@ -791,7 +802,7 @@ fun DartsTrainerApp() {
         } else {
             mainExercises.getOrNull(currentExerciseIndex)?.id ?: ""
         }
-        if (!isFreeTraining) {
+        if (!isFreeTraining && !isSingleExercisePlay) {
             exerciseStatuses = exerciseStatuses.toMutableMap().apply {
                 put(currentExerciseIndex, SummaryStatus.DONE)
             }
@@ -819,6 +830,12 @@ fun DartsTrainerApp() {
                     resetTrainingState()
                     TrainingStateStorage.clear(context)
                     autoOpenTimeDialog = false
+                    screen = "main"
+                } else if (isSingleExercisePlay) {
+                    isSingleExercisePlay = false
+                    isTrainingActive = false
+                    trainingSessionId = 0L
+                    isFreeTraining = false
                     screen = "main"
                 } else {
                     screen = "training_free_summary"
@@ -898,7 +915,35 @@ fun DartsTrainerApp() {
                     },
                     onFreePlay = { screen = "game_select" },
                     onStatsClick = { statsMenuKey++; screen = "stats_menu" },
-                    onSettingsClick = { screen = "settings" }
+                    onSettingsClick = { screen = "settings" },
+                    onPlayExercise = { id ->
+                        isSingleExercisePlay = true
+                        autoOpenTimeDialog = false
+                        scope.launch {
+                            val analysis = TrainingStatsAnalyzer.analyze(trainingRepository)
+                            currentWeakness = analysis.weakestType
+                            currentLevel = analysis.level
+                            currentTargetGoals = analysis.targetPracticeGoals
+
+                            val session = TrainingSession(
+                                dateMillis = System.currentTimeMillis(),
+                                plannedMinutes = 0,
+                                actualMinutes = 0,
+                                levelAtStart = analysis.level,
+                                mode = TrainingMode.FLEXIBLE,
+                                focus = null,
+                                isControl = false,
+                                isCompleted = false
+                            )
+                            trainingSessionId = trainingRepository.insertSession(session)
+                            trainingElapsedSeconds = 0
+                            trainingPaused = false
+                            isTrainingActive = true
+                            isFreeTraining = true
+                            
+                            launchExercise(id)
+                        }
+                    }
                 )
 
                 "stats_menu" -> StatsMenuScreen(
@@ -1033,6 +1078,7 @@ fun DartsTrainerApp() {
                             isTrainingCricket = false
                             isTrainingActive = true
                             isFreeTraining = false
+                            isSingleExercisePlay = false
                             showRestTimer = false
                             pendingNextStep = null
 
@@ -1101,6 +1147,7 @@ fun DartsTrainerApp() {
                             isTrainingCricket = false
                             isTrainingActive = true
                             isFreeTraining = true
+                            isSingleExercisePlay = false
                             freeNoRepeat = false
                             freeCompletedIds = emptySet()
                             freeSkippedIds = emptySet()
@@ -1366,7 +1413,7 @@ fun DartsTrainerApp() {
                                             lowerDartsBetter = false
                                         )
                                     }
-                                    if (!isFreeTraining) {
+                                    if (!isFreeTraining && !isSingleExercisePlay) {
                                         exerciseStatuses = exerciseStatuses.toMutableMap().apply {
                                             put(currentExerciseIndex, SummaryStatus.DONE)
                                         }
@@ -1374,7 +1421,15 @@ fun DartsTrainerApp() {
                                     advanceAfterExercise(current.id)
                                 },
                                 onBack = {
-                                    screen = if (isFreeTraining) "training_free_next" else "training_block"
+                                    if (isSingleExercisePlay) {
+                                        isSingleExercisePlay = false
+                                        isTrainingActive = false
+                                        trainingSessionId = 0L
+                                        isFreeTraining = false
+                                        screen = "main"
+                                    } else {
+                                        screen = if (isFreeTraining) "training_free_next" else "training_block"
+                                    }
                                 }
                             )
                         } else {
@@ -1413,7 +1468,7 @@ fun DartsTrainerApp() {
                                             lowerDartsBetter = lowerDartsBetter
                                         )
                                     }
-                                    if (!isFreeTraining) {
+                                    if (!isFreeTraining && !isSingleExercisePlay) {
                                         exerciseStatuses = exerciseStatuses.toMutableMap().apply {
                                             put(currentExerciseIndex, SummaryStatus.DONE)
                                         }
@@ -1421,7 +1476,15 @@ fun DartsTrainerApp() {
                                     advanceAfterExercise(current.id)
                                 },
                                 onBack = {
-                                    screen = if (isFreeTraining) "training_free_next" else "training_block"
+                                    if (isSingleExercisePlay) {
+                                        isSingleExercisePlay = false
+                                        isTrainingActive = false
+                                        trainingSessionId = 0L
+                                        isFreeTraining = false
+                                        screen = "main"
+                                    } else {
+                                        screen = if (isFreeTraining) "training_free_next" else "training_block"
+                                    }
                                 }
                             )
                         }
@@ -1636,6 +1699,13 @@ fun DartsTrainerApp() {
                             cricketGame = null; cricketExistingId = 0L
                             screen = when {
                                 wasNorm -> "normatives"
+                                isSingleExercisePlay -> {
+                                    isSingleExercisePlay = false
+                                    isTrainingActive = false
+                                    trainingSessionId = 0L
+                                    isFreeTraining = false
+                                    "main"
+                                }
                                 wasTraining -> if (isFreeTraining) "training_free_next" else "training_block"
                                 else -> "game_select"
                             }
@@ -1730,6 +1800,13 @@ fun DartsTrainerApp() {
                             game501 = null; game501ExistingId = 0L
                             screen = when {
                                 wasNorm -> "normatives"
+                                isSingleExercisePlay -> {
+                                    isSingleExercisePlay = false
+                                    isTrainingActive = false
+                                    trainingSessionId = 0L
+                                    isFreeTraining = false
+                                    "main"
+                                }
                                 wasTraining -> if (isFreeTraining) "training_free_next" else "training_block"
                                 else -> "game_select"
                             }
@@ -1995,6 +2072,7 @@ fun DartsTrainerApp() {
                 trainingPaused = false
                 isTrainingActive = true
                 isFreeTraining = false
+                isSingleExercisePlay = false
                 autoOpenTimeDialog = false
                 showResumeDialog = false
                 exerciseStartMillis = 0L
