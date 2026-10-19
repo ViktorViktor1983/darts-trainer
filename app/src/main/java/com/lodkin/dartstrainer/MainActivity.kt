@@ -6,18 +6,12 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.sp
 import com.lodkin.dartstrainer.data.SettingsStorage
 import com.lodkin.dartstrainer.data.aroundclock.AroundClockDatabase
 import com.lodkin.dartstrainer.data.aroundclock.AroundClockOrder
@@ -61,10 +55,7 @@ import com.lodkin.dartstrainer.data.training.TrainingSession
 import com.lodkin.dartstrainer.data.training.TrainingStateStorage
 import com.lodkin.dartstrainer.data.training.TrainingStatsAnalyzer
 import com.lodkin.dartstrainer.data.training.WeaknessType
-import com.lodkin.dartstrainer.theme.Accent
 import com.lodkin.dartstrainer.theme.DarkBg
-import com.lodkin.dartstrainer.theme.GoldAccent
-import com.lodkin.dartstrainer.theme.TileBgDark
 import com.lodkin.dartstrainer.ui.GameSelectScreen
 import com.lodkin.dartstrainer.ui.LoadingScreen
 import com.lodkin.dartstrainer.ui.MainMenuScreen
@@ -78,7 +69,6 @@ import com.lodkin.dartstrainer.ui.about.AboutScreen
 import com.lodkin.dartstrainer.ui.aroundclock.AroundClockGameScreen
 import com.lodkin.dartstrainer.ui.aroundclock.AroundClockSetupScreen
 import com.lodkin.dartstrainer.ui.aroundclock.AroundClockStatsScreen
-import com.lodkin.dartstrainer.ui.biground.BigRoundGameScreen
 import com.lodkin.dartstrainer.ui.biground.BigRoundSetupScreen
 import com.lodkin.dartstrainer.ui.biground.BigRoundStatsScreen
 import com.lodkin.dartstrainer.ui.cricket.CricketGameScreen
@@ -87,20 +77,21 @@ import com.lodkin.dartstrainer.ui.cricket.CricketStatsScreen
 import com.lodkin.dartstrainer.ui.game501.Game501Screen
 import com.lodkin.dartstrainer.ui.game501.Game501SetupScreen
 import com.lodkin.dartstrainer.ui.game501.Game501StatsScreen
-import com.lodkin.dartstrainer.ui.scoreset.ScoreSetGameScreen
 import com.lodkin.dartstrainer.ui.scoreset.ScoreSetSetupScreen
 import com.lodkin.dartstrainer.ui.scoreset.ScoreSetStatsScreen
-import com.lodkin.dartstrainer.ui.sector.SectorGameScreen
 import com.lodkin.dartstrainer.ui.sector.SectorSetupScreen
 import com.lodkin.dartstrainer.ui.sector.SectorStatsScreen
 import com.lodkin.dartstrainer.ui.training.BlockExerciseItem
 import com.lodkin.dartstrainer.ui.training.BullDrawDialog
 import com.lodkin.dartstrainer.ui.training.ExerciseSummary
 import com.lodkin.dartstrainer.ui.training.ExitTrainingDialog
+import com.lodkin.dartstrainer.ui.training.FreeNewRoundDialog
 import com.lodkin.dartstrainer.ui.training.FreeRouletteScreen
 import com.lodkin.dartstrainer.ui.training.FreeTrainingSummaryScreen
 import com.lodkin.dartstrainer.ui.training.MainExerciseRunner
 import com.lodkin.dartstrainer.ui.training.NormativeStep
+import com.lodkin.dartstrainer.ui.training.NormativesExerciseScreen
+import com.lodkin.dartstrainer.ui.training.NormativesResumeDialog
 import com.lodkin.dartstrainer.ui.training.NormativesScreen
 import com.lodkin.dartstrainer.ui.training.PlannedExercise
 import com.lodkin.dartstrainer.ui.training.RestTimerOverlay
@@ -1165,151 +1156,34 @@ fun DartsTrainerApp() {
                     if (step == null) {
                         screen = "normatives"
                     } else {
-                        when (step) {
-                            NormativeStep.SECTOR_20 -> SectorGameScreen(
-                                sector = 20,
-                                repository = sectorRepository,
-                                isTrainingMode = true,
-                                trainingRepository = trainingRepository,
-                                trainingRecordKey = "sector20",
-                                onFinish = { score ->
-                                    val duration = if (exerciseStartMillis > 0L)
-                                        ((System.currentTimeMillis() - exerciseStartMillis) / 1000L).toInt()
-                                    else 0
-                                    exerciseStartMillis = 0L
-                                    scope.launch {
-                                        trainingRepository.insertExerciseResult(
-                                            ExerciseResult(
-                                                sessionId = trainingSessionId,
-                                                blockType = BlockType.SCORE,
-                                                exerciseId = "sector20",
-                                                score = score,
-                                                dartsThrown = 30,
-                                                timestamp = System.currentTimeMillis(),
-                                                durationSeconds = duration,
-                                                detailsJson = ""
-                                            )
-                                        )
-                                        trainingRepository.updateTrainingRecordIfBetter(
-                                            exerciseId = "sector20",
-                                            score = score,
-                                            darts = 30,
-                                            lowerDartsBetter = false
-                                        )
-                                        normativesCompletedSteps = normativesCompletedSteps + NormativeStep.SECTOR_20.id
-                                        saveNormativesSnapshot()
-                                        if (normativesCompletedSteps.size == NormativeStep.entries.size) {
-                                            evaluateAndFinishNormatives()
-                                        } else {
-                                            isNormativesExercise = false
-                                            sectorToPlay = null
-                                            screen = "normatives"
-                                        }
-                                    }
-                                },
-                                onBack = {
+                        NormativesExerciseScreen(
+                            step = step,
+                            startMillis = exerciseStartMillis,
+                            trainingSessionId = trainingSessionId,
+                            trainingRepository = trainingRepository,
+                            sectorRepository = sectorRepository,
+                            bigRoundRepository = bigRoundRepository,
+                            scoreSetRepository = scoreSetRepository,
+                            onExerciseFinished = { stepId ->
+                                exerciseStartMillis = 0L
+                                normativesCompletedSteps = normativesCompletedSteps + stepId
+                                saveNormativesSnapshot()
+                                if (normativesCompletedSteps.size == NormativeStep.entries.size) {
+                                    evaluateAndFinishNormatives()
+                                } else {
                                     isNormativesExercise = false
                                     sectorToPlay = null
-                                    screen = "normatives"
-                                }
-                            )
-                            NormativeStep.BIG_ROUND -> BigRoundGameScreen(
-                                category = BigRoundCategory.MALE,
-                                repository = bigRoundRepository,
-                                isTrainingMode = true,
-                                trainingRepository = trainingRepository,
-                                trainingRecordKey = "biground",
-                                onFinish = { score ->
-                                    val duration = if (exerciseStartMillis > 0L)
-                                        ((System.currentTimeMillis() - exerciseStartMillis) / 1000L).toInt()
-                                    else 0
-                                    exerciseStartMillis = 0L
-                                    scope.launch {
-                                        trainingRepository.insertExerciseResult(
-                                            ExerciseResult(
-                                                sessionId = trainingSessionId,
-                                                blockType = BlockType.SECTOR,
-                                                exerciseId = "biground",
-                                                score = score,
-                                                dartsThrown = 63,
-                                                timestamp = System.currentTimeMillis(),
-                                                durationSeconds = duration,
-                                                detailsJson = ""
-                                            )
-                                        )
-                                        trainingRepository.updateTrainingRecordIfBetter(
-                                            exerciseId = "biground",
-                                            score = score,
-                                            darts = 63,
-                                            lowerDartsBetter = false
-                                        )
-                                        normativesCompletedSteps = normativesCompletedSteps + NormativeStep.BIG_ROUND.id
-                                        saveNormativesSnapshot()
-                                        if (normativesCompletedSteps.size == NormativeStep.entries.size) {
-                                            evaluateAndFinishNormatives()
-                                        } else {
-                                            isNormativesExercise = false
-                                            bigRoundCategory = null
-                                            screen = "normatives"
-                                        }
-                                    }
-                                },
-                                onBack = {
-                                    isNormativesExercise = false
                                     bigRoundCategory = null
                                     screen = "normatives"
                                 }
-                            )
-                            NormativeStep.SCORE_SET -> ScoreSetGameScreen(
-                                repository = scoreSetRepository,
-                                isTrainingMode = true,
-                                trainingRepository = trainingRepository,
-                                trainingRecordKey = "scoreset",
-                                onFinish = { totalScore, approaches ->
-                                    val duration = if (exerciseStartMillis > 0L)
-                                        ((System.currentTimeMillis() - exerciseStartMillis) / 1000L).toInt()
-                                    else 0
-                                    exerciseStartMillis = 0L
-                                    val dartsCount = approaches.size * 3
-                                    scope.launch {
-                                        trainingRepository.insertExerciseResult(
-                                            ExerciseResult(
-                                                sessionId = trainingSessionId,
-                                                blockType = BlockType.SCORE,
-                                                exerciseId = "scoreset",
-                                                score = totalScore,
-                                                dartsThrown = dartsCount,
-                                                timestamp = System.currentTimeMillis(),
-                                                durationSeconds = duration,
-                                                detailsJson = ""
-                                            )
-                                        )
-                                        trainingRepository.updateTrainingRecordIfBetter(
-                                            exerciseId = "scoreset",
-                                            score = totalScore,
-                                            darts = dartsCount,
-                                            lowerDartsBetter = false
-                                        )
-                                        normativesCompletedSteps = normativesCompletedSteps + NormativeStep.SCORE_SET.id
-                                        saveNormativesSnapshot()
-                                        if (normativesCompletedSteps.size == NormativeStep.entries.size) {
-                                            evaluateAndFinishNormatives()
-                                        } else {
-                                            isNormativesExercise = false
-                                            screen = "normatives"
-                                        }
-                                    }
-                                },
-                                onBack = {
-                                    isNormativesExercise = false
-                                    screen = "normatives"
-                                }
-                            )
-                            else -> {
+                            },
+                            onBack = {
                                 isNormativesExercise = false
+                                sectorToPlay = null
+                                bigRoundCategory = null
                                 screen = "normatives"
                             }
-                        }
+                        )
                     }
                 }
 
@@ -1887,7 +1761,7 @@ fun DartsTrainerApp() {
 
                 "biground_game" -> {
                     val c = bigRoundCategory
-                    if (c != null) BigRoundGameScreen(
+                    if (c != null) com.lodkin.dartstrainer.ui.biground.BigRoundGameScreen(
                         category = c, repository = bigRoundRepository,
                         isTrainingMode = false,
                         onFinish = { _ -> bigRoundCategory = null; screen = "game_select" },
@@ -1908,7 +1782,7 @@ fun DartsTrainerApp() {
                     onBack = { screen = "game_select" }
                 )
 
-                "scoreset_game" -> ScoreSetGameScreen(
+                "scoreset_game" -> com.lodkin.dartstrainer.ui.scoreset.ScoreSetGameScreen(
                     repository = scoreSetRepository,
                     isTrainingMode = false,
                     onFinish = { ts, ap ->
@@ -1994,99 +1868,50 @@ fun DartsTrainerApp() {
     if (showResumeNormativesDialog && pendingNormativesResume != null) {
         val snap = pendingNormativesResume!!
         val minutesAgo = NormativesStateStorage.minutesSinceLastUpdate(context)
-        AlertDialog(
-            onDismissRequest = { },
-            containerColor = TileBgDark,
-            title = {
-                Text(
-                    "Незавершённые нормативы",
-                    color = GoldAccent,
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold
-                )
-            },
-            text = {
-                Text(
-                    "У тебя есть незавершённая сдача нормативов. " +
-                            if (minutesAgo > 0) "Прошло $minutesAgo мин." else "Только что прервана.",
-                    color = Color.White.copy(alpha = 0.85f),
-                    fontSize = 14.sp
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    normativesCompletedSteps = snap.completedSteps
-                    normatives501Levels = snap.game501Levels
-                    normativesCricketLevels = snap.cricketLevels
-                    normatives501PlayerWins = snap.game501Results.count { it }
-                    normatives501BotWins = snap.game501Results.count { !it }
-                    normatives501CurrentLeg = snap.game501Results.size
-                    normativesCricketPlayerWins = snap.cricketResults.count { it }
-                    normativesCricketBotWins = snap.cricketResults.count { !it }
-                    normativesCricketCurrentLeg = snap.cricketResults.size
 
-                    scope.launch {
-                        val analysis = TrainingStatsAnalyzer.analyze(trainingRepository)
-                        normativesStartLevel = analysis.level.coerceAtLeast(1)
-                    }
-                    normativesActive = true
-                    normativesNewLevel = null
-                    showResumeNormativesDialog = false
-                    pendingNormativesResume = null
-                    screen = "normatives"
-                }) {
-                    Text("Продолжить", color = Accent, fontWeight = FontWeight.Bold)
+        NormativesResumeDialog(
+            minutesAgo = minutesAgo,
+            onContinue = {
+                normativesCompletedSteps = snap.completedSteps
+                normatives501Levels = snap.game501Levels
+                normativesCricketLevels = snap.cricketLevels
+                normatives501PlayerWins = snap.game501Results.count { it }
+                normatives501BotWins = snap.game501Results.count { !it }
+                normatives501CurrentLeg = snap.game501Results.size
+                normativesCricketPlayerWins = snap.cricketResults.count { it }
+                normativesCricketBotWins = snap.cricketResults.count { !it }
+                normativesCricketCurrentLeg = snap.cricketResults.size
+
+                scope.launch {
+                    val analysis = TrainingStatsAnalyzer.analyze(trainingRepository)
+                    normativesStartLevel = analysis.level.coerceAtLeast(1)
                 }
+                normativesActive = true
+                normativesNewLevel = null
+                showResumeNormativesDialog = false
+                pendingNormativesResume = null
+                screen = "normatives"
             },
-            dismissButton = {
-                TextButton(onClick = {
-                    NormativesStateStorage.clear(context)
-                    showResumeNormativesDialog = false
-                    pendingNormativesResume = null
-                    autoOpenTimeDialog = true
-                }) {
-                    Text("Начать заново", color = Color.White.copy(alpha = 0.75f))
-                }
+            onRestart = {
+                NormativesStateStorage.clear(context)
+                showResumeNormativesDialog = false
+                pendingNormativesResume = null
+                autoOpenTimeDialog = true
             }
         )
     }
 
     if (showFreeNewRoundDialog) {
-        AlertDialog(
-            onDismissRequest = { },
-            containerColor = TileBgDark,
-            title = {
-                Text(
-                    "Все упражнения пройдены",
-                    color = GoldAccent,
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold
-                )
+        FreeNewRoundDialog(
+            onNewRound = {
+                showFreeNewRoundDialog = false
+                freeCompletedIds = emptySet()
+                freeSkippedIds = emptySet()
+                pickNextFreeExercise()
             },
-            text = {
-                Text(
-                    "Ты прошёл все 8 упражнений. Что делаем дальше?",
-                    color = Color.White.copy(alpha = 0.9f),
-                    fontSize = 14.sp
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    showFreeNewRoundDialog = false
-                    freeCompletedIds = emptySet()
-                    freeSkippedIds = emptySet()
-                    pickNextFreeExercise()
-                }) {
-                    Text("Новый круг", color = Accent, fontWeight = FontWeight.Bold)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = {
-                    showFreeNewRoundDialog = false
-                    screen = "training_free_summary"
-                }) {
-                    Text("Закончить тренировку", color = Color.White.copy(alpha = 0.75f))
-                }
+            onFinish = {
+                showFreeNewRoundDialog = false
+                screen = "training_free_summary"
             }
         )
     }
