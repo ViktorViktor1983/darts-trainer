@@ -41,7 +41,8 @@ import com.lodkin.dartstrainer.ui.sector.SectorGameScreen
  * Запуск упражнения основной части. Используется и в обычной,
  * и в свободной тренировке.
  *
- * onFinish передаёт: (blockType, score, darts).
+ * onFinish передаёт: (blockType, score, darts, detailsJson).
+ * detailsJson — строка с подробностями (для кругосветок: "1:2,2:1,3:4").
  */
 @Composable
 internal fun MainExerciseRunner(
@@ -52,7 +53,7 @@ internal fun MainExerciseRunner(
     scoreSetRepository: ScoreSetRepository,
     bigRoundRepository: BigRoundRepository,
     trainingRepository: TrainingRepository?,
-    onFinish: (BlockType, Int, Int) -> Unit,
+    onFinish: (BlockType, Int, Int, String) -> Unit,
     onBack: () -> Unit
 ) {
     val isTraining = trainingRepository != null
@@ -66,7 +67,10 @@ internal fun MainExerciseRunner(
             sectorStart = 1,
             trainingRepository = trainingRepository,
             trainingRecordKey = if (isTraining) "aroundclock_doubles" else null,
-            onFinish = { totalDarts, _, _ -> onFinish(BlockType.DOUBLES, totalDarts, totalDarts) },
+            onFinish = { totalDarts, _, sr ->
+                val details = sr.entries.joinToString(",") { "${it.key}:${it.value}" }
+                onFinish(BlockType.DOUBLES, totalDarts, totalDarts, details)
+            },
             onBack = onBack
         )
         "aroundclock_sectors" -> AroundClockGameScreen(
@@ -77,7 +81,10 @@ internal fun MainExerciseRunner(
             sectorStart = 1,
             trainingRepository = trainingRepository,
             trainingRecordKey = if (isTraining) "aroundclock_sectors" else null,
-            onFinish = { totalDarts, _, _ -> onFinish(BlockType.SECTOR, totalDarts, totalDarts) },
+            onFinish = { totalDarts, _, sr ->
+                val details = sr.entries.joinToString(",") { "${it.key}:${it.value}" }
+                onFinish(BlockType.SECTOR, totalDarts, totalDarts, details)
+            },
             onBack = onBack
         )
         "aroundclock_trebles" -> {
@@ -90,7 +97,10 @@ internal fun MainExerciseRunner(
                 sectorStart = sectorStart,
                 trainingRepository = trainingRepository,
                 trainingRecordKey = if (isTraining) "aroundclock_trebles" else null,
-                onFinish = { totalDarts, _, _ -> onFinish(BlockType.TREBLES, totalDarts, totalDarts) },
+                onFinish = { totalDarts, _, sr ->
+                    val details = sr.entries.joinToString(",") { "${it.key}:${it.value}" }
+                    onFinish(BlockType.TREBLES, totalDarts, totalDarts, details)
+                },
                 onBack = onBack
             )
         }
@@ -100,7 +110,7 @@ internal fun MainExerciseRunner(
             isTrainingMode = isTraining,
             trainingRepository = trainingRepository,
             trainingRecordKey = if (isTraining) "sector20" else null,
-            onFinish = { score -> onFinish(BlockType.SCORE, score, 30) },
+            onFinish = { score -> onFinish(BlockType.SCORE, score, 30, "") },
             onBack = onBack
         )
         "scoreset" -> ScoreSetGameScreen(
@@ -108,7 +118,7 @@ internal fun MainExerciseRunner(
             isTrainingMode = isTraining,
             trainingRepository = trainingRepository,
             trainingRecordKey = if (isTraining) "scoreset" else null,
-            onFinish = { totalScore, _ -> onFinish(BlockType.SCORE, totalScore, 30) },
+            onFinish = { totalScore, _ -> onFinish(BlockType.SCORE, totalScore, 30, "") },
             onBack = onBack
         )
         "biground" -> BigRoundGameScreen(
@@ -117,13 +127,13 @@ internal fun MainExerciseRunner(
             isTrainingMode = isTraining,
             trainingRepository = trainingRepository,
             trainingRecordKey = if (isTraining) "biground" else null,
-            onFinish = { score -> onFinish(BlockType.SECTOR, score, 63) },
+            onFinish = { score -> onFinish(BlockType.SECTOR, score, 63, "") },
             onBack = onBack
         )
         else -> TrainingExercisePlaceholder(
             title = "Упражнение",
             description = "Это упражнение пока в разработке.",
-            onDone = { onFinish(BlockType.SCORE, 0, 0) },
+            onDone = { onFinish(BlockType.SCORE, 0, 0, "") },
             onBack = onBack
         )
     }
