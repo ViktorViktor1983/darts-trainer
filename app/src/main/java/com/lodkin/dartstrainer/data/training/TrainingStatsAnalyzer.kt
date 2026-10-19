@@ -7,28 +7,18 @@ import kotlin.math.roundToInt
 /**
  * Анализатор накопленных данных тренировок.
  *
- * Читает результаты упражнений из БД, вычисляет:
- *   • Средние значения по 4 параметрам (набор, точность, удвоения, утроения).
- *   • Средние показатели 501 (PPR) и Крикета (MPR).
- *   • Два комплекса уровня:
- *       - Комплекс 1 — упражнения (среднее 4 параметров).
- *       - Комплекс 2 — игры (среднее 501 PPR и Крикета MPR).
- *   • Итоговый уровень — максимум из двух.
- *   • Флаги расхождения: недотягивают игры / недотягивают упражнения.
- *   • Слабое место.
- *   • Средний темп по каждому упражнению (по последним 5 записям).
+ * Считает два комплекса:
+ *   • Комплекс 1 — упражнения (набор, точность, удвоения, утроения).
+ *   • Комплекс 2 — игры (501 PPR и Крикет MPR).
  *
- * ВАЖНО: для кругосветок score = общее количество дротиков (чем меньше — тем лучше).
- * Для Сектор 20 / Набор / Большой раунд score = очки (чем больше — тем лучше).
+ * ВАЖНО: для кругосветок score = общее количество дротиков.
+ * Для Сектор 20 / Набор / Большой раунд score = очки.
  */
 object TrainingStatsAnalyzer {
 
     private const val RECENT_LIMIT = 5
     private const val AROUND_CLOCK_TARGETS = 21
 
-    /**
-     * Сводный результат анализа.
-     */
     data class TrainingAnalysis(
         // Средние значения по 4 параметрам
         val avgScore: Int?,
@@ -40,6 +30,7 @@ object TrainingStatsAnalyzer {
         // Уровни по параметрам (комплекс 1)
         val levelByScore: Int,
         val levelByBigRound: Int,
+        val levelBySectors: Int,
         val levelByDoubles: Int,
         val levelByTrebles: Int,
 
@@ -48,16 +39,16 @@ object TrainingStatsAnalyzer {
         val levelCricket: Int,
 
         // Два комплекса
-        val complex1Level: Int,        // уровень по упражнениям
-        val complex2Level: Int,        // уровень по играм
+        val complex1Level: Int,
+        val complex2Level: Int,
 
-        // Итоговый уровень (максимум из двух комплексов)
+        // Итоговый уровень
         val level: Int,
         val potential: Int,
 
-        // Флаги расхождения — какой комплекс отстаёт
-        val gamesLagBehind: Boolean,      // игры отстают от упражнений
-        val exercisesLagBehind: Boolean,  // упражнения отстают от игр
+        // Флаги расхождения
+        val gamesLagBehind: Boolean,
+        val exercisesLagBehind: Boolean,
 
         val weakestType: WeaknessType?,
 
@@ -96,7 +87,7 @@ object TrainingStatsAnalyzer {
         scoresetResults.forEach { scoreValues.add(it.score) }
         val avgScore = if (scoreValues.isEmpty()) null else scoreValues.average().roundToInt()
 
-        // ── Большой раунд ──
+        // ── Большой раунд (оставляем для справки, но в уровень не идёт) ──
         val avgBigRound = if (bigroundResults.isEmpty()) null
             else bigroundResults.map { it.score }.average().roundToInt()
 
@@ -114,7 +105,7 @@ object TrainingStatsAnalyzer {
             else ((AROUND_CLOCK_TARGETS / avgDarts) * 100.0).toFloat()
         }
 
-        // ── Точность в сектор ──
+        // ── Точность в сектор (Кругосветка-Сектора) ──
         val avgSectorsPercent = if (aroundSectorsResults.isEmpty()) null else {
             val avgDarts = aroundSectorsResults.map { it.score }.average()
             if (avgDarts <= 0.0) null
@@ -124,12 +115,13 @@ object TrainingStatsAnalyzer {
         // ── Уровни по параметрам (комплекс 1) ──
         val levelByScore = avgScore?.let { DartsNorms.levelBySector20(it) } ?: 0
         val levelByBigRound = avgBigRound?.let { DartsNorms.levelByBigRound(it) } ?: 0
+        val levelBySectors = avgSectorsPercent?.let { DartsNorms.levelBySectorsPercent(it) } ?: 0
         val levelByDoubles = avgDoublesPercent?.let { DartsNorms.levelByDoubles(it) } ?: 0
         val levelByTrebles = avgTreblesPercent?.let { DartsNorms.levelByTrebles(it) } ?: 0
 
         val exerciseLevels = mutableListOf<Int>()
         if (levelByScore > 0) exerciseLevels.add(levelByScore)
-        if (levelByBigRound > 0) exerciseLevels.add(levelByBigRound)
+        if (levelBySectors > 0) exerciseLevels.add(levelBySectors) // Большой раунд заменён на Кругосветку-Сектора
         if (levelByDoubles > 0) exerciseLevels.add(levelByDoubles)
         if (levelByTrebles > 0) exerciseLevels.add(levelByTrebles)
 
@@ -157,7 +149,7 @@ object TrainingStatsAnalyzer {
                 .coerceIn(1, DartsNorms.totalLevels())
         }
 
-        // ── Итоговый уровень = максимум из двух ──
+        // ── Итоговый уровень ──
         val level = when {
             complex1Level == 0 && complex2Level == 0 -> 1
             complex1Level == 0 -> complex2Level
@@ -179,7 +171,8 @@ object TrainingStatsAnalyzer {
         val weakestType: WeaknessType? = run {
             val candidates = mutableListOf<Pair<WeaknessType, Int>>()
             if (levelByScore > 0) candidates.add(WeaknessType.SCORE to levelByScore)
-            if (levelByBigRound > 0) candidates.add(WeaknessType.ACCURACY to levelByBigRound)
+            // Большой раунд больше не участвует в слабом месте
+            if (levelBySectors > 0) candidates.add(WeaknessType.ACCURACY to levelBySectors)
             if (levelByDoubles > 0) candidates.add(WeaknessType.DOUBLES to levelByDoubles)
             if (levelByTrebles > 0) candidates.add(WeaknessType.TREBLES to levelByTrebles)
             candidates.minByOrNull { it.second }?.first
@@ -201,7 +194,7 @@ object TrainingStatsAnalyzer {
         addTempo("aroundclock_trebles", aroundTreblesResults)
         addTempo("aroundclock_sectors", aroundSectorsResults)
 
-        // ── Общее количество данных (для блока «мало данных») ──
+        // ── Общее количество данных ──
         val count = sector20Results.size + scoresetResults.size + bigroundResults.size +
                 aroundDoublesResults.size + aroundTreblesResults.size + aroundSectorsResults.size
         val hasEnough = count >= 6
@@ -214,6 +207,7 @@ object TrainingStatsAnalyzer {
             avgSectorsPercent = avgSectorsPercent,
             levelByScore = levelByScore,
             levelByBigRound = levelByBigRound,
+            levelBySectors = levelBySectors,
             levelByDoubles = levelByDoubles,
             levelByTrebles = levelByTrebles,
             level501 = level501,
@@ -236,10 +230,6 @@ object TrainingStatsAnalyzer {
         )
     }
 
-    /**
-     * Средний PPR и % удвоений по партиям 501.
-     * Парсит detailsJson: "won=X;ppr=Y;dbl=Z".
-     */
     private fun compute501Averages(
         all501: List<ExerciseResult>
     ): Triple<Float?, Float?, Int> {
@@ -259,10 +249,6 @@ object TrainingStatsAnalyzer {
         return Triple(avgPpr, avgDbl, pprValues.size)
     }
 
-    /**
-     * Средний MPR по партиям Крикета.
-     * Парсит detailsJson: "won=X;mpr=Y".
-     */
     private fun computeCricketAverages(
         allCricket: List<ExerciseResult>
     ): Pair<Float?, Int> {
@@ -286,9 +272,6 @@ object TrainingStatsAnalyzer {
         }.toMap()
     }
 
-    /**
-     * Получить средний темп упражнения в минутах.
-     */
     fun tempoFor(analysis: TrainingAnalysis, exerciseId: String, fallbackMinutes: Int): Int {
         val tempo = analysis.avgMinutesByExercise[exerciseId] ?: return fallbackMinutes
         return tempo.roundToInt().coerceAtLeast(1)
