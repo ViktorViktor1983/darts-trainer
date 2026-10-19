@@ -15,11 +15,10 @@ import kotlin.math.roundToInt
  * Для Сектор 20 / Набор / Большой раунд score = очки.
  *
  * Дополнительно (с версии «Статистика по секторам»):
- *   • парсит detailsJson Кругосветки-Сектора формата "1:2,2:1,3:4"
- *     (сектор : дротиков_потрачено), где hitsRequired = 1;
+ *   • парсит detailsJson Кругосветок (Сектора, Удвоения, Утроения)
+ *     формата "1:2,2:1,3:4" (сектор : дротиков_потрачено);
  *   • считает средний процент попаданий по каждому сектору;
- *   • сравнивает его с общим средним и возвращает только ПРОБЛЕМНЫЕ
- *     сектора (отставание > MIN_DEVIATION_PERCENT).
+ *   • сравнивает его с общим средним и возвращает топ-3 худших.
  */
 object TrainingStatsAnalyzer {
 
@@ -98,13 +97,17 @@ object TrainingStatsAnalyzer {
         val avgCricketMpr: Float?,
         val countCricketMatches: Int,
 
-        // Только проблемные сектора (отставание > MIN_DEVIATION_PERCENT),
-        // отсортированы по убыванию отклонения. Может быть пусто.
+        // Топ худших секторов (только проблемные, отклонение > 25%)
         val worstSectors: List<SectorWeakness>,
-
-        // true, если накоплено достаточно данных по секторам (≥ MIN_SECTOR_ENTRIES записей),
-        // чтобы отчёт вообще имел смысл. Нужен, чтобы отличить «мало данных» от «всё в норме».
         val sectorsDataAvailable: Boolean,
+
+        // Топ худших удвоений
+        val worstDoubles: List<SectorWeakness>,
+        val doublesDataAvailable: Boolean,
+
+        // Топ худших утроений
+        val worstTrebles: List<SectorWeakness>,
+        val treblesDataAvailable: Boolean,
 
         val dataPointsCount: Int,
         val hasEnoughData: Boolean
@@ -123,8 +126,10 @@ object TrainingStatsAnalyzer {
         val all501Results = repository.getAllExerciseResultsByExerciseId("game501")
         val allCricketResults = repository.getAllExerciseResultsByExerciseId("cricket")
 
-        // ── Все записи Кругосветки-Сектора (для детальной статистики по секторам) ──
+        // ── Все записи Кругосветок (для детальной статистики) ──
         val allSectorsResults = repository.getAllExerciseResultsByExerciseId("aroundclock_sectors")
+        val allDoublesResults = repository.getAllExerciseResultsByExerciseId("aroundclock_doubles")
+        val allTreblesResults = repository.getAllExerciseResultsByExerciseId("aroundclock_trebles")
 
         // ── Средний набор очков (Сектор 20 + Набор) ──
         val scoreValues = mutableListOf<Int>()
@@ -166,7 +171,7 @@ object TrainingStatsAnalyzer {
 
         val exerciseLevels = mutableListOf<Int>()
         if (levelByScore > 0) exerciseLevels.add(levelByScore)
-        if (levelBySectors > 0) exerciseLevels.add(levelBySectors) // Большой раунд заменён на Кругосветку-Сектора
+        if (levelBySectors > 0) exerciseLevels.add(levelBySectors)
         if (levelByDoubles > 0) exerciseLevels.add(levelByDoubles)
         if (levelByTrebles > 0) exerciseLevels.add(levelByTrebles)
 
@@ -216,7 +221,6 @@ object TrainingStatsAnalyzer {
         val weakestType: WeaknessType? = run {
             val candidates = mutableListOf<Pair<WeaknessType, Int>>()
             if (levelByScore > 0) candidates.add(WeaknessType.SCORE to levelByScore)
-            // Большой раунд больше не участвует в слабом месте
             if (levelBySectors > 0) candidates.add(WeaknessType.ACCURACY to levelBySectors)
             if (levelByDoubles > 0) candidates.add(WeaknessType.DOUBLES to levelByDoubles)
             if (levelByTrebles > 0) candidates.add(WeaknessType.TREBLES to levelByTrebles)
@@ -239,8 +243,10 @@ object TrainingStatsAnalyzer {
         addTempo("aroundclock_trebles", aroundTreblesResults)
         addTempo("aroundclock_sectors", aroundSectorsResults)
 
-        // ── Проблемные сектора (детальная статистика Кругосветки-Сектора) ──
+        // ── Проблемные сектора (детальная статистика Кругосветок) ──
         val sectorsReport = computeWorstSectors(allSectorsResults)
+        val doublesReport = computeWorstSectors(allDoublesResults)
+        val treblesReport = computeWorstSectors(allTreblesResults)
 
         // ── Общее количество данных ──
         val count = sector20Results.size + scoresetResults.size + bigroundResults.size +
@@ -275,6 +281,10 @@ object TrainingStatsAnalyzer {
             countCricketMatches = countCricket,
             worstSectors = sectorsReport.problemSectors,
             sectorsDataAvailable = sectorsReport.dataAvailable,
+            worstDoubles = doublesReport.problemSectors,
+            doublesDataAvailable = doublesReport.dataAvailable,
+            worstTrebles = treblesReport.problemSectors,
+            treblesDataAvailable = treblesReport.dataAvailable,
             dataPointsCount = count,
             hasEnoughData = hasEnough
         )
@@ -287,7 +297,7 @@ object TrainingStatsAnalyzer {
     )
 
     /**
-     * Считает проблемные сектора по данным Кругосветки-Сектора.
+     * Считает проблемные сектора по данным любой Кругосветки.
      *
      * Логика:
      *   • Каждая запись exercise_results с непустым detailsJson парсится как
@@ -354,7 +364,7 @@ object TrainingStatsAnalyzer {
     }
 
     /**
-     * Парсит detailsJson Кругосветки-Сектора.
+     * Парсит detailsJson Кругосветок.
      * Формат: "1:2,2:1,3:4" (сектор : дротиков_потрачено).
      * Возвращает Map<сектор, дротиков>. Некорректные пары игнорируются.
      */
