@@ -273,6 +273,7 @@ fun DartsTrainerApp() {
     var isFreeTraining by remember { mutableStateOf(false) }
     var isSingleExercisePlay by remember { mutableStateOf(false) } // Новый флаг для одиночного запуска
     var freeNoRepeat by remember { mutableStateOf(false) }
+    var freeChooseMyself by remember { mutableStateOf(false) } // Новый переключатель
     var freeCompletedIds by remember { mutableStateOf<Set<String>>(emptySet()) }
     var freeSkippedIds by remember { mutableStateOf<Set<String>>(emptySet()) }
     var freeCurrentId by remember { mutableStateOf<String?>(null) }
@@ -682,6 +683,7 @@ fun DartsTrainerApp() {
         isFreeTraining = false
         isSingleExercisePlay = false
         freeNoRepeat = false
+        freeChooseMyself = false
         freeCompletedIds = emptySet()
         freeSkippedIds = emptySet()
         freeCurrentId = null
@@ -1079,6 +1081,7 @@ fun DartsTrainerApp() {
                             isTrainingActive = true
                             isFreeTraining = false
                             isSingleExercisePlay = false
+                            freeChooseMyself = false
                             showRestTimer = false
                             pendingNextStep = null
 
@@ -1149,6 +1152,7 @@ fun DartsTrainerApp() {
                             isFreeTraining = true
                             isSingleExercisePlay = false
                             freeNoRepeat = false
+                            freeChooseMyself = false
                             freeCompletedIds = emptySet()
                             freeSkippedIds = emptySet()
                             freeCurrentId = null
@@ -1286,7 +1290,7 @@ fun DartsTrainerApp() {
                 "training_free_next" -> {
                     val current = mainExercises.firstOrNull { it.id == freeCurrentId }
 
-                    if (current == null) {
+                    if (current == null && !freeChooseMyself) {
                         LaunchedEffect(freeCurrentId, showFreeNewRoundDialog) {
                             if (freeCurrentId == null && !showFreeNewRoundDialog) {
                                 pickNextFreeExercise()
@@ -1309,9 +1313,17 @@ fun DartsTrainerApp() {
                                         freeCompletedIds = emptySet()
                                     }
                                 },
-                                onPlay = { launchExercise(current.id) },
+                                chooseMyself = freeChooseMyself,
+                                onToggleChooseMyself = { newValue ->
+                                    freeChooseMyself = newValue
+                                },
+                                onPlay = { launchExercise(current?.id ?: "") },
+                                onPlayDirect = { id ->
+                                    freeCurrentId = id
+                                    launchExercise(id)
+                                },
                                 onSkip = {
-                                    freeSkippedIds = freeSkippedIds + current.id
+                                    freeSkippedIds = freeSkippedIds + (current?.id ?: "")
                                     freeCurrentId = null
                                 },
                                 onFinish = { screen = "training_free_summary" }
@@ -2073,6 +2085,7 @@ fun DartsTrainerApp() {
                 isTrainingActive = true
                 isFreeTraining = false
                 isSingleExercisePlay = false
+                freeChooseMyself = false
                 autoOpenTimeDialog = false
                 showResumeDialog = false
                 exerciseStartMillis = 0L
