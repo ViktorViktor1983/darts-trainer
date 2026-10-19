@@ -99,6 +99,7 @@ import com.lodkin.dartstrainer.ui.training.RestTimerOverlay
 import com.lodkin.dartstrainer.ui.training.ResumeTrainingDialog
 import com.lodkin.dartstrainer.ui.training.SummaryBlockType
 import com.lodkin.dartstrainer.ui.training.SummaryStatus
+import com.lodkin.dartstrainer.ui.training.TargetedPracticeScreen
 import com.lodkin.dartstrainer.ui.training.TimeUpDialog
 import com.lodkin.dartstrainer.ui.training.TrainingBlockScreen
 import com.lodkin.dartstrainer.ui.training.TrainingExercisePlaceholder
@@ -260,6 +261,7 @@ fun DartsTrainerApp() {
     var exerciseStatuses by remember { mutableStateOf<Map<Int, SummaryStatus>>(emptyMap()) }
     var currentWeakness by remember { mutableStateOf<WeaknessType?>(null) }
     var currentLevel by remember { mutableStateOf(1) }
+    var currentTargetGoals by remember { mutableStateOf<List<String>>(emptyList()) }
 
     var blockExerciseId by remember { mutableStateOf<String?>(null) }
     var extraGameId by remember { mutableStateOf<String?>(null) }
@@ -703,6 +705,9 @@ fun DartsTrainerApp() {
         normativesCricketCurrentLeg = 0
         normativesNewLevel = null
         isNormativesExercise = false
+        currentWeakness = null
+        currentLevel = 1
+        currentTargetGoals = emptyList()
     }
 
     fun activePhases(): List<TrainingBlockPhase> {
@@ -977,6 +982,7 @@ fun DartsTrainerApp() {
                             val completedCount = trainingRepository.getCompletedSessionCount()
                             currentWeakness = analysis.weakestType
                             currentLevel = analysis.level
+                            currentTargetGoals = analysis.targetPracticeGoals
 
                             val session = TrainingSession(
                                 dateMillis = System.currentTimeMillis(),
@@ -1058,6 +1064,7 @@ fun DartsTrainerApp() {
                             val completedCount = trainingRepository.getCompletedSessionCount()
                             currentWeakness = analysis.weakestType
                             currentLevel = analysis.level
+                            currentTargetGoals = analysis.targetPracticeGoals
 
                             val session = TrainingSession(
                                 dateMillis = System.currentTimeMillis(),
@@ -1334,52 +1341,95 @@ fun DartsTrainerApp() {
                             }
                         )
                     } else {
-                        MainExerciseRunner(
-                            exerciseId = current.id,
-                            playerLevel = currentLevel,
-                            aroundClockRepository = aroundClockRepository,
-                            sectorRepository = sectorRepository,
-                            scoreSetRepository = scoreSetRepository,
-                            bigRoundRepository = bigRoundRepository,
-                            trainingRepository = trainingRepository,
-                            onFinish = { blockType, score, darts, details ->
-                                val duration = if (exerciseStartMillis > 0L)
-                                    ((System.currentTimeMillis() - exerciseStartMillis) / 1000L).toInt()
-                                else 0
-                                exerciseStartMillis = 0L
+                        if (current.id == "targeted_practice") {
+                            TargetedPracticeScreen(
+                                targets = currentTargetGoals,
+                                dartsPerTarget = 15,
+                                onFinish = { hits, totalDarts ->
+                                    val duration = if (exerciseStartMillis > 0L)
+                                        ((System.currentTimeMillis() - exerciseStartMillis) / 1000L).toInt()
+                                    else 0
+                                    exerciseStartMillis = 0L
 
-                                scope.launch {
-                                    trainingRepository.insertExerciseResult(
-                                        ExerciseResult(
-                                            sessionId = trainingSessionId,
-                                            blockType = blockType,
+                                    scope.launch {
+                                        trainingRepository.insertExerciseResult(
+                                            ExerciseResult(
+                                                sessionId = trainingSessionId,
+                                                blockType = BlockType.SCORE,
+                                                exerciseId = "targeted_practice",
+                                                score = hits,
+                                                dartsThrown = totalDarts,
+                                                timestamp = System.currentTimeMillis(),
+                                                durationSeconds = duration,
+                                                detailsJson = ""
+                                            )
+                                        )
+                                        trainingRepository.updateTrainingRecordIfBetter(
+                                            exerciseId = "targeted_practice",
+                                            score = hits,
+                                            darts = totalDarts,
+                                            lowerDartsBetter = false
+                                        )
+                                    }
+                                    if (!isFreeTraining) {
+                                        exerciseStatuses = exerciseStatuses.toMutableMap().apply {
+                                            put(currentExerciseIndex, SummaryStatus.DONE)
+                                        }
+                                    }
+                                    advanceAfterExercise(current.id)
+                                },
+                                onBack = {
+                                    screen = if (isFreeTraining) "training_free_next" else "training_block"
+                                }
+                            )
+                        } else {
+                            MainExerciseRunner(
+                                exerciseId = current.id,
+                                playerLevel = currentLevel,
+                                aroundClockRepository = aroundClockRepository,
+                                sectorRepository = sectorRepository,
+                                scoreSetRepository = scoreSetRepository,
+                                bigRoundRepository = bigRoundRepository,
+                                trainingRepository = trainingRepository,
+                                onFinish = { blockType, score, darts, details ->
+                                    val duration = if (exerciseStartMillis > 0L)
+                                        ((System.currentTimeMillis() - exerciseStartMillis) / 1000L).toInt()
+                                    else 0
+                                    exerciseStartMillis = 0L
+
+                                    scope.launch {
+                                        trainingRepository.insertExerciseResult(
+                                            ExerciseResult(
+                                                sessionId = trainingSessionId,
+                                                blockType = blockType,
+                                                exerciseId = current.id,
+                                                score = score,
+                                                dartsThrown = darts,
+                                                timestamp = System.currentTimeMillis(),
+                                                durationSeconds = duration,
+                                                detailsJson = details
+                                            )
+                                        )
+                                        val lowerDartsBetter = current.id.startsWith("aroundclock_")
+                                        trainingRepository.updateTrainingRecordIfBetter(
                                             exerciseId = current.id,
                                             score = score,
-                                            dartsThrown = darts,
-                                            timestamp = System.currentTimeMillis(),
-                                            durationSeconds = duration,
-                                            detailsJson = details
+                                            darts = darts,
+                                            lowerDartsBetter = lowerDartsBetter
                                         )
-                                    )
-                                    val lowerDartsBetter = current.id.startsWith("aroundclock_")
-                                    trainingRepository.updateTrainingRecordIfBetter(
-                                        exerciseId = current.id,
-                                        score = score,
-                                        darts = darts,
-                                        lowerDartsBetter = lowerDartsBetter
-                                    )
-                                }
-                                if (!isFreeTraining) {
-                                    exerciseStatuses = exerciseStatuses.toMutableMap().apply {
-                                        put(currentExerciseIndex, SummaryStatus.DONE)
                                     }
+                                    if (!isFreeTraining) {
+                                        exerciseStatuses = exerciseStatuses.toMutableMap().apply {
+                                            put(currentExerciseIndex, SummaryStatus.DONE)
+                                        }
+                                    }
+                                    advanceAfterExercise(current.id)
+                                },
+                                onBack = {
+                                    screen = if (isFreeTraining) "training_free_next" else "training_block"
                                 }
-                                advanceAfterExercise(current.id)
-                            },
-                            onBack = {
-                                screen = if (isFreeTraining) "training_free_next" else "training_block"
-                            }
-                        )
+                            )
+                        }
                     }
                 }
 
