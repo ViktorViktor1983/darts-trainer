@@ -18,7 +18,9 @@ import kotlin.math.roundToInt
  *   • парсит detailsJson Кругосветок (Сектора, Удвоения, Утроения)
  *     формата "1:2,2:1,3:4" (сектор : дротиков_потрачено);
  *   • считает средний процент попаданий по каждому сектору;
- *   • сравнивает его с общим средним и возвращает топ-3 худших.
+ *   • сравнивает его с общим средним и возвращает топ-3 худших;
+ *   • формирует список целей для точечной работы (targetPracticeGoals);
+ *   • проверяет, было ли уже упражнение "targeted_practice" в этом периоде.
  */
 object TrainingStatsAnalyzer {
 
@@ -34,16 +36,11 @@ object TrainingStatsAnalyzer {
     /**
      * Минимальное отклонение от среднего (в процентах), при котором
      * сектор считается проблемным и попадает в отчёт.
-     * Сектора, которые лучше среднего (отрицательное отклонение), не показываем.
      */
     private const val MIN_DEVIATION_PERCENT = 25f
 
     /**
      * Один проблемный сектор.
-     * @param sector номер сектора (1..20, 25 = Bull).
-     * @param percent средний процент попаданий по сектору (hits / darts * 100).
-     * @param deviation относительное отклонение от общего среднего, в процентах (положительное — хуже среднего).
-     * @param count сколько завершённых Кругосветок содержали этот сектор.
      */
     data class SectorWeakness(
         val sector: Int,
@@ -109,6 +106,12 @@ object TrainingStatsAnalyzer {
         val worstTrebles: List<SectorWeakness>,
         val treblesDataAvailable: Boolean,
 
+        // Список целей для точечной работы (например, ["S13", "D7", "T11"])
+        val targetPracticeGoals: List<String>,
+
+        // Было ли уже выполнено упражнение "targeted_practice" в этом периоде
+        val hasTargetedPracticeThisPeriod: Boolean,
+
         val dataPointsCount: Int,
         val hasEnoughData: Boolean
     )
@@ -130,6 +133,10 @@ object TrainingStatsAnalyzer {
         val allSectorsResults = repository.getAllExerciseResultsByExerciseId("aroundclock_sectors")
         val allDoublesResults = repository.getAllExerciseResultsByExerciseId("aroundclock_doubles")
         val allTreblesResults = repository.getAllExerciseResultsByExerciseId("aroundclock_trebles")
+
+        // ── Проверяем, было ли упражнение "targeted_practice" в этом периоде ──
+        val allTargetedResults = repository.getAllExerciseResultsByExerciseId("targeted_practice")
+        val hasTargetedPractice = allTargetedResults.isNotEmpty()
 
         // ── Средний набор очков (Сектор 20 + Набор) ──
         val scoreValues = mutableListOf<Int>()
@@ -243,10 +250,26 @@ object TrainingStatsAnalyzer {
         addTempo("aroundclock_trebles", aroundTreblesResults)
         addTempo("aroundclock_sectors", aroundSectorsResults)
 
-        // ── Проблемные сектора (детальная статистика Кругосветок) ──
+        // ── Проблемные сектора ──
         val sectorsReport = computeWorstSectors(allSectorsResults)
         val doublesReport = computeWorstSectors(allDoublesResults)
         val treblesReport = computeWorstSectors(allTreblesResults)
+
+        // ── Сборка списка целей для точечной работы ──
+        val goals = mutableListOf<String>()
+        
+        // Сектора
+        sectorsReport.problemSectors.take(3).forEach { 
+            goals.add(if (it.sector == 25) "Bull" else "S${it.sector}")
+        }
+        // Удвоения
+        doublesReport.problemSectors.take(3).forEach { 
+            goals.add(if (it.sector == 25) "D-Bull" else "D${it.sector}")
+        }
+        // Утроения
+        treblesReport.problemSectors.take(3).forEach { 
+            goals.add(if (it.sector == 25) "T-Bull" else "T${it.sector}")
+        }
 
         // ── Общее количество данных ──
         val count = sector20Results.size + scoresetResults.size + bigroundResults.size +
@@ -285,32 +308,18 @@ object TrainingStatsAnalyzer {
             doublesDataAvailable = doublesReport.dataAvailable,
             worstTrebles = treblesReport.problemSectors,
             treblesDataAvailable = treblesReport.dataAvailable,
+            targetPracticeGoals = goals,
+            hasTargetedPracticeThisPeriod = hasTargetedPractice,
             dataPointsCount = count,
             hasEnoughData = hasEnough
         )
     }
 
-    /** Результат анализа секторов: список проблемных + флаг «данных вообще достаточно». */
     private data class SectorsReport(
         val problemSectors: List<SectorWeakness>,
         val dataAvailable: Boolean
     )
 
-    /**
-     * Считает проблемные сектора по данным любой Кругосветки.
-     *
-     * Логика:
-     *   • Каждая запись exercise_results с непустым detailsJson парсится как
-     *     "1:2,2:1,3:4" (сектор : дротиков_потрачено).
-     *   • hitsRequired = 1, значит hits[S] = count[S] (по одной записи = одно попадание).
-     *   • Фильтр 1: сектор попадает в отчёт, если он встречался в ≥ MIN_SECTOR_ENTRIES записях.
-     *   • sectorPercent = count / sumDarts * 100.
-     *   • generalPercent = Σcount / ΣsumDarts * 100 (по прошедшим фильтр 1).
-     *   • deviation = (generalPercent − sectorPercent) / generalPercent * 100 (относительное).
-     *   • Фильтр 2: в итоговый список попадают только сектора с deviation > MIN_DEVIATION_PERCENT.
-     *     Сектора, которые лучше среднего, не показываем — они не проблема.
-     *   • Сортировка по deviation по убыванию (худшие сверху), берём топ WORST_SECTORS_TOP.
-     */
     private fun computeWorstSectors(
         allSectors: List<ExerciseResult>
     ): SectorsReport {
@@ -330,17 +339,14 @@ object TrainingStatsAnalyzer {
             }
         }
 
-        // Фильтр 1: только сектора с достаточным количеством записей
         val filtered = sumDarts.keys.filter { (countSector[it] ?: 0) >= MIN_SECTOR_ENTRIES }
         if (filtered.isEmpty()) return SectorsReport(emptyList(), false)
 
-        // Общий средний процент по прошедшим фильтр 1
         val totalCount = filtered.sumOf { countSector[it] ?: 0 }
         val totalDarts = filtered.sumOf { sumDarts[it] ?: 0 }
         if (totalDarts <= 0 || totalCount <= 0) return SectorsReport(emptyList(), false)
         val generalPercent = totalCount.toDouble() / totalDarts.toDouble() * 100.0
 
-        // Считаем отклонения и оставляем только проблемные (deviation > MIN_DEVIATION_PERCENT)
         val problems = filtered
             .map { sector ->
                 val c = countSector[sector] ?: 0
@@ -363,11 +369,6 @@ object TrainingStatsAnalyzer {
         return SectorsReport(problems, true)
     }
 
-    /**
-     * Парсит detailsJson Кругосветок.
-     * Формат: "1:2,2:1,3:4" (сектор : дротиков_потрачено).
-     * Возвращает Map<сектор, дротиков>. Некорректные пары игнорируются.
-     */
     private fun parseSectorDetails(s: String): Map<Int, Int> {
         if (s.isBlank()) return emptyMap()
         val result = mutableMapOf<Int, Int>()
@@ -418,7 +419,6 @@ object TrainingStatsAnalyzer {
         return avgMpr to mprValues.size
     }
 
-    /** Парсер detailsJson для 501/Крикета: формат "ppr=50.5;dbl=25.0". */
     private fun parseDetails(s: String): Map<String, String> {
         if (s.isBlank()) return emptyMap()
         return s.split(";").mapNotNull { entry ->
