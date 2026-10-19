@@ -7,25 +7,24 @@ import kotlin.math.roundToInt
  *
  * Правила (согласованы с автором):
  *   1. Максимум 1 тяжёлое упражнение за тренировку (кроме вводного режима).
- *   2. Первые 3 тренировки — вводный режим без тяжёлых упражнений,
- *      больше игровой формы:
- *        • Тренировки 1–2: только игры + лёгкие (difficulty 1–3).
- *        • Тренировка 3:   игры + лёгкие + средние (difficulty 1–6).
- *        • Тренировка 4+:  обычный режим.
+ *   2. Первые 3 тренировки — вводный режим без тяжёлых упражнений.
  *   3. Первые 5 тренировок — сортировка по возрастанию тяжести.
  *   4. Учитывается слабое место (первое упражнение — на слабое).
  *   5. Учитывается реальный темп игрока (avgMinutesByExercise).
  *   6. Свободный режим (ignoreHardLimit = true) — все 8 упражнений, без ограничений.
+ *   7. Точечная работа (targeted_practice): если есть проблемные сектора и
+ *      её ещё не было в этом периоде — ставится первым упражнением.
  *
  * Шкала тяжести (от лёгкого к тяжёлому, 1 = самое лёгкое):
  *   1 — Крикет
  *   2 — 501
  *   3 — Кругосветка: Сектора
  *   4 — Набор очков
- *   5 — Сектор 20
- *   6 — Большой раунд
- *   7 — Кругосветка: Удвоения
- *   8 — Кругосветка: Утроения
+ *   5 — Точечная работа (targeted_practice)
+ *   6 — Сектор 20
+ *   7 — Большой раунд
+ *   8 — Кругосветка: Удвоения
+ *   9 — Кругосветка: Утроения
  *
  * Порог «тяжёлое»: difficulty >= 7.
  */
@@ -53,6 +52,8 @@ object TrainingPlanner {
         AROUND_CLOCK_DOUBLES,
         AROUND_CLOCK_TREBLES,
 
+        TARGETED_PRACTICE,
+
         GAME_501,
         GAME_CRICKET,
         GAME_ANY,
@@ -78,7 +79,8 @@ object TrainingPlanner {
 
     data class PlannedDynamicExercise(
         val id: String,
-        val minutes: Int
+        val minutes: Int,
+        val focusHint: String? = null
     )
 
     /** Пороговое количество тренировок для «вводного режима». */
@@ -98,18 +100,16 @@ object TrainingPlanner {
         "game501" -> 2
         "aroundclock_sectors" -> 3
         "scoreset" -> 4
-        "sector20" -> 5
-        "biground" -> 6
-        "aroundclock_doubles" -> 7
-        "aroundclock_trebles" -> 8
-        else -> 4
+        "targeted_practice" -> 5
+        "sector20" -> 6
+        "biground" -> 7
+        "aroundclock_doubles" -> 8
+        "aroundclock_trebles" -> 9
+        else -> 5
     }
 
     /**
      * Сколько секунд отдыха после упражнения.
-     *   • лёгкие (1–3)  — 3 минуты
-     *   • средние (4–6) — 4 минуты
-     *   • тяжёлые (7–8) — 5 минут
      */
     fun restSecondsAfter(id: String): Int {
         val d = difficultyOf(id)
@@ -209,13 +209,6 @@ object TrainingPlanner {
 
     /**
      * Подобрать упражнения основной части на день.
-     *
-     * @param analysis               результат анализа данных
-     * @param budgetMinutes          сколько минут доступно на основную часть
-     * @param completedTrainingCount сколько тренировок уже завершено
-     * @param ignoreHardLimit        true — снять все ограничения (свободный режим):
-     *                               все 8 упражнений, без правила «макс 1 тяжёлое»
-     *                               и без вводного режима.
      */
     fun buildDynamicMainExerciseIds(
         analysis: TrainingStatsAnalyzer.TrainingAnalysis,
@@ -294,10 +287,10 @@ object TrainingPlanner {
 
         // ── Максимально допустимая тяжесть ──
         val maxAllowedDifficulty: Int = when {
-            ignoreHardLimit -> 8
+            ignoreHardLimit -> 9
             completedTrainingCount < 2 -> 3
             completedTrainingCount == 2 -> 6
-            else -> 8
+            else -> 9
         }
 
         fun fallbackMinutes(id: String): Int = when (id) {
@@ -309,6 +302,7 @@ object TrainingPlanner {
             "biground" -> 12
             "game501" -> 18
             "cricket" -> 12
+            "targeted_practice" -> 15
             else -> 10
         }
 
@@ -323,6 +317,17 @@ object TrainingPlanner {
         val result = mutableListOf<PlannedDynamicExercise>()
         var hardCount = 0
 
+        // 1. Точечная работа (если есть цели и её ещё не было в этом периоде)
+        if (analysis.targetPracticeGoals.isNotEmpty() && !analysis.hasTargetedPracticeThisPeriod) {
+            // Примерно 2 минуты на каждую цель (15 дротиков = 5 подходов)
+            val tpMinutes = (analysis.targetPracticeGoals.size * 2).coerceIn(5, 15)
+            if (tpMinutes <= remaining) {
+                result.add(PlannedDynamicExercise("targeted_practice", tpMinutes))
+                remaining -= tpMinutes
+            }
+        }
+
+        // 2. Остальные упражнения по плану
         for (id in orderedIds) {
             val diff = difficultyOf(id)
 
@@ -336,13 +341,35 @@ object TrainingPlanner {
 
             val m = minutesFor(id)
             if (m <= remaining) {
-                result.add(PlannedDynamicExercise(id, m))
+                val hint = buildFocusHint(id, analysis)
+                result.add(PlannedDynamicExercise(id, m, hint))
                 remaining -= m
                 if (isHard) hardCount++
             }
         }
 
         return result
+    }
+
+    /**
+     * Формирует подсказку-фокус для упражнения на основе худших секторов.
+     */
+    private fun buildFocusHint(id: String, analysis: TrainingStatsAnalyzer.TrainingAnalysis): String? {
+        return when (id) {
+            "aroundclock_doubles" -> {
+                val worst = analysis.worstDoubles.take(3).map { "D${it.sector}" }
+                if (worst.isNotEmpty()) "Твой фокус: ${worst.joinToString(", ")}. Обрати на них особое внимание!" else null
+            }
+            "aroundclock_trebles" -> {
+                val worst = analysis.worstTrebles.take(3).map { "T${it.sector}" }
+                if (worst.isNotEmpty()) "Твой фокус: ${worst.joinToString(", ")}. Обрати на них особое внимание!" else null
+            }
+            "aroundclock_sectors" -> {
+                val worst = analysis.worstSectors.take(3).map { if (it.sector == 25) "Bull" else "S${it.sector}" }
+                if (worst.isNotEmpty()) "Твой фокус: ${worst.joinToString(", ")}. Обрати на них особое внимание!" else null
+            }
+            else -> null
+        }
     }
 
     // ─────────────────────────────────────────────
