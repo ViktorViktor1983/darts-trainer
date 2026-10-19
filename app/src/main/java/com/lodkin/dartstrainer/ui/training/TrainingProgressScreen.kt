@@ -155,7 +155,7 @@ fun TrainingProgressScreen(
             ParamRow(
                 label = "Точность в сектор",
                 value = a.avgSectorsPercent?.let { formatPercent(it) + " попаданий" } ?: "нет данных",
-                level = a.levelByBigRound,
+                level = a.levelBySectors,
                 isWeak = a.weakestType == WeaknessType.ACCURACY
             )
             Spacer(Modifier.height(6.dp))
@@ -284,10 +284,6 @@ fun TrainingProgressScreen(
     }
 }
 
-// ─────────────────────────────────────────────
-// Итоговый уровень
-// ─────────────────────────────────────────────
-
 @Composable
 private fun FinalLevelBlock(a: TrainingStatsAnalyzer.TrainingAnalysis) {
     Column(
@@ -342,10 +338,6 @@ private fun FinalLevelBlock(a: TrainingStatsAnalyzer.TrainingAnalysis) {
         }
     }
 }
-
-// ─────────────────────────────────────────────
-// Подсказка при расхождении
-// ─────────────────────────────────────────────
 
 @Composable
 private fun DivergenceCard(a: TrainingStatsAnalyzer.TrainingAnalysis) {
@@ -511,10 +503,6 @@ private fun SectionTitle(text: String) {
         letterSpacing = 2.sp
     )
 }
-
-// ─────────────────────────────────────────────
-// Утилиты
-// ─────────────────────────────────────────────
 
 private fun formatPercent(value: Float): String =
     String.format(Locale.US, "%.0f%%", value)
