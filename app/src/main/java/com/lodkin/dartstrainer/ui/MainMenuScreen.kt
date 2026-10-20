@@ -19,6 +19,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.lodkin.dartstrainer.data.training.MonthlyDartsStat
 import com.lodkin.dartstrainer.data.training.TrainingDatabase
 import com.lodkin.dartstrainer.data.training.TrainingRepository
 import com.lodkin.dartstrainer.data.training.TrainingStatsAnalyzer
@@ -39,7 +40,7 @@ fun MainMenuScreen(
     onFreePlay: () -> Unit,
     onStatsClick: () -> Unit,
     onSettingsClick: () -> Unit,
-    onPlayExercise: (String) -> Unit = {} // Новый колбэк для быстрого запуска
+    onPlayExercise: (String) -> Unit = {}
 ) {
     val context = LocalContext.current
     val repository = remember {
@@ -54,7 +55,13 @@ fun MainMenuScreen(
     var exercisesProgress by remember { mutableStateOf<List<TrainingStatsAnalyzer.ExerciseProgress>>(emptyList()) }
     var isReadyForNormatives by remember { mutableStateOf(false) }
 
+    // Новая статистика интенсивности
+    var totalDarts by remember { mutableStateOf(0) }
+    var dartsThisWeek by remember { mutableStateOf(0) }
+    var dartsByMonth by remember { mutableStateOf<List<MonthlyDartsStat>>(emptyList()) }
+
     var showProgressDialog by remember { mutableStateOf(false) }
+    var showDartsDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         val analysis = withContext(Dispatchers.IO) {
@@ -66,6 +73,10 @@ fun MainMenuScreen(
         overallProgress = analysis.overallProgress
         exercisesProgress = analysis.exercisesProgress
         isReadyForNormatives = analysis.isReadyForNormatives
+
+        totalDarts = withContext(Dispatchers.IO) { repository.getTotalDartsThrown() }
+        dartsThisWeek = withContext(Dispatchers.IO) { repository.getDartsThrownThisWeek() }
+        dartsByMonth = withContext(Dispatchers.IO) { repository.getDartsByMonth() }
     }
 
     Column(
@@ -119,7 +130,9 @@ fun MainMenuScreen(
             count501Matches = count501,
             overallProgress = overallProgress,
             isReadyForNormatives = isReadyForNormatives,
+            dartsThisWeek = dartsThisWeek,
             onProgressClick = { showProgressDialog = true },
+            onDartsClick = { showDartsDialog = true },
             onClick = onTraining
         )
 
@@ -146,6 +159,15 @@ fun MainMenuScreen(
             onDismiss = { showProgressDialog = false }
         )
     }
+
+    if (showDartsDialog) {
+        DartsIntensityDialog(
+            totalDarts = totalDarts,
+            dartsThisWeek = dartsThisWeek,
+            monthlyStats = dartsByMonth,
+            onDismiss = { showDartsDialog = false }
+        )
+    }
 }
 
 /**
@@ -159,7 +181,9 @@ private fun TrainingCard(
     count501Matches: Int,
     overallProgress: Float,
     isReadyForNormatives: Boolean,
+    dartsThisWeek: Int,
     onProgressClick: () -> Unit,
+    onDartsClick: () -> Unit,
     onClick: () -> Unit
 ) {
     Box(
@@ -243,11 +267,33 @@ private fun TrainingCard(
                 )
             }
 
-            // ── ШКАЛА ПРОГРЕССА ДО ЭКЗАМЕНА ──
-            Spacer(Modifier.height(20.dp))
+            Spacer(Modifier.height(16.dp))
+
+            // ── СТРОКА ИНТЕНСИВНОСТИ ──
             Box(
                 modifier = Modifier
-                    .fillMaxWidth(0.8f)
+                    .fillMaxWidth(0.85f)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(TileBgDark)
+                    .clickable { onDartsClick() }
+                    .padding(vertical = 8.dp, horizontal = 12.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "🎯 На этой неделе: $dartsThisWeek дротиков",
+                    color = Color.White,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Medium,
+                    textAlign = TextAlign.Center
+                )
+            }
+
+            Spacer(Modifier.height(8.dp))
+
+            // ── ШКАЛА ПРОГРЕССА ДО ЭКЗАМЕНА ──
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth(0.85f)
                     .clip(RoundedCornerShape(8.dp))
                     .background(TileBgDark)
                     .clickable { onProgressClick() }
@@ -431,6 +477,116 @@ private fun ExamProgressDialog(
             }
         }
     )
+}
+
+/**
+ * Всплывающее окно с интенсивностью тренировок.
+ */
+@Composable
+private fun DartsIntensityDialog(
+    totalDarts: Int,
+    dartsThisWeek: Int,
+    monthlyStats: List<MonthlyDartsStat>,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = TileBgDark,
+        title = {
+            Text(
+                "Интенсивность тренировок",
+                color = GoldAccent,
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Bold
+            )
+        },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("Всего брошено:", color = Color.White, fontSize = 14.sp)
+                    Text("$totalDarts", color = GoldAccent, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                }
+                Spacer(Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("За эту неделю:", color = Color.White, fontSize = 14.sp)
+                    Text("$dartsThisWeek", color = GoldAccent, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                }
+
+                Spacer(Modifier.height(20.dp))
+                Text(
+                    "РАЗБИВКА ПО МЕСЯЦАМ",
+                    color = Accent,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 1.sp
+                )
+                Spacer(Modifier.height(10.dp))
+
+                if (monthlyStats.isEmpty()) {
+                    Text(
+                        "Пока нет данных. Сыграй первую тренировку!",
+                        color = Color.White.copy(alpha = 0.6f),
+                        fontSize = 13.sp
+                    )
+                } else {
+                    monthlyStats.forEach { stat ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                formatMonth(stat.month),
+                                color = Color.White.copy(alpha = 0.9f),
+                                fontSize = 14.sp
+                            )
+                            Text(
+                                "${stat.darts}",
+                                color = Color.White,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("ЗАКРЫТЬ", color = Accent, fontWeight = FontWeight.Bold)
+            }
+        }
+    )
+}
+
+/** Форматирует "2026-10" в "Октябрь 2026". */
+private fun formatMonth(monthStr: String): String {
+    return try {
+        val parts = monthStr.split("-")
+        if (parts.size == 2) {
+            val year = parts[0]
+            val month = parts[1].toInt()
+            val months = arrayOf("Январь", "Февраль", "Март", "Апрель", "Май", "Июнь", "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь")
+            "${months[month - 1]} $year"
+        } else {
+            monthStr
+        }
+    } catch (e: Exception) {
+        monthStr
+    }
 }
 
 private fun plural501Matches(n: Int): String {
