@@ -7,7 +7,9 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -31,8 +33,6 @@ import java.util.Locale
 
 /**
  * Экран детальной статистики по конкретной дисциплине.
- *
- * @param disciplineId ID дисциплины (например, "game501", "cricket").
  */
 @Composable
 fun DisciplineStatsScreen(
@@ -42,6 +42,8 @@ fun DisciplineStatsScreen(
 ) {
     var period by remember { mutableStateOf(StatPeriod.ALL) }
     var loading by remember { mutableStateOf(true) }
+    
+    var showChartsDialog by remember { mutableStateOf(false) }
 
     // Стейты для 501
     var avgPpr by remember { mutableStateOf(0f) }
@@ -55,7 +57,11 @@ fun DisciplineStatsScreen(
     var count57p by remember { mutableStateOf(0) }
     var count57m by remember { mutableStateOf(0) }
     
-    var chartData by remember { mutableStateOf<List<Double>>(emptyList()) }
+    // Данные для графиков
+    var pprChartData by remember { mutableStateOf<List<Double>>(emptyList()) }
+    var dblChartData by remember { mutableStateOf<List<Double>>(emptyList()) }
+    var first9ChartData by remember { mutableStateOf<List<Double>>(emptyList()) }
+    var c57mChartData by remember { mutableStateOf<List<Double>>(emptyList()) }
 
     LaunchedEffect(disciplineId, period) {
         loading = true
@@ -69,7 +75,6 @@ fun DisciplineStatsScreen(
         
         val filtered = if (cutoff == null) allResults else allResults.filter { it.timestamp >= cutoff }
 
-        // Пока делаем расчет только для 501
         if (disciplineId == "game501" && filtered.isNotEmpty()) {
             var sumPpr = 0f
             var sumDbl = 0f
@@ -83,20 +88,28 @@ fun DisciplineStatsScreen(
             var c57p = 0
             var c57m = 0
             
-            val chartPoints = mutableListOf<Double>()
+            val pprs = mutableListOf<Double>()
+            val dbls = mutableListOf<Double>()
+            val f9s = mutableListOf<Double>()
+            val c57ms = mutableListOf<Double>()
 
             filtered.forEach { r ->
                 val details = parseDetails(r.detailsJson)
                 val ppr = details["ppr"]?.toFloatOrNull() ?: 0f
                 val dbl = details["dbl"]?.toFloatOrNull() ?: 0f
                 val f9 = details["first9"]?.toFloatOrNull() ?: 0f
+                val c57 = details["c57m"]?.toIntOrNull() ?: 0
                 
                 if (ppr > 0f) {
                     sumPpr += ppr
                     sumDbl += dbl
                     sumFirst9 += f9
                     totalMatches++
-                    chartPoints.add(ppr.toDouble())
+                    
+                    pprs.add(ppr.toDouble())
+                    dbls.add(dbl.toDouble())
+                    f9s.add(f9.toDouble())
+                    c57ms.add(c57.toDouble())
                 }
 
                 c180 += details["c180"]?.toIntOrNull() ?: 0
@@ -113,7 +126,6 @@ fun DisciplineStatsScreen(
                 avgFirst9 = sumFirst9 / totalMatches
             }
             
-            // Считаем средние значения категорий (за матч или лег - по желанию, здесь за матч)
             val divisor = if (totalMatches > 0) totalMatches.toFloat() else 1f
             count180 = (c180 / divisor).toInt()
             count170 = (c170 / divisor).toInt()
@@ -122,7 +134,10 @@ fun DisciplineStatsScreen(
             count57p = (c57p / divisor).toInt()
             count57m = (c57m / divisor).toInt()
 
-            chartData = chartPoints
+            pprChartData = pprs
+            dblChartData = dbls
+            first9ChartData = f9s
+            c57mChartData = c57ms
         }
         loading = false
     }
@@ -156,8 +171,22 @@ fun DisciplineStatsScreen(
                 disciplineTitle,
                 color = GoldAccent,
                 fontSize = 22.sp,
-                fontWeight = FontWeight.Bold
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.weight(1f)
             )
+            // Кнопка графиков (только для 501)
+            if (disciplineId == "game501" && pprChartData.isNotEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .size(44.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(TileBgDark)
+                        .clickable { showChartsDialog = true },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("📈", fontSize = 22.sp)
+                }
+            }
         }
 
         Spacer(Modifier.height(16.dp))
@@ -192,23 +221,6 @@ fun DisciplineStatsScreen(
                     .weight(1f)
                     .verticalScroll(rememberScrollState())
             ) {
-                // График
-                if (chartData.size >= 2) {
-                    Text("ГРАФИК PPR", color = Accent, fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
-                    Spacer(Modifier.height(8.dp))
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(180.dp)
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(TileBgDark)
-                            .padding(12.dp)
-                    ) {
-                        LineChart(points = chartData, yMin = 0.0, yMax = 120.0, lineColor = Accent)
-                    }
-                    Spacer(Modifier.height(20.dp))
-                }
-
                 Text("ОСНОВНЫЕ", color = Accent, fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
                 Spacer(Modifier.height(8.dp))
                 StatRowCard("Средний PPR", String.format(Locale.US, "%.2f", avgPpr))
@@ -240,44 +252,106 @@ fun DisciplineStatsScreen(
             }
         }
     }
-}
 
-// ─────────────────────────────────────────────
-// ВСПОМОГАТЕЛЬНЫЕ КОМПОНЕНТЫ
-// ─────────────────────────────────────────────
-
-@Composable
-private fun StatRowCard(label: String, value: String) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(10.dp))
-            .background(TileBg)
-            .padding(horizontal = 16.dp, vertical = 14.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(label, color = Color.White, fontSize = 14.sp)
-        Text(value, color = GoldAccent, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+    if (showChartsDialog) {
+        AllChartsDialog(
+            pprData = pprChartData,
+            dblData = dblChartData,
+            first9Data = first9ChartData,
+            c57mData = c57mChartData,
+            onDismiss = { showChartsDialog = false }
+        )
     }
 }
 
+// ─────────────────────────────────────────────
+// ДИАЛОГ СО ВСЕМИ ГРАФИКАМИ
+// ─────────────────────────────────────────────
+
 @Composable
-private fun PeriodChip(label: String, selected: Boolean, onClick: () -> Unit, modifier: Modifier) {
-    Box(
-        modifier = modifier
-            .clip(RoundedCornerShape(10.dp))
-            .background(if (selected) Accent else TileBgDark)
-            .clickable { onClick() }
-            .padding(vertical = 10.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(
-            label,
-            color = if (selected) Color(0xFF121212) else Color.White,
-            fontSize = 12.sp,
-            fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium
-        )
+private fun AllChartsDialog(
+    pprData: List<Double>,
+    dblData: List<Double>,
+    first9Data: List<Double>,
+    c57mData: List<Double>,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = TileBgDark,
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("ЗАКРЫТЬ", color = Accent) }
+        },
+        title = {
+            Text("Графики 501", color = GoldAccent, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+        },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+            ) {
+                ChartBlock("Средний PPR", pprData, 0.0, 120.0, Accent)
+                Spacer(Modifier.height(24.dp))
+                
+                ChartBlock("Точность удвоений (%)", dblData, 0.0, 100.0, GoldAccent)
+                Spacer(Modifier.height(24.dp))
+                
+                ChartBlock("Набор за первые 9 дротиков", first9Data, 0.0, 180.0, Color(0xFF4CAF50))
+                Spacer(Modifier.height(24.dp))
+                
+                // График "мусорных рук" (чем ниже, тем лучше)
+                ChartBlock("Подходы < 57 (шт.)", c57mData, 0.0, 20.0, Color(0xFFE57373))
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    "Чем ниже линия, тем меньше провальных подходов.",
+                    color = Color.White.copy(alpha = 0.5f),
+                    fontSize = 11.sp
+                )
+            }
+        }
+    )
+}
+
+@Composable
+private fun ChartBlock(
+    title: String,
+    points: List<Double>,
+    yMin: Double,
+    yMax: Double,
+    lineColor: Color
+) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Text(title, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+        Spacer(Modifier.height(6.dp))
+
+        if (points.size < 2) {
+            Text(
+                "Недостаточно матчей для графика",
+                color = Color.White.copy(alpha = 0.5f),
+                fontSize = 11.sp
+            )
+        } else {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(150.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(Color.Black.copy(alpha = 0.2f))
+                    .padding(8.dp)
+            ) {
+                LineChart(points, yMin, yMax, lineColor)
+            }
+            Spacer(Modifier.height(4.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text("мин: %.1f".format(Locale.US, points.minOrNull() ?: 0.0), color = Color.White.copy(alpha = 0.5f), fontSize = 10.sp)
+                Text("сред: %.1f".format(Locale.US, points.average()), color = GoldAccent, fontSize = 10.sp)
+                Text("макс: %.1f".format(Locale.US, points.maxOrNull() ?: 0.0), color = Color.White.copy(alpha = 0.5f), fontSize = 10.sp)
+            }
+        }
     }
 }
 
@@ -334,6 +408,45 @@ private fun LineChart(points: List<Double>, yMin: Double, yMax: Double, lineColo
     }
 }
 
+// ─────────────────────────────────────────────
+// ВСПОМОГАТЕЛЬНЫЕ КОМПОНЕНТЫ
+// ─────────────────────────────────────────────
+
+@Composable
+private fun StatRowCard(label: String, value: String) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(10.dp))
+            .background(TileBg)
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(label, color = Color.White, fontSize = 14.sp)
+        Text(value, color = GoldAccent, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+    }
+}
+
+@Composable
+private fun PeriodChip(label: String, selected: Boolean, onClick: () -> Unit, modifier: Modifier) {
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(10.dp))
+            .background(if (selected) Accent else TileBgDark)
+            .clickable { onClick() }
+            .padding(vertical = 10.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            label,
+            color = if (selected) Color(0xFF121212) else Color.White,
+            fontSize = 12.sp,
+            fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium
+        )
+    }
+}
+
 private fun parseDetails(s: String): Map<String, String> {
     if (s.isBlank()) return emptyMap()
     return s.split(";").mapNotNull { entry ->
@@ -342,7 +455,6 @@ private fun parseDetails(s: String): Map<String, String> {
     }.toMap()
 }
 
-// Перечисление для периодов (если его нет в проекте, добавляем локально)
 enum class StatPeriod(val label: String, val daysBack: Long?) {
     WEEK("Неделя", 7),
     MONTH("Месяц", 30),
