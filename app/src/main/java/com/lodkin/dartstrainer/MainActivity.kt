@@ -1844,6 +1844,20 @@ fun DartsTrainerApp() {
                                     TrainingBotLevelStorage.updateLevel501(context, botPlayer.botLevel, playerWon)
                                 }
                                 val isNorm = isNormativesExercise
+                                
+                                // СОБИРАЕМ ДОПОЛНИТЕЛЬНУЮ СТАТИСТИКУ
+                                val c180 = player?.matchCount180 ?: 0
+                                val c170 = player?.matchCount170plus ?: 0
+                                val c130 = player?.matchCount130plus ?: 0
+                                val c90 = player?.matchCount90plus ?: 0
+                                val c57p = player?.matchCount57plus ?: 0
+                                val c57m = player?.matchCount57minus ?: 0
+                                val first9 = player?.listOfFirst9Ppr?.average() ?: 0.0
+
+                                val details = "won=$playerWon;ppr=$pprStr;dbl=$dblStr" +
+                                        ";c180=$c180;c170=$c170;c130=$c130;c90=$c90;c57p=$c57p;c57m=$c57m" +
+                                        ";first9=${String.format(Locale.US, "%.2f", first9)}"
+
                                 scope.launch {
                                     trainingRepository.insertExerciseResult(
                                         ExerciseResult(
@@ -1854,7 +1868,7 @@ fun DartsTrainerApp() {
                                             dartsThrown = player?.matchDarts ?: 0,
                                             timestamp = System.currentTimeMillis(),
                                             durationSeconds = dur,
-                                            detailsJson = "won=$playerWon;ppr=$pprStr;dbl=$dblStr"
+                                            detailsJson = details
                                         )
                                     )
                                     closeValues.forEach { value ->
