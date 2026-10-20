@@ -22,7 +22,9 @@ import kotlin.math.roundToInt
  *   • формирует список целей для точечной работы (targetPracticeGoals);
  *   • проверяет, было ли уже упражнение "targeted_practice" в этом периоде;
  *   • считает прогресс накопления статистики (от 0 до 100%) по каждому
- *     из 8 упражнений и общий прогресс. Экзамен доступен, когда все 8 по 100%.
+ *     из 8 упражнений и общий прогресс. Экзамен доступен, когда все 8 по 100%;
+ *   • считает среднее время (avgMinutesByExercise) для всех 8 упражнений,
+ *     включая игры 501 и Крикет.
  */
 object TrainingStatsAnalyzer {
 
@@ -271,7 +273,7 @@ object TrainingStatsAnalyzer {
             candidates.minByOrNull { it.second }?.first
         }
 
-        // ── Средний темп ──
+        // ── Средний темп (Твой темп) ──
         val avgMinutesByExercise = mutableMapOf<String, Float>()
         fun addTempo(exerciseId: String, list: List<ExerciseResult>) {
             val withDuration = list.filter { it.durationSeconds > 0 }
@@ -286,6 +288,9 @@ object TrainingStatsAnalyzer {
         addTempo("aroundclock_doubles", aroundDoublesResults)
         addTempo("aroundclock_trebles", aroundTreblesResults)
         addTempo("aroundclock_sectors", aroundSectorsResults)
+        // Добавляем время для игр
+        addTempo("game501", all501Results)
+        addTempo("cricket", allCricketResults)
 
         // ── Проблемные сектора ──
         val sectorsReport = computeWorstSectors(allSectorsResults)
