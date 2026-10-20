@@ -44,7 +44,8 @@ fun MainMenuScreen(
 ) {
     val context = LocalContext.current
     val repository = remember {
-        TrainingRepository(TrainingDatabase.getInstance(context))
+        // Передаем context в конструктор репозитория
+        TrainingRepository(TrainingDatabase.getInstance(context), context)
     }
 
     var avgPpr by remember { mutableStateOf<Float?>(null) }
@@ -55,7 +56,7 @@ fun MainMenuScreen(
     var exercisesProgress by remember { mutableStateOf<List<TrainingStatsAnalyzer.ExerciseProgress>>(emptyList()) }
     var isReadyForNormatives by remember { mutableStateOf(false) }
 
-    // Новая статистика интенсивности
+    // Статистика интенсивности
     var totalDarts by remember { mutableStateOf(0) }
     var dartsThisWeek by remember { mutableStateOf(0) }
     var dartsByMonth by remember { mutableStateOf<List<MonthlyDartsStat>>(emptyList()) }
