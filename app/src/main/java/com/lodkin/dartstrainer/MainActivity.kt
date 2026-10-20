@@ -14,6 +14,7 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.sp
 import com.lodkin.dartstrainer.data.SettingsStorage
@@ -139,7 +140,7 @@ private val PARENT_SCREEN: Map<String, String> = mapOf(
     "training" to "main",
     "training_settings" to "training",
     "training_progress" to "training",
-    "detailed_stats" to "main", // Новый экран
+    "detailed_stats" to "main",
     "training_warmup" to "training",
     "training_block" to "training",
     "training_exercise" to "training_block",
@@ -933,7 +934,7 @@ fun DartsTrainerApp() {
                     onFreePlay = { screen = "game_select" },
                     onStatsClick = { statsMenuKey++; screen = "stats_menu" },
                     onSettingsClick = { screen = "settings" },
-                    onOpenDetailedStats = { screen = "detailed_stats" } // Переход на новый экран
+                    onOpenDetailedStats = { screen = "detailed_stats" }
                 )
 
                 "detailed_stats" -> DetailedStatsScreen(
@@ -941,13 +942,11 @@ fun DartsTrainerApp() {
                     onBack = { screen = "main" },
                     onOpenDiscipline = { id ->
                         selectedDiscipline = id
-                        // TODO: Переход на детальный экран дисциплины (сделаем следующим шагом)
                         screen = "discipline_stats"
                     }
                 )
 
                 "discipline_stats" -> {
-                    // Заглушка для экрана конкретной дисциплины
                     Box(
                         modifier = Modifier.fillMaxSize().background(DarkBg),
                         contentAlignment = Alignment.Center
