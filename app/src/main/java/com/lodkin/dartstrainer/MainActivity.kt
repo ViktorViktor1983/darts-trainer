@@ -90,6 +90,7 @@ import com.lodkin.dartstrainer.ui.sector.SectorStatsScreen
 import com.lodkin.dartstrainer.ui.training.BlockExerciseItem
 import com.lodkin.dartstrainer.ui.training.BullDrawDialog
 import com.lodkin.dartstrainer.ui.training.DetailedStatsScreen
+import com.lodkin.dartstrainer.ui.training.DisciplineStatsScreen
 import com.lodkin.dartstrainer.ui.training.ExerciseSummary
 import com.lodkin.dartstrainer.ui.training.ExitTrainingDialog
 import com.lodkin.dartstrainer.ui.training.FreeNewRoundDialog
@@ -141,6 +142,7 @@ private val PARENT_SCREEN: Map<String, String> = mapOf(
     "training_settings" to "training",
     "training_progress" to "training",
     "detailed_stats" to "main",
+    "discipline_stats" to "detailed_stats",
     "training_warmup" to "training",
     "training_block" to "training",
     "training_exercise" to "training_block",
@@ -947,15 +949,15 @@ fun DartsTrainerApp() {
                 )
 
                 "discipline_stats" -> {
-                    Box(
-                        modifier = Modifier.fillMaxSize().background(DarkBg),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            "Детальная статистика по: $selectedDiscipline\n(в разработке)",
-                            color = Color.White,
-                            fontSize = 18.sp
+                    val discId = selectedDiscipline
+                    if (discId != null) {
+                        DisciplineStatsScreen(
+                            repository = trainingRepository,
+                            disciplineId = discId,
+                            onBack = { screen = "detailed_stats" }
                         )
+                    } else {
+                        screen = "detailed_stats"
                     }
                 }
 
