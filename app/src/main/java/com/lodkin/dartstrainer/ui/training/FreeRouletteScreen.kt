@@ -29,23 +29,8 @@ import kotlinx.coroutines.delay
 /**
  * Экран «Рулетка» в свободной тренировке.
  *
- * При появлении — короткая анимация (1,5 сек): название быстро мелькает,
- * потом останавливается на выпавшем упражнении.
- *
- * Если включен «Выбор вручную» — рулетка скрывается, вместо неё появляется
- * список всех упражнений. Нажатие на упражнение сразу запускает его.
- *
- * @param finalExercise   упражнение, на котором остановится рулетка (может быть null, если рулетка выключена)
- * @param allExercises    все доступные упражнения (для анимации и списка)
- * @param completedCount  сколько упражнений уже пройдено в этой сессии
- * @param noRepeat        галочка «Без повторов»
- * @param onToggleNoRepeat колбэк переключения галочки
- * @param chooseMyself    включен ли режим выбора вручную
- * @param onToggleChooseMyself колбэк переключения режима выбора
- * @param onPlay          колбэк кнопки «Играть» для рулетки
- * @param onPlayDirect    колбэк запуска конкретного упражнения из списка
- * @param onSkip          колбэк кнопки «Пропустить» для рулетки
- * @param onFinish        колбэк кнопки «Закончить тренировку»
+ * @param withFriend включен ли режим игры с другом.
+ * @param onToggleWithFriend колбэк переключения режима.
  */
 @Composable
 internal fun FreeRouletteScreen(
@@ -56,6 +41,8 @@ internal fun FreeRouletteScreen(
     onToggleNoRepeat: (Boolean) -> Unit,
     chooseMyself: Boolean,
     onToggleChooseMyself: (Boolean) -> Unit,
+    withFriend: Boolean,
+    onToggleWithFriend: (Boolean) -> Unit,
     onPlay: () -> Unit,
     onPlayDirect: (String) -> Unit,
     onSkip: () -> Unit,
@@ -211,6 +198,42 @@ internal fun FreeRouletteScreen(
                         }
                         Text("▶", color = Accent, fontSize = 18.sp)
                     }
+                }
+                
+                // ── Переключатель Игры с другом ──
+                Spacer(Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(TileBg)
+                        .clickable { onToggleWithFriend(!withFriend) }
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            "Играть с другом",
+                            color = Color.White,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            "Для 501 и Крикета",
+                            color = Color.White.copy(alpha = 0.5f),
+                            fontSize = 11.sp
+                        )
+                    }
+                    Switch(
+                        checked = withFriend,
+                        onCheckedChange = { onToggleWithFriend(it) },
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = Color.White,
+                            checkedTrackColor = Accent,
+                            uncheckedThumbColor = Color.White,
+                            uncheckedTrackColor = TileBgDark
+                        )
+                    )
                 }
                 Spacer(Modifier.height(10.dp))
             }
