@@ -4,14 +4,18 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.sp
 import com.lodkin.dartstrainer.data.SettingsStorage
 import com.lodkin.dartstrainer.data.aroundclock.AroundClockDatabase
 import com.lodkin.dartstrainer.data.aroundclock.AroundClockOrder
@@ -84,6 +88,7 @@ import com.lodkin.dartstrainer.ui.sector.SectorSetupScreen
 import com.lodkin.dartstrainer.ui.sector.SectorStatsScreen
 import com.lodkin.dartstrainer.ui.training.BlockExerciseItem
 import com.lodkin.dartstrainer.ui.training.BullDrawDialog
+import com.lodkin.dartstrainer.ui.training.DetailedStatsScreen
 import com.lodkin.dartstrainer.ui.training.ExerciseSummary
 import com.lodkin.dartstrainer.ui.training.ExitTrainingDialog
 import com.lodkin.dartstrainer.ui.training.FreeNewRoundDialog
@@ -134,6 +139,7 @@ private val PARENT_SCREEN: Map<String, String> = mapOf(
     "training" to "main",
     "training_settings" to "training",
     "training_progress" to "training",
+    "detailed_stats" to "main", // Новый экран
     "training_warmup" to "training",
     "training_block" to "training",
     "training_exercise" to "training_block",
@@ -212,7 +218,7 @@ fun DartsTrainerApp() {
     val bigRoundRepository = remember { BigRoundRepository(BigRoundDatabase.get(context).bigRoundDao()) }
     val scoreSetRepository = remember { ScoreSetRepository(ScoreSetDatabase.get(context).scoreSetDao()) }
     
-    // ОБНОВЛЕНО: передаем context в конструктор
+    // Передаем context в конструктор
     val trainingRepository = remember { TrainingRepository(TrainingDatabase.getInstance(context), context) }
     
     val freePlayRecordsRepository = remember {
@@ -225,6 +231,9 @@ fun DartsTrainerApp() {
     var onboardingDone by remember { mutableStateOf(SettingsStorage.isOnboardingDone(context)) }
     var stage by remember { mutableStateOf(if (onboardingDone) "loading" else "welcome") }
     var screen by remember { mutableStateOf("main") }
+    
+    // Выбранная дисциплина для детальной статистики
+    var selectedDiscipline by remember { mutableStateOf<String?>(null) }
 
     var cricketGame by remember { mutableStateOf<CricketGame?>(null) }
     var cricketExistingId by remember { mutableStateOf(0L) }
@@ -502,7 +511,7 @@ fun DartsTrainerApp() {
             normativesNewLevel = if (newLvl > startLvl) newLvl else startLvl
 
             if (newLvl > startLvl) {
-                // Теперь это не удаляет данные, а просто начинает новый период!
+                // Начинаем новый период!
                 trainingRepository.clearStatisticsAfterNormatives()
                 TrainingStateStorage.clear(context)
                 NormativesStateStorage.clear(context)
@@ -924,35 +933,32 @@ fun DartsTrainerApp() {
                     onFreePlay = { screen = "game_select" },
                     onStatsClick = { statsMenuKey++; screen = "stats_menu" },
                     onSettingsClick = { screen = "settings" },
-                    onPlayExercise = { id ->
-                        isSingleExercisePlay = true
-                        autoOpenTimeDialog = false
-                        scope.launch {
-                            val analysis = TrainingStatsAnalyzer.analyze(trainingRepository)
-                            currentWeakness = analysis.weakestType
-                            currentLevel = analysis.level
-                            currentTargetGoals = analysis.targetPracticeGoals
+                    onOpenDetailedStats = { screen = "detailed_stats" } // Переход на новый экран
+                )
 
-                            val session = TrainingSession(
-                                dateMillis = System.currentTimeMillis(),
-                                plannedMinutes = 0,
-                                actualMinutes = 0,
-                                levelAtStart = analysis.level,
-                                mode = TrainingMode.FLEXIBLE,
-                                focus = null,
-                                isControl = false,
-                                isCompleted = false
-                            )
-                            trainingSessionId = trainingRepository.insertSession(session)
-                            trainingElapsedSeconds = 0
-                            trainingPaused = false
-                            isTrainingActive = true
-                            isFreeTraining = true
-                            
-                            launchExercise(id)
-                        }
+                "detailed_stats" -> DetailedStatsScreen(
+                    repository = trainingRepository,
+                    onBack = { screen = "main" },
+                    onOpenDiscipline = { id ->
+                        selectedDiscipline = id
+                        // TODO: Переход на детальный экран дисциплины (сделаем следующим шагом)
+                        screen = "discipline_stats"
                     }
                 )
+
+                "discipline_stats" -> {
+                    // Заглушка для экрана конкретной дисциплины
+                    Box(
+                        modifier = Modifier.fillMaxSize().background(DarkBg),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            "Детальная статистика по: $selectedDiscipline\n(в разработке)",
+                            color = Color.White,
+                            fontSize = 18.sp
+                        )
+                    }
+                }
 
                 "stats_menu" -> StatsMenuScreen(
                     cricketRepository = cricketRepository,
