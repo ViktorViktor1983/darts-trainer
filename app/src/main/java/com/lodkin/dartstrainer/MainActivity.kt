@@ -272,10 +272,9 @@ fun DartsTrainerApp() {
 
     var isFreeTraining by remember { mutableStateOf(false) }
     var isSingleExercisePlay by remember { mutableStateOf(false) }
-    var isSetupForTraining by remember { mutableStateOf(false) } // Новый флаг для настройки друга
+    var isSetupForTraining by remember { mutableStateOf(false) } // Флаг для настройки друга
     var freeNoRepeat by remember { mutableStateOf(false) }
     var freeChooseMyself by remember { mutableStateOf(false) }
-    var freeWithFriend by remember { mutableStateOf(false) } // Новый флаг "Играть с другом"
     var freeCompletedIds by remember { mutableStateOf<Set<String>>(emptySet()) }
     var freeSkippedIds by remember { mutableStateOf<Set<String>>(emptySet()) }
     var freeCurrentId by remember { mutableStateOf<String?>(null) }
@@ -687,7 +686,6 @@ fun DartsTrainerApp() {
         isSetupForTraining = false
         freeNoRepeat = false
         freeChooseMyself = false
-        freeWithFriend = false
         freeCompletedIds = emptySet()
         freeSkippedIds = emptySet()
         freeCurrentId = null
@@ -1086,7 +1084,6 @@ fun DartsTrainerApp() {
                             isFreeTraining = false
                             isSingleExercisePlay = false
                             freeChooseMyself = false
-                            freeWithFriend = false
                             isSetupForTraining = false
                             showRestTimer = false
                             pendingNextStep = null
@@ -1160,7 +1157,6 @@ fun DartsTrainerApp() {
                             isSetupForTraining = false
                             freeNoRepeat = false
                             freeChooseMyself = false
-                            freeWithFriend = false
                             freeCompletedIds = emptySet()
                             freeSkippedIds = emptySet()
                             freeCurrentId = null
@@ -1325,11 +1321,9 @@ fun DartsTrainerApp() {
                                 onToggleChooseMyself = { newValue ->
                                     freeChooseMyself = newValue
                                 },
-                                withFriend = freeWithFriend,
-                                onToggleWithFriend = { freeWithFriend = it },
                                 onPlay = { launchExercise(current?.id ?: "") },
-                                onPlayDirect = { id ->
-                                    if (freeWithFriend && (id == "game501" || id == "cricket")) {
+                                onPlayDirect = { id, isWithFriend ->
+                                    if (isWithFriend && (id == "game501" || id == "cricket")) {
                                         isSetupForTraining = true
                                         autoOpenTimeDialog = false
                                         scope.launch {
@@ -2154,7 +2148,6 @@ fun DartsTrainerApp() {
                 isFreeTraining = false
                 isSingleExercisePlay = false
                 freeChooseMyself = false
-                freeWithFriend = false
                 isSetupForTraining = false
                 autoOpenTimeDialog = false
                 showResumeDialog = false
