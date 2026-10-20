@@ -271,9 +271,11 @@ fun DartsTrainerApp() {
     var showExitTrainingDialog by remember { mutableStateOf(false) }
 
     var isFreeTraining by remember { mutableStateOf(false) }
-    var isSingleExercisePlay by remember { mutableStateOf(false) } // Новый флаг для одиночного запуска
+    var isSingleExercisePlay by remember { mutableStateOf(false) }
+    var isSetupForTraining by remember { mutableStateOf(false) } // Новый флаг для настройки друга
     var freeNoRepeat by remember { mutableStateOf(false) }
-    var freeChooseMyself by remember { mutableStateOf(false) } // Новый переключатель
+    var freeChooseMyself by remember { mutableStateOf(false) }
+    var freeWithFriend by remember { mutableStateOf(false) } // Новый флаг "Играть с другом"
     var freeCompletedIds by remember { mutableStateOf<Set<String>>(emptySet()) }
     var freeSkippedIds by remember { mutableStateOf<Set<String>>(emptySet()) }
     var freeCurrentId by remember { mutableStateOf<String?>(null) }
@@ -682,8 +684,10 @@ fun DartsTrainerApp() {
         showExitTrainingDialog = false
         isFreeTraining = false
         isSingleExercisePlay = false
+        isSetupForTraining = false
         freeNoRepeat = false
         freeChooseMyself = false
+        freeWithFriend = false
         freeCompletedIds = emptySet()
         freeSkippedIds = emptySet()
         freeCurrentId = null
@@ -1082,6 +1086,8 @@ fun DartsTrainerApp() {
                             isFreeTraining = false
                             isSingleExercisePlay = false
                             freeChooseMyself = false
+                            freeWithFriend = false
+                            isSetupForTraining = false
                             showRestTimer = false
                             pendingNextStep = null
 
@@ -1151,8 +1157,10 @@ fun DartsTrainerApp() {
                             isTrainingActive = true
                             isFreeTraining = true
                             isSingleExercisePlay = false
+                            isSetupForTraining = false
                             freeNoRepeat = false
                             freeChooseMyself = false
+                            freeWithFriend = false
                             freeCompletedIds = emptySet()
                             freeSkippedIds = emptySet()
                             freeCurrentId = null
@@ -1317,10 +1325,42 @@ fun DartsTrainerApp() {
                                 onToggleChooseMyself = { newValue ->
                                     freeChooseMyself = newValue
                                 },
+                                withFriend = freeWithFriend,
+                                onToggleWithFriend = { freeWithFriend = it },
                                 onPlay = { launchExercise(current?.id ?: "") },
                                 onPlayDirect = { id ->
-                                    freeCurrentId = id
-                                    launchExercise(id)
+                                    if (freeWithFriend && (id == "game501" || id == "cricket")) {
+                                        isSetupForTraining = true
+                                        autoOpenTimeDialog = false
+                                        scope.launch {
+                                            val analysis = TrainingStatsAnalyzer.analyze(trainingRepository)
+                                            currentWeakness = analysis.weakestType
+                                            currentLevel = analysis.level
+                                            currentTargetGoals = analysis.targetPracticeGoals
+
+                                            val session = TrainingSession(
+                                                dateMillis = System.currentTimeMillis(),
+                                                plannedMinutes = 0,
+                                                actualMinutes = 0,
+                                                levelAtStart = analysis.level,
+                                                mode = TrainingMode.FLEXIBLE,
+                                                focus = null,
+                                                isControl = false,
+                                                isCompleted = false
+                                            )
+                                            trainingSessionId = trainingRepository.insertSession(session)
+                                            trainingElapsedSeconds = 0
+                                            trainingPaused = false
+                                            isTrainingActive = true
+                                            isFreeTraining = true
+                                            isSingleExercisePlay = false
+                                            
+                                            screen = if (id == "game501") "game501_setup" else "cricket_setup"
+                                        }
+                                    } else {
+                                        freeCurrentId = id
+                                        launchExercise(id)
+                                    }
                                 },
                                 onSkip = {
                                     freeSkippedIds = freeSkippedIds + (current?.id ?: "")
@@ -1642,10 +1682,22 @@ fun DartsTrainerApp() {
                             startingTeam, autoOkSeconds, sessionStartTime, sessionForm
                         )
                         cricketExistingId = 0L
-                        isTrainingCricket = false
+                        isTrainingCricket = isSetupForTraining
+                        if (isSetupForTraining) isSetupForTraining = false
                         screen = "cricket_game"
                     },
-                    onBack = { screen = "game_select" }
+                    onBack = {
+                        if (isSetupForTraining) {
+                            isSetupForTraining = false
+                            isTrainingActive = false
+                            trainingSessionId = 0L
+                            isFreeTraining = false
+                            isSingleExercisePlay = false
+                            screen = "training_free_next"
+                        } else {
+                            screen = "game_select"
+                        }
+                    }
                 )
 
                 "cricket_game" -> {
@@ -1672,8 +1724,10 @@ fun DartsTrainerApp() {
                                     ((System.currentTimeMillis() - exerciseStartMillis) / 1000L).toInt()
                                 else 0
                                 exerciseStartMillis = 0L
-                                val botLevel = g.players.getOrNull(1)?.botLevel ?: 1
-                                TrainingBotLevelStorage.updateLevelCricket(context, botLevel, playerWon)
+                                val botPlayer = g.players.getOrNull(1)
+                                if (botPlayer?.isBot == true) {
+                                    TrainingBotLevelStorage.updateLevelCricket(context, botPlayer.botLevel, playerWon)
+                                }
                                 val isNorm = isNormativesExercise
                                 scope.launch {
                                     trainingRepository.insertExerciseResult(
@@ -1742,10 +1796,22 @@ fun DartsTrainerApp() {
                             startingTeam, autoOkSeconds, sessionStartTime, sessionForm
                         )
                         game501ExistingId = 0L
-                        isTraining501 = false
+                        isTraining501 = isSetupForTraining
+                        if (isSetupForTraining) isSetupForTraining = false
                         screen = "game501_game"
                     },
-                    onBack = { screen = "game_select" }
+                    onBack = {
+                        if (isSetupForTraining) {
+                            isSetupForTraining = false
+                            isTrainingActive = false
+                            trainingSessionId = 0L
+                            isFreeTraining = false
+                            isSingleExercisePlay = false
+                            screen = "training_free_next"
+                        } else {
+                            screen = "game_select"
+                        }
+                    }
                 )
 
                 "game501_game" -> {
@@ -1770,8 +1836,10 @@ fun DartsTrainerApp() {
                                     ((System.currentTimeMillis() - exerciseStartMillis) / 1000L).toInt()
                                 else 0
                                 exerciseStartMillis = 0L
-                                val botLevel = g.players.getOrNull(1)?.botLevel ?: 1
-                                TrainingBotLevelStorage.updateLevel501(context, botLevel, playerWon)
+                                val botPlayer = g.players.getOrNull(1)
+                                if (botPlayer?.isBot == true) {
+                                    TrainingBotLevelStorage.updateLevel501(context, botPlayer.botLevel, playerWon)
+                                }
                                 val isNorm = isNormativesExercise
                                 scope.launch {
                                     trainingRepository.insertExerciseResult(
@@ -2086,6 +2154,8 @@ fun DartsTrainerApp() {
                 isFreeTraining = false
                 isSingleExercisePlay = false
                 freeChooseMyself = false
+                freeWithFriend = false
+                isSetupForTraining = false
                 autoOpenTimeDialog = false
                 showResumeDialog = false
                 exerciseStartMillis = 0L
