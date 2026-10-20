@@ -211,7 +211,10 @@ fun DartsTrainerApp() {
     val aroundClockRepository = remember { AroundClockRepository(AroundClockDatabase.get(context).aroundClockDao()) }
     val bigRoundRepository = remember { BigRoundRepository(BigRoundDatabase.get(context).bigRoundDao()) }
     val scoreSetRepository = remember { ScoreSetRepository(ScoreSetDatabase.get(context).scoreSetDao()) }
-    val trainingRepository = remember { TrainingRepository(TrainingDatabase.getInstance(context)) }
+    
+    // ОБНОВЛЕНО: передаем context в конструктор
+    val trainingRepository = remember { TrainingRepository(TrainingDatabase.getInstance(context), context) }
+    
     val freePlayRecordsRepository = remember {
         FreePlayRecordsRepository(FreePlayRecordsDatabase.get(context))
     }
@@ -272,7 +275,7 @@ fun DartsTrainerApp() {
 
     var isFreeTraining by remember { mutableStateOf(false) }
     var isSingleExercisePlay by remember { mutableStateOf(false) }
-    var isSetupForTraining by remember { mutableStateOf(false) } // Флаг для настройки друга
+    var isSetupForTraining by remember { mutableStateOf(false) }
     var freeNoRepeat by remember { mutableStateOf(false) }
     var freeChooseMyself by remember { mutableStateOf(false) }
     var freeCompletedIds by remember { mutableStateOf<Set<String>>(emptySet()) }
@@ -499,6 +502,7 @@ fun DartsTrainerApp() {
             normativesNewLevel = if (newLvl > startLvl) newLvl else startLvl
 
             if (newLvl > startLvl) {
+                // Теперь это не удаляет данные, а просто начинает новый период!
                 trainingRepository.clearStatisticsAfterNormatives()
                 TrainingStateStorage.clear(context)
                 NormativesStateStorage.clear(context)
