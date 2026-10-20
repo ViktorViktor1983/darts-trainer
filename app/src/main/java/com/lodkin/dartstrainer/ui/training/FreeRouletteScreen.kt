@@ -29,8 +29,7 @@ import kotlinx.coroutines.delay
 /**
  * Экран «Рулетка» в свободной тренировке.
  *
- * @param withFriend включен ли режим игры с другом.
- * @param onToggleWithFriend колбэк переключения режима.
+ * @param onPlayDirect теперь принимает ID игры и флаг (играть с другом или нет).
  */
 @Composable
 internal fun FreeRouletteScreen(
@@ -41,15 +40,16 @@ internal fun FreeRouletteScreen(
     onToggleNoRepeat: (Boolean) -> Unit,
     chooseMyself: Boolean,
     onToggleChooseMyself: (Boolean) -> Unit,
-    withFriend: Boolean,
-    onToggleWithFriend: (Boolean) -> Unit,
     onPlay: () -> Unit,
-    onPlayDirect: (String) -> Unit,
+    onPlayDirect: (String, Boolean) -> Unit,
     onSkip: () -> Unit,
     onFinish: () -> Unit
 ) {
     var spinning by remember { mutableStateOf(!chooseMyself && finalExercise != null) }
     var shownTitle by remember { mutableStateOf(finalExercise?.title ?: "") }
+    
+    // Локальный стейт для выбора "играть с другом" на каждой карточке
+    val friendGames = remember { mutableStateMapOf<String, Boolean>() }
 
     LaunchedEffect(finalExercise?.id, chooseMyself) {
         if (chooseMyself || finalExercise == null) {
@@ -173,12 +173,15 @@ internal fun FreeRouletteScreen(
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 allExercises.forEach { ex ->
+                    val isGame = ex.id == "game501" || ex.id == "cricket"
+                    val isWithFriend = friendGames[ex.id] == true
+
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(12.dp))
                             .background(TileBg)
-                            .clickable { onPlayDirect(ex.id) }
+                            .clickable { onPlayDirect(ex.id, isWithFriend) }
                             .padding(16.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -196,44 +199,36 @@ internal fun FreeRouletteScreen(
                                 fontSize = 12.sp
                             )
                         }
+
+                        // Если это игра, показываем переключатель "С другом"
+                        if (isGame) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(end = 12.dp)
+                            ) {
+                                Text(
+                                    "С другом",
+                                    color = if (isWithFriend) GoldAccent else Color.White.copy(alpha = 0.5f),
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Spacer(Modifier.width(4.dp))
+                                Switch(
+                                    checked = isWithFriend,
+                                    onCheckedChange = { friendGames[ex.id] = it },
+                                    modifier = Modifier.scale(0.7f),
+                                    colors = SwitchDefaults.colors(
+                                        checkedThumbColor = GoldAccent,
+                                        checkedTrackColor = GoldAccent.copy(alpha = 0.5f),
+                                        uncheckedThumbColor = Color.White,
+                                        uncheckedTrackColor = TileBgDark
+                                    )
+                                )
+                            }
+                        }
+
                         Text("▶", color = Accent, fontSize = 18.sp)
                     }
-                }
-                
-                // ── Переключатель Игры с другом ──
-                Spacer(Modifier.height(8.dp))
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(TileBg)
-                        .clickable { onToggleWithFriend(!withFriend) }
-                        .padding(horizontal = 16.dp, vertical = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            "Играть с другом",
-                            color = Color.White,
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Text(
-                            "Для 501 и Крикета",
-                            color = Color.White.copy(alpha = 0.5f),
-                            fontSize = 11.sp
-                        )
-                    }
-                    Switch(
-                        checked = withFriend,
-                        onCheckedChange = { onToggleWithFriend(it) },
-                        colors = SwitchDefaults.colors(
-                            checkedThumbColor = Color.White,
-                            checkedTrackColor = Accent,
-                            uncheckedThumbColor = Color.White,
-                            uncheckedTrackColor = TileBgDark
-                        )
-                    )
                 }
                 Spacer(Modifier.height(10.dp))
             }
