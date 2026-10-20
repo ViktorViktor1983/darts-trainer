@@ -21,12 +21,14 @@ import java.util.Calendar
  * Версия 3 (13.10.2026) — добавлена таблица training_records.
  * Версия 4 (14.10.2026) — в training_records добавлены поля bestFloat и extraInt.
  * Версия 5 (16.10.2026) — добавлена таблица training_checkouts.
- * Версия 6 (20.10.2026) — добавлена таблица darts_history (для вечного счетчика дротиков).
+ * Версия 6 (20.10.2026) — добавлена таблица darts_history.
+ * Версия 7 (20.10.2026) — добавлены колонки periodId для разделения тренировок по периодам.
  */
 
 @Entity(tableName = "training_sessions")
 data class TrainingSessionEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0L,
+    val periodId: Int = 1,
     val dateMillis: Long,
     val plannedMinutes: Int,
     val actualMinutes: Int,
@@ -40,6 +42,7 @@ data class TrainingSessionEntity(
 @Entity(tableName = "exercise_results")
 data class ExerciseResultEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0L,
+    val periodId: Int = 1,
     val sessionId: Long,
     val blockType: String,
     val exerciseId: String,
@@ -99,7 +102,6 @@ data class ControlMatchEntity(
 
 /**
  * Рекорд упражнения в тренировке.
- * Ключ — exerciseId (например, "aroundclock_doubles", "game501_leg").
  */
 @Entity(tableName = "training_records")
 data class TrainingRecordEntity(
@@ -113,19 +115,16 @@ data class TrainingRecordEntity(
 
 /**
  * Закрытый чекаут в тренировочной партии 501.
- * Эти записи НЕ сбрасываются после сдачи нормативов — как рекорды.
  */
 @Entity(tableName = "training_checkouts")
 data class TrainingCheckoutEntity(
-    @PrimaryKey val value: Int,       // остаток 2..170
-    val count: Int,                   // сколько раз закрыт
-    val lastUpdated: Long             // когда последний раз закрывал
+    @PrimaryKey val value: Int,
+    val count: Int,
+    val lastUpdated: Long
 )
 
 /**
  * Архив дротиков для счетчика интенсивности.
- * Пишется при каждом упражнении, НЕ чистится после нормативов,
- * чистится только при полном сбросе.
  */
 @Entity(tableName = "darts_history")
 data class DartsHistoryEntity(
@@ -160,11 +159,11 @@ interface TrainingSessionDao {
     @Query("SELECT * FROM training_sessions ORDER BY dateMillis DESC LIMIT 1")
     suspend fun getLast(): TrainingSessionEntity?
 
-    @Query("SELECT * FROM training_sessions WHERE isCompleted = 1 ORDER BY dateMillis DESC")
-    suspend fun getAllCompleted(): List<TrainingSessionEntity>
+    @Query("SELECT * FROM training_sessions WHERE isCompleted = 1 AND periodId = :periodId ORDER BY dateMillis DESC")
+    suspend fun getAllCompletedForPeriod(periodId: Int): List<TrainingSessionEntity>
 
-    @Query("SELECT COUNT(*) FROM training_sessions WHERE isCompleted = 1")
-    suspend fun getCompletedCount(): Int
+    @Query("SELECT COUNT(*) FROM training_sessions WHERE isCompleted = 1 AND periodId = :periodId")
+    suspend fun getCompletedCountForPeriod(periodId: Int): Int
 
     @Query("SELECT * FROM training_sessions ORDER BY dateMillis DESC")
     suspend fun getAll(): List<TrainingSessionEntity>
@@ -173,7 +172,6 @@ interface TrainingSessionDao {
     suspend fun clearAll()
 }
 
-// Вспомогательный класс для запроса по месяцам
 data class DartsByMonthRaw(
     @ColumnInfo(name = "month") val month: String,
     @ColumnInfo(name = "totalDarts") val totalDarts: Int
@@ -187,8 +185,11 @@ interface ExerciseResultDao {
     @Query("SELECT * FROM exercise_results WHERE sessionId = :sessionId ORDER BY timestamp ASC")
     suspend fun getBySession(sessionId: Long): List<ExerciseResultEntity>
 
-    @Query("SELECT * FROM exercise_results WHERE exerciseId = :exerciseId ORDER BY timestamp DESC LIMIT :limit")
-    suspend fun getLatestByExercise(exerciseId: String, limit: Int): List<ExerciseResultEntity>
+    @Query("SELECT * FROM exercise_results WHERE exerciseId = :exerciseId AND periodId = :periodId ORDER BY timestamp DESC LIMIT :limit")
+    suspend fun getLatestByExerciseForPeriod(exerciseId: String, periodId: Int, limit: Int): List<ExerciseResultEntity>
+
+    @Query("SELECT * FROM exercise_results WHERE exerciseId = :exerciseId AND periodId = :periodId ORDER BY timestamp ASC")
+    suspend fun getAllByExerciseForPeriod(exerciseId: String, periodId: Int): List<ExerciseResultEntity>
 
     @Query("SELECT * FROM exercise_results WHERE exerciseId = :exerciseId ORDER BY timestamp ASC")
     suspend fun getAllByExercise(exerciseId: String): List<ExerciseResultEntity>
@@ -336,7 +337,7 @@ interface TrainingCheckoutDao {
         TrainingCheckoutEntity::class,
         DartsHistoryEntity::class
     ],
-    version = 6,
+    version = 7,
     exportSchema = false
 )
 abstract class TrainingDatabase : RoomDatabase() {
@@ -407,6 +408,13 @@ abstract class TrainingDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_6_7 = object : Migration(6, 7) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE training_sessions ADD COLUMN periodId INTEGER NOT NULL DEFAULT 1")
+                db.execSQL("ALTER TABLE exercise_results ADD COLUMN periodId INTEGER NOT NULL DEFAULT 1")
+            }
+        }
+
         fun getInstance(context: Context): TrainingDatabase {
             return INSTANCE ?: synchronized(this) {
                 INSTANCE ?: Room.databaseBuilder(
@@ -414,7 +422,7 @@ abstract class TrainingDatabase : RoomDatabase() {
                     TrainingDatabase::class.java,
                     "training_database"
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
                     .build()
                     .also { INSTANCE = it }
             }
@@ -426,16 +434,21 @@ abstract class TrainingDatabase : RoomDatabase() {
 // REPOSITORY
 // ============================================================
 
-class TrainingRepository(private val db: TrainingDatabase) {
+class TrainingRepository(
+    private val db: TrainingDatabase,
+    private val context: Context
+) {
+    private val currentPeriod: Int
+        get() = TrainingPeriodStorage.getCurrentPeriod(context)
 
     // ---------- Тренировочные сессии ----------
 
     suspend fun insertSession(session: TrainingSession): Long {
-        return db.sessionDao().insert(session.toEntity())
+        return db.sessionDao().insert(session.toEntity().copy(periodId = currentPeriod))
     }
 
     suspend fun updateSession(session: TrainingSession) {
-        db.sessionDao().update(session.toEntity())
+        db.sessionDao().update(session.toEntity().copy(periodId = currentPeriod))
     }
 
     suspend fun getSessionById(id: Long): TrainingSession? {
@@ -447,17 +460,16 @@ class TrainingRepository(private val db: TrainingDatabase) {
     }
 
     suspend fun getCompletedSessionCount(): Int {
-        return db.sessionDao().getCompletedCount()
+        return db.sessionDao().getCompletedCountForPeriod(currentPeriod)
     }
 
     suspend fun getAllCompletedSessions(): List<TrainingSession> {
-        return db.sessionDao().getAllCompleted().map { it.toModel() }
+        return db.sessionDao().getAllCompletedForPeriod(currentPeriod).map { it.toModel() }
     }
 
     // ---------- Результаты упражнений ----------
 
     suspend fun insertExerciseResult(result: ExerciseResult): Long {
-        // Сохраняем в историю дротиков (для счетчика интенсивности)
         if (result.dartsThrown > 0) {
             db.dartsHistoryDao().insert(
                 DartsHistoryEntity(
@@ -466,8 +478,7 @@ class TrainingRepository(private val db: TrainingDatabase) {
                 )
             )
         }
-        // Сохраняем как обычно
-        return db.exerciseDao().insert(result.toEntity())
+        return db.exerciseDao().insert(result.toEntity().copy(periodId = currentPeriod))
     }
 
     suspend fun getExerciseResults(sessionId: Long): List<ExerciseResult> {
@@ -475,10 +486,15 @@ class TrainingRepository(private val db: TrainingDatabase) {
     }
 
     suspend fun getLatestExerciseResults(exerciseId: String, limit: Int): List<ExerciseResult> {
-        return db.exerciseDao().getLatestByExercise(exerciseId, limit).map { it.toModel() }
+        return db.exerciseDao().getLatestByExerciseForPeriod(exerciseId, currentPeriod, limit).map { it.toModel() }
     }
 
     suspend fun getAllExerciseResultsByExerciseId(exerciseId: String): List<ExerciseResult> {
+        return db.exerciseDao().getAllByExerciseForPeriod(exerciseId, currentPeriod).map { it.toModel() }
+    }
+
+    /** Получить ВСЕ результаты упражнения за ВСЕ периоды (для глубокой статистики). */
+    suspend fun getAllExerciseResultsEver(exerciseId: String): List<ExerciseResult> {
         return db.exerciseDao().getAllByExercise(exerciseId).map { it.toModel() }
     }
 
@@ -751,8 +767,9 @@ class TrainingRepository(private val db: TrainingDatabase) {
         return false
     }
 
-    // ---------- Полный сброс ----------
+    // ---------- Сбросы ----------
 
+    /** Полный сброс тренировочных данных. Удаляет ВСЁ и сбрасывает период до 1. */
     suspend fun clearAllTrainingData() {
         db.exerciseDao().clearAll()
         db.sessionDao().clearAll()
@@ -762,19 +779,16 @@ class TrainingRepository(private val db: TrainingDatabase) {
         db.controlDao().clearAll()
         db.recordDao().clearAll()
         db.checkoutDao().clearAll()
-        db.dartsHistoryDao().clearAll() // Стираем и историю дротиков
+        db.dartsHistoryDao().clearAll()
+        TrainingPeriodStorage.reset(context)
     }
 
+    /**
+     * Сброс статистики после сдачи нормативов.
+     * Теперь он НЕ УДАЛЯЕТ данные, а просто начинает новый период.
+     */
     suspend fun clearStatisticsAfterNormatives() {
-        db.exerciseDao().clearAll()
-        db.sessionDao().clearAll()
-        db.postponedDao().clearAll()
-        db.weaknessDao().clearAll()
-        db.potentialDao().clearAll()
-        db.controlDao().clearAll()
-        // training_records — НЕ трогаем
-        // training_checkouts — НЕ трогаем
-        // darts_history — НЕ трогаем (дротики копятся вечно)
+        TrainingPeriodStorage.startNewPeriod(context)
     }
 }
 
