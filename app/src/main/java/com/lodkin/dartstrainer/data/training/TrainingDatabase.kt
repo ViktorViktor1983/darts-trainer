@@ -21,6 +21,7 @@ import java.util.Calendar
  * Версия 3 (13.10.2026) — добавлена таблица training_records.
  * Версия 4 (14.10.2026) — в training_records добавлены поля bestFloat и extraInt.
  * Версия 5 (16.10.2026) — добавлена таблица training_checkouts.
+ * Версия 6 (20.10.2026) — добавлена таблица darts_history (для вечного счетчика дротиков).
  */
 
 @Entity(tableName = "training_sessions")
@@ -112,10 +113,6 @@ data class TrainingRecordEntity(
 
 /**
  * Закрытый чекаут в тренировочной партии 501.
- *
- * Одна запись = один остаток, с которого игрок закрывал лег.
- * Несколько закрытий одного остатка → счётчик count растёт.
- *
  * Эти записи НЕ сбрасываются после сдачи нормативов — как рекорды.
  */
 @Entity(tableName = "training_checkouts")
@@ -123,6 +120,18 @@ data class TrainingCheckoutEntity(
     @PrimaryKey val value: Int,       // остаток 2..170
     val count: Int,                   // сколько раз закрыт
     val lastUpdated: Long             // когда последний раз закрывал
+)
+
+/**
+ * Архив дротиков для счетчика интенсивности.
+ * Пишется при каждом упражнении, НЕ чистится после нормативов,
+ * чистится только при полном сбросе.
+ */
+@Entity(tableName = "darts_history")
+data class DartsHistoryEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0L,
+    val dartsThrown: Int,
+    val timestamp: Long
 )
 
 /**
@@ -189,18 +198,24 @@ interface ExerciseResultDao {
 
     @Query("DELETE FROM exercise_results")
     suspend fun clearAll()
+}
 
-    // ── НОВЫЕ ЗАПРОСЫ ДЛЯ ИНТЕНСИВНОСТИ ──
+@Dao
+interface DartsHistoryDao {
+    @Insert
+    suspend fun insert(item: DartsHistoryEntity)
 
-    @Query("SELECT SUM(dartsThrown) FROM exercise_results")
-    suspend fun getTotalDartsThrown(): Int?
+    @Query("SELECT SUM(dartsThrown) FROM darts_history")
+    suspend fun getTotalDarts(): Int?
 
-    @Query("SELECT SUM(dartsThrown) FROM exercise_results WHERE timestamp >= :startOfWeekMillis")
-    suspend fun getDartsThrownSince(startOfWeekMillis: Long): Int?
+    @Query("SELECT SUM(dartsThrown) FROM darts_history WHERE timestamp >= :startMillis")
+    suspend fun getDartsSince(startMillis: Long): Int?
 
-    // Группируем по месяцам. timestamp / 1000 переводит миллисекунды в секунды для strftime
-    @Query("SELECT strftime('%Y-%m', timestamp / 1000, 'unixepoch', 'localtime') as month, SUM(dartsThrown) as totalDarts FROM exercise_results GROUP BY month ORDER BY month DESC")
+    @Query("SELECT strftime('%Y-%m', timestamp / 1000, 'unixepoch', 'localtime') as month, SUM(dartsThrown) as totalDarts FROM darts_history GROUP BY month ORDER BY month DESC")
     suspend fun getDartsByMonth(): List<DartsByMonthRaw>
+
+    @Query("DELETE FROM darts_history")
+    suspend fun clearAll()
 }
 
 @Dao
@@ -318,14 +333,16 @@ interface TrainingCheckoutDao {
         PotentialSnapshotEntity::class,
         ControlMatchEntity::class,
         TrainingRecordEntity::class,
-        TrainingCheckoutEntity::class
+        TrainingCheckoutEntity::class,
+        DartsHistoryEntity::class
     ],
-    version = 5,
+    version = 6,
     exportSchema = false
 )
 abstract class TrainingDatabase : RoomDatabase() {
     abstract fun sessionDao(): TrainingSessionDao
     abstract fun exerciseDao(): ExerciseResultDao
+    abstract fun dartsHistoryDao(): DartsHistoryDao
     abstract fun postponedDao(): PostponedDoubleDao
     abstract fun weaknessDao(): WeaknessSnapshotDao
     abstract fun potentialDao(): PotentialSnapshotDao
@@ -379,6 +396,17 @@ abstract class TrainingDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS darts_history (" +
+                            "id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                            "dartsThrown INTEGER NOT NULL, " +
+                            "timestamp INTEGER NOT NULL)"
+                )
+            }
+        }
+
         fun getInstance(context: Context): TrainingDatabase {
             return INSTANCE ?: synchronized(this) {
                 INSTANCE ?: Room.databaseBuilder(
@@ -386,7 +414,7 @@ abstract class TrainingDatabase : RoomDatabase() {
                     TrainingDatabase::class.java,
                     "training_database"
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
                     .build()
                     .also { INSTANCE = it }
             }
@@ -429,6 +457,16 @@ class TrainingRepository(private val db: TrainingDatabase) {
     // ---------- Результаты упражнений ----------
 
     suspend fun insertExerciseResult(result: ExerciseResult): Long {
+        // Сохраняем в историю дротиков (для счетчика интенсивности)
+        if (result.dartsThrown > 0) {
+            db.dartsHistoryDao().insert(
+                DartsHistoryEntity(
+                    dartsThrown = result.dartsThrown,
+                    timestamp = result.timestamp
+                )
+            )
+        }
+        // Сохраняем как обычно
         return db.exerciseDao().insert(result.toEntity())
     }
 
@@ -444,14 +482,12 @@ class TrainingRepository(private val db: TrainingDatabase) {
         return db.exerciseDao().getAllByExercise(exerciseId).map { it.toModel() }
     }
 
-    // ---------- НОВЫЕ МЕТОДЫ ДЛЯ ИНТЕНСИВНОСТИ ----------
+    // ---------- Интенсивность (счетчик дротиков) ----------
 
-    /** Сколько всего дротиков брошено за всё время. */
     suspend fun getTotalDartsThrown(): Int {
-        return db.exerciseDao().getTotalDartsThrown() ?: 0
+        return db.dartsHistoryDao().getTotalDarts() ?: 0
     }
 
-    /** Сколько дротиков брошено с начала текущей недели (с понедельника). */
     suspend fun getDartsThrownThisWeek(): Int {
         val calendar = Calendar.getInstance()
         calendar.firstDayOfWeek = Calendar.MONDAY
@@ -462,12 +498,11 @@ class TrainingRepository(private val db: TrainingDatabase) {
         calendar.set(Calendar.MILLISECOND, 0)
         val startOfWeek = calendar.timeInMillis
 
-        return db.exerciseDao().getDartsThrownSince(startOfWeek) ?: 0
+        return db.dartsHistoryDao().getDartsSince(startOfWeek) ?: 0
     }
 
-    /** Статистика бросков по месяцам (от новых к старым). */
     suspend fun getDartsByMonth(): List<MonthlyDartsStat> {
-        return db.exerciseDao().getDartsByMonth().map {
+        return db.dartsHistoryDao().getDartsByMonth().map {
             MonthlyDartsStat(month = it.month, darts = it.totalDarts)
         }
     }
@@ -727,6 +762,7 @@ class TrainingRepository(private val db: TrainingDatabase) {
         db.controlDao().clearAll()
         db.recordDao().clearAll()
         db.checkoutDao().clearAll()
+        db.dartsHistoryDao().clearAll() // Стираем и историю дротиков
     }
 
     suspend fun clearStatisticsAfterNormatives() {
@@ -736,6 +772,9 @@ class TrainingRepository(private val db: TrainingDatabase) {
         db.weaknessDao().clearAll()
         db.potentialDao().clearAll()
         db.controlDao().clearAll()
+        // training_records — НЕ трогаем
+        // training_checkouts — НЕ трогаем
+        // darts_history — НЕ трогаем (дротики копятся вечно)
     }
 }
 
