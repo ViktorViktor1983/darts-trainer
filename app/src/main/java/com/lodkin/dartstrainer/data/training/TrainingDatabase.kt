@@ -1,6 +1,7 @@
 package com.lodkin.dartstrainer.data.training
 
 import android.content.Context
+import androidx.room.ColumnInfo
 import androidx.room.Dao
 import androidx.room.Database
 import androidx.room.Entity
@@ -12,16 +13,14 @@ import androidx.room.RoomDatabase
 import androidx.room.Update
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
+import java.util.Calendar
 
 /**
  * База данных тренировочного раздела.
  *
  * Версия 3 (13.10.2026) — добавлена таблица training_records.
  * Версия 4 (14.10.2026) — в training_records добавлены поля bestFloat и extraInt.
- * Версия 5 (16.10.2026) — добавлена таблица training_checkouts
- *   (закрытые чекауты из тренировочных партий 501).
- *   Чекауты НЕ сбрасываются после сдачи нормативов — они переживают
- *   сброс статистики, как и рекорды.
+ * Версия 5 (16.10.2026) — добавлена таблица training_checkouts.
  */
 
 @Entity(tableName = "training_sessions")
@@ -126,6 +125,14 @@ data class TrainingCheckoutEntity(
     val lastUpdated: Long             // когда последний раз закрывал
 )
 
+/**
+ * Модель для статистики по месяцам.
+ */
+data class MonthlyDartsStat(
+    val month: String,
+    val darts: Int
+)
+
 // ============================================================
 // DAO
 // ============================================================
@@ -157,6 +164,12 @@ interface TrainingSessionDao {
     suspend fun clearAll()
 }
 
+// Вспомогательный класс для запроса по месяцам
+data class DartsByMonthRaw(
+    @ColumnInfo(name = "month") val month: String,
+    @ColumnInfo(name = "totalDarts") val totalDarts: Int
+)
+
 @Dao
 interface ExerciseResultDao {
     @Insert
@@ -176,6 +189,18 @@ interface ExerciseResultDao {
 
     @Query("DELETE FROM exercise_results")
     suspend fun clearAll()
+
+    // ── НОВЫЕ ЗАПРОСЫ ДЛЯ ИНТЕНСИВНОСТИ ──
+
+    @Query("SELECT SUM(dartsThrown) FROM exercise_results")
+    suspend fun getTotalDartsThrown(): Int?
+
+    @Query("SELECT SUM(dartsThrown) FROM exercise_results WHERE timestamp >= :startOfWeekMillis")
+    suspend fun getDartsThrownSince(startOfWeekMillis: Long): Int?
+
+    // Группируем по месяцам. timestamp / 1000 переводит миллисекунды в секунды для strftime
+    @Query("SELECT strftime('%Y-%m', timestamp / 1000, 'unixepoch', 'localtime') as month, SUM(dartsThrown) as totalDarts FROM exercise_results GROUP BY month ORDER BY month DESC")
+    suspend fun getDartsByMonth(): List<DartsByMonthRaw>
 }
 
 @Dao
@@ -419,6 +444,34 @@ class TrainingRepository(private val db: TrainingDatabase) {
         return db.exerciseDao().getAllByExercise(exerciseId).map { it.toModel() }
     }
 
+    // ---------- НОВЫЕ МЕТОДЫ ДЛЯ ИНТЕНСИВНОСТИ ----------
+
+    /** Сколько всего дротиков брошено за всё время. */
+    suspend fun getTotalDartsThrown(): Int {
+        return db.exerciseDao().getTotalDartsThrown() ?: 0
+    }
+
+    /** Сколько дротиков брошено с начала текущей недели (с понедельника). */
+    suspend fun getDartsThrownThisWeek(): Int {
+        val calendar = Calendar.getInstance()
+        calendar.firstDayOfWeek = Calendar.MONDAY
+        calendar.set(Calendar.DAY_OF_WEEK, Calendar.MONDAY)
+        calendar.set(Calendar.HOUR_OF_DAY, 0)
+        calendar.set(Calendar.MINUTE, 0)
+        calendar.set(Calendar.SECOND, 0)
+        calendar.set(Calendar.MILLISECOND, 0)
+        val startOfWeek = calendar.timeInMillis
+
+        return db.exerciseDao().getDartsThrownSince(startOfWeek) ?: 0
+    }
+
+    /** Статистика бросков по месяцам (от новых к старым). */
+    suspend fun getDartsByMonth(): List<MonthlyDartsStat> {
+        return db.exerciseDao().getDartsByMonth().map {
+            MonthlyDartsStat(month = it.month, darts = it.totalDarts)
+        }
+    }
+
     // ---------- Отложенные даблы ----------
 
     suspend fun insertPostponed(item: PostponedDouble): Long {
@@ -477,11 +530,6 @@ class TrainingRepository(private val db: TrainingDatabase) {
 
     // ---------- Закрытые чекауты тренировки ----------
 
-    /**
-     * Записать закрытый чекаут в тренировочной партии 501.
-     * Если такой остаток уже был — увеличиваем счётчик.
-     * Эти записи НЕ сбрасываются после нормативов.
-     */
     suspend fun recordCheckout(value: Int) {
         if (value < 2 || value > 170) return
         val existing = db.checkoutDao().getByValue(value)
@@ -497,7 +545,6 @@ class TrainingRepository(private val db: TrainingDatabase) {
         }
     }
 
-    /** Все закрытые чекауты из тренировок — Map(value → count). */
     suspend fun getAllCheckouts(): Map<Int, Int> {
         return db.checkoutDao().getAll().associate { it.value to it.count }
     }
@@ -671,11 +718,6 @@ class TrainingRepository(private val db: TrainingDatabase) {
 
     // ---------- Полный сброс ----------
 
-    /**
-     * Полный сброс тренировочных данных.
-     * Используется в TrainingSettingsScreen («Сбросить всё»).
-     * Чистит ВСЁ, включая рекорды и чекауты.
-     */
     suspend fun clearAllTrainingData() {
         db.exerciseDao().clearAll()
         db.sessionDao().clearAll()
@@ -687,16 +729,6 @@ class TrainingRepository(private val db: TrainingDatabase) {
         db.checkoutDao().clearAll()
     }
 
-    /**
-     * Сброс статистики после сдачи нормативов.
-     *
-     * Чистит всю накопленную статистику периода (сессии, результаты,
-     * снапшоты, отложенные даблы), но СОХРАНЯЕТ:
-     *   • рекорды (training_records)
-     *   • закрытые чекауты (training_checkouts)
-     *
-     * После сдачи нормативов начинается новый период.
-     */
     suspend fun clearStatisticsAfterNormatives() {
         db.exerciseDao().clearAll()
         db.sessionDao().clearAll()
@@ -704,8 +736,6 @@ class TrainingRepository(private val db: TrainingDatabase) {
         db.weaknessDao().clearAll()
         db.potentialDao().clearAll()
         db.controlDao().clearAll()
-        // training_records — НЕ трогаем
-        // training_checkouts — НЕ трогаем
     }
 }
 
