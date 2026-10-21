@@ -118,7 +118,7 @@ internal fun MainExerciseRunner(
             isTrainingMode = isTraining,
             trainingRepository = trainingRepository,
             trainingRecordKey = if (isTraining) "scoreset" else null,
-            onFinish = { totalScore, _ -> onFinish(BlockType.SCORE, totalScore, 30, "") },
+            onFinish = { totalScore, approaches -> onFinish(BlockType.SCORE, totalScore, approaches.size * 3, "") },
             onBack = onBack
         )
         "biground" -> BigRoundGameScreen(
@@ -193,4 +193,60 @@ internal fun TrainingExercisePlaceholder(
             }
         }
     }
+}
+
+// ─────────────────────────────────────────────
+// СПИСКИ УПРАЖНЕНИЙ ПО УМОЛЧАНИЮ
+// ─────────────────────────────────────────────
+
+data class PlannedExercise(
+    val id: String,
+    val title: String,
+    val minutes: Int,
+    val whyImportant: String = ""
+)
+
+data class BlockExerciseItem(
+    val id: String,
+    val title: String
+)
+
+internal fun defaultMainExercises(): List<PlannedExercise> = listOf(
+    PlannedExercise("aroundclock_doubles", "Кругосветка: Удвоения", 14, "Тренирует точность на удвоениях, чтобы закрывать леги с первого дротика."),
+    PlannedExercise("aroundclock_sectors", "Кругосветка: Сектора", 12, "Улучшает общую точность и контроль над сектором."),
+    PlannedExercise("aroundclock_trebles", "Кругосветка: Утроения", 12, "Помогает набирать больше очков за подход (особенно в Крикете)."),
+    PlannedExercise("sector20", "Сектор 20", 8, "База для набора очков в 501."),
+    PlannedExercise("scoreset", "Набор очков", 6, "Учит стабильно набирать максимум за 3 дротика."),
+    PlannedExercise("biground", "Большой раунд", 12, "Тренирует переход по всей мишени."),
+    PlannedExercise("game501", "501", 18, "Главная игра — учит считать и закрывать."),
+    PlannedExercise("cricket", "Крикет", 12, "Тренирует утроения и стратегию.")
+)
+
+internal fun defaultPsychologyExercises(): List<PlannedExercise> = listOf(
+    PlannedExercise("psy_breath", "Дыхание 4-4-7", 3, "Снижает пульс и убирает дрожь в руках перед важным броском."),
+    PlannedExercise("psy_tunnel", "Туннельное зрение", 3, "Учит мозг не отвлекаться на фон и концентрироваться только на цели."),
+    PlannedExercise("psy_ritual", "Ритуал трёх шагов", 3, "Стабильность — залог победы. Одинаковые действия настраивают на бросок."),
+    PlannedExercise("psy_visual", "Визуализация полёта", 3, "Прогревает нейронные связи, и рука бросает точнее."),
+    PlannedExercise("psy_single", "Один дротик", 3, "Убирает расслабленность. Каждый бросок — решающий."),
+    PlannedExercise("psy_trigger_word", "Триггер-слово", 3, "Создаёт условный рефлекс для тела начать правильное движение."),
+    PlannedExercise("psy_mirror", "Зеркало", 3, "Контроль техники и осознанность движений."),
+    PlannedExercise("psy_ideomotor", "Идеомоторная тренировка", 3, "Улучшение техники без физических бросков.")
+)
+
+internal fun defaultStrengthExercises(): List<PlannedExercise> = listOf(
+    PlannedExercise("str_1", "Силовая: Плечи", 2, "Укрепляет плечевой пояс."),
+    PlannedExercise("str_2", "Силовая: Кисти", 2, "Разрабатывает кисть для контроля дротика."),
+    PlannedExercise("str_3", "Силовая: Спина", 2, "Стабильная стойка."),
+    PlannedExercise("str_4", "Силовая: Растяжка", 1, "Снимает напряжение после тренировки.")
+)
+
+internal fun warmupBlockItems(): List<BlockExerciseItem> = listOf(
+    BlockExerciseItem("warm_muscles", "Разминка: мышцы"),
+    BlockExerciseItem("warm_trajectory", "Разминка: траектория"),
+    BlockExerciseItem("warm_accuracy", "Разминка: кучность"),
+    BlockExerciseItem("warm_aim", "Прицеливание")
+)
+
+internal fun defaultMainBlockItems(recommendedIds: Set<String>): List<BlockExerciseItem> {
+    return defaultMainExercises().map { BlockExerciseItem(it.id, it.title) }
 }
