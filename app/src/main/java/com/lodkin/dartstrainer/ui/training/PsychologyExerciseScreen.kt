@@ -28,7 +28,7 @@ import kotlinx.coroutines.delay
 @Composable
 fun PsychologyExerciseScreen(
     exerciseId: String,
-    onFinish: () -> Unit,
+    onFinish: (exerciseId: String) -> Unit, // ТЕПЕРЬ ПЕРЕДАЕМ ID
     onBack: () -> Unit
 ) {
     Column(
@@ -67,55 +67,55 @@ fun PsychologyExerciseScreen(
                 title = "Ритуал трёх шагов",
                 description = "Стабильность — залог победы. Одинаковые действия перед броском успокаивают нервную систему и настраивают мозг на выполнение задачи.",
                 action = "Твоя задача: перед каждым броском выполнять одинаковую последовательность:\n\n1. Встань на одну и ту же точку на полу.\n2. Сделай глубокий вдох.\n3. Посмотри на цель 2 секунды.\n4. Брось дротик.",
-                onFinish = onFinish
+                onFinish = { onFinish(exerciseId) }
             )
 
             "psy_visual" -> TextExerciseContent(
                 title = "Визуализация полёта",
                 description = "Мозг не различает реальное действие и яркое представление. Визуализация «прогревает» нейронные связи, и рука бросает точнее.",
                 action = "Твоя задача:\n\nПеред каждым броском закрой глаза на 3 секунды и представь, как дротик летит по идеальной дуге и втыкается ровно в центр цели. Открой глаза и бросай.",
-                onFinish = onFinish
+                onFinish = { onFinish(exerciseId) }
             )
 
             "psy_ideomotor" -> TextExerciseContent(
                 title = "Идеомоторная тренировка",
                 description = "Реальное улучшение техники без физических бросков. Мозг запоминает правильные движения, и потом рука делает их автоматически.",
                 action = "Твоя задача:\n\nСядь на стул, закрой глаза и мысленно «прокрути» 3 идеальных броска: как ты встаешь, как замахиваешься, как разжимаешь пальцы, как дротик втыкается в центр.",
-                onFinish = onFinish
+                onFinish = { onFinish(exerciseId) }
             )
 
             "psy_trigger_word" -> TextExerciseContent(
                 title = "Триггер-слово",
                 description = "Создаёт условный рефлекс. Короткое слово — это сигнал для тела начать правильное движение, отключая лишние мысли.",
                 action = "Твоя задача:\n\n1. Придумай короткое слово (например, «Цель», «Бросок», «Точно»).\n2. Сделай 5 подходов по 3 дротика.\n3. Перед каждым броском говори это слово про себя за секунду до замаха.",
-                onFinish = onFinish
+                onFinish = { onFinish(exerciseId) }
             )
 
             "psy_mirror" -> TextExerciseContent(
                 title = "Зеркало",
                 description = "Контроль техники и осознанность движений. Помогает увидеть и исправить ошибки в замахе, которые ты не замечаешь на автомате.",
                 action = "Твоя задача:\n\n1. Встань перед зеркалом так, чтобы видеть руку с дротиком.\n2. Сделай 10 медленных, осознанных замахов без броска.\n3. Следи за тем, чтобы локоть не гулял, а кисть двигалась по прямой.",
-                onFinish = onFinish
+                onFinish = { onFinish(exerciseId) }
             )
 
-            "psy_breath" -> BreathExerciseContent(onFinish = onFinish)
+            "psy_breath" -> BreathExerciseContent(onFinish = { onFinish(exerciseId) })
 
-            "psy_single" -> SingleDartExerciseContent(onFinish = onFinish)
+            "psy_single" -> SingleDartExerciseContent(onFinish = { onFinish(exerciseId) })
 
-            "psy_tunnel" -> TunnelVisionExerciseContent(onFinish = onFinish)
+            "psy_tunnel" -> TunnelVisionExerciseContent(onFinish = { onFinish(exerciseId) })
 
             else -> TextExerciseContent(
                 title = "Упражнение",
                 description = "Описание отсутствует.",
                 action = "",
-                onFinish = onFinish
+                onFinish = { onFinish(exerciseId) }
             )
         }
     }
 }
 
 // ─────────────────────────────────────────────
-// Текстовые упражнения (1, 2, 3, 5, 29)
+// Текстовые упражнения
 // ─────────────────────────────────────────────
 @Composable
 private fun TextExerciseContent(
@@ -170,14 +170,13 @@ private fun TextExerciseContent(
 // ─────────────────────────────────────────────
 @Composable
 private fun BreathExerciseContent(onFinish: () -> Unit) {
-    var currentPhase by remember { mutableStateOf(0) } // 0 - Вдох, 1 - Задержка, 2 - Выдох
+    var currentPhase by remember { mutableStateOf(0) }
     var timeLeft by remember { mutableStateOf(4) }
     var cyclesDone by remember { mutableStateOf(0) }
 
     LaunchedEffect(currentPhase, cyclesDone) {
         if (cyclesDone >= 3) return@LaunchedEffect
         
-        // 4 секунды на вдох, 4 на задержку, 7 на выдох
         val maxTime = if (currentPhase == 2) 7 else 4
         timeLeft = maxTime
         
@@ -198,45 +197,22 @@ private fun BreathExerciseContent(onFinish: () -> Unit) {
         modifier = Modifier.fillMaxWidth().weight(1f),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text(
-            "Дыхание 4-4-7",
-            color = GoldAccent,
-            fontSize = 24.sp,
-            fontWeight = FontWeight.Bold
-        )
+        Text("Дыхание 4-4-7", color = GoldAccent, fontSize = 24.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(8.dp))
-        Text(
-            "Удлинённый выдох физиологически снижает пульс и убирает дрожь в руках.",
-            color = Color.White.copy(alpha = 0.7f),
-            fontSize = 14.sp,
-            textAlign = TextAlign.Center
-        )
+        Text("Удлинённый выдох снижает пульс и убирает дрожь в руках.", color = Color.White.copy(alpha = 0.7f), fontSize = 14.sp, textAlign = TextAlign.Center)
 
         Spacer(Modifier.height(40.dp))
 
         if (cyclesDone >= 3) {
-            Text(
-                "Упражнение выполнено!\nТы готов бросать.",
-                color = Accent,
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Bold,
-                textAlign = TextAlign.Center
-            )
+            Text("Упражнение выполнено!\nТы готов бросать.", color = Accent, fontSize = 20.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
         } else {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceEvenly
-            ) {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
                 PhaseBox("ВДОХ", currentPhase == 0, timeLeft)
                 PhaseBox("ЗАДЕРЖКА", currentPhase == 1, timeLeft)
                 PhaseBox("ВЫДОХ", currentPhase == 2, timeLeft)
             }
             Spacer(Modifier.height(20.dp))
-            Text(
-                "Цикл ${cyclesDone + 1} из 3",
-                color = Color.White.copy(alpha = 0.5f),
-                fontSize = 14.sp
-            )
+            Text("Цикл ${cyclesDone + 1} из 3", color = Color.White.copy(alpha = 0.5f), fontSize = 14.sp)
         }
 
         Spacer(Modifier.weight(1f))
@@ -248,25 +224,11 @@ private fun BreathExerciseContent(onFinish: () -> Unit) {
 private fun PhaseBox(label: String, isActive: Boolean, time: Int) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier
-            .width(90.dp)
-            .clip(RoundedCornerShape(12.dp))
-            .background(if (isActive) Accent else TileBgDark)
-            .padding(vertical = 16.dp)
+        modifier = Modifier.width(90.dp).clip(RoundedCornerShape(12.dp)).background(if (isActive) Accent else TileBgDark).padding(vertical = 16.dp)
     ) {
-        Text(
-            label,
-            color = if (isActive) Color(0xFF121212) else Color.White.copy(alpha = 0.5f),
-            fontSize = 12.sp,
-            fontWeight = FontWeight.Bold
-        )
+        Text(label, color = if (isActive) Color(0xFF121212) else Color.White.copy(alpha = 0.5f), fontSize = 12.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(8.dp))
-        Text(
-            if (isActive) "$time" else "-",
-            color = if (isActive) Color(0xFF121212) else Color.White.copy(alpha = 0.5f),
-            fontSize = 32.sp,
-            fontWeight = FontWeight.Bold
-        )
+        Text(if (isActive) "$time" else "-", color = if (isActive) Color(0xFF121212) else Color.White.copy(alpha = 0.5f), fontSize = 32.sp, fontWeight = FontWeight.Bold)
     }
 }
 
@@ -278,60 +240,24 @@ private fun SingleDartExerciseContent(onFinish: () -> Unit) {
     var dartsThrown by remember { mutableStateOf(0) }
     val totalDarts = 15
 
-    Column(
-        modifier = Modifier.fillMaxWidth().weight(1f),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Text(
-            "Один дротик",
-            color = GoldAccent,
-            fontSize = 24.sp,
-            fontWeight = FontWeight.Bold
-        )
+    Column(modifier = Modifier.fillMaxWidth().weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+        Text("Один дротик", color = GoldAccent, fontSize = 24.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(8.dp))
-        Text(
-            "Убирает расслабленность. Каждый бросок — решающий.",
-            color = Color.White.copy(alpha = 0.7f),
-            fontSize = 14.sp,
-            textAlign = TextAlign.Center
-        )
+        Text("Убирает расслабленность. Каждый бросок — решающий.", color = Color.White.copy(alpha = 0.7f), fontSize = 14.sp, textAlign = TextAlign.Center)
 
         Spacer(Modifier.height(40.dp))
-
-        Text(
-            "Дротик $dartsThrown из $totalDarts",
-            color = Color.White,
-            fontSize = 24.sp,
-            fontWeight = FontWeight.Bold
-        )
-
+        Text("Дротик $dartsThrown из $totalDarts", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(32.dp))
 
         if (dartsThrown < totalDarts) {
             Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(14.dp))
-                    .background(Accent)
-                    .clickable { dartsThrown++ }
-                    .padding(vertical = 20.dp),
+                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Accent).clickable { dartsThrown++ }.padding(vertical = 20.dp),
                 contentAlignment = Alignment.Center
             ) {
-                Text(
-                    "СДЕЛАЛ БРОСОК",
-                    color = Color(0xFF121212),
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold
-                )
+                Text("СДЕЛАЛ БРОСОК", color = Color(0xFF121212), fontSize = 18.sp, fontWeight = FontWeight.Bold)
             }
         } else {
-            Text(
-                "Все 15 бросков сделаны!\nОтличная концентрация.",
-                color = Accent,
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Bold,
-                textAlign = TextAlign.Center
-            )
+            Text("Все 15 бросков сделаны!\nОтличная концентрация.", color = Accent, fontSize = 20.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
         }
 
         Spacer(Modifier.weight(1f))
@@ -359,7 +285,6 @@ private fun TunnelVisionExerciseContent(onFinish: () -> Unit) {
         }
         if (timeLeft == 0) {
             isFocusing = false
-            // Вибрация
             val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 val vibratorManager = context.getSystemService(android.content.Context.VIBRATOR_MANAGER_SERVICE) as android.os.VibratorManager
                 vibratorManager.defaultVibrator
@@ -376,82 +301,30 @@ private fun TunnelVisionExerciseContent(onFinish: () -> Unit) {
         }
     }
 
-    Column(
-        modifier = Modifier.fillMaxWidth().weight(1f),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Text(
-            "Туннельное зрение",
-            color = GoldAccent,
-            fontSize = 24.sp,
-            fontWeight = FontWeight.Bold
-        )
+    Column(modifier = Modifier.fillMaxWidth().weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+        Text("Туннельное зрение", color = GoldAccent, fontSize = 24.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(8.dp))
-        Text(
-            "Учит мозг не отвлекаться на фон и концентрироваться на цели.",
-            color = Color.White.copy(alpha = 0.7f),
-            fontSize = 14.sp,
-            textAlign = TextAlign.Center
-        )
+        Text("Учит мозг не отвлекаться на фон и концентрироваться на цели.", color = Color.White.copy(alpha = 0.7f), fontSize = 14.sp, textAlign = TextAlign.Center)
 
         Spacer(Modifier.height(40.dp))
 
         if (dartsThrown >= totalDarts) {
-            Text(
-                "Упражнение выполнено!\nТы сконцентрировался на 3 бросках.",
-                color = Accent,
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Bold,
-                textAlign = TextAlign.Center
-            )
+            Text("Упражнение выполнено!\nТы сконцентрировался на 3 бросках.", color = Accent, fontSize = 20.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
         } else {
             if (isFocusing) {
-                Text(
-                    "Смотри на точку в центре мишени",
-                    color = Color.White,
-                    fontSize = 18.sp,
-                    textAlign = TextAlign.Center
-                )
+                Text("Смотри на точку в центре мишени", color = Color.White, fontSize = 18.sp, textAlign = TextAlign.Center)
                 Spacer(Modifier.height(24.dp))
-                Text(
-                    "$timeLeft",
-                    color = Accent,
-                    fontSize = 64.sp,
-                    fontWeight = FontWeight.Bold
-                )
+                Text("$timeLeft", color = Accent, fontSize = 64.sp, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.height(24.dp))
-                Text(
-                    "Не отводи взгляд",
-                    color = Color.White.copy(alpha = 0.5f),
-                    fontSize = 14.sp
-                )
+                Text("Не отводи взгляд", color = Color.White.copy(alpha = 0.5f), fontSize = 14.sp)
             } else {
-                Text(
-                    "ВИБРАЦИЯ! ДЕЛАЙ БРОСОК!",
-                    color = GoldAccent,
-                    fontSize = 24.sp,
-                    fontWeight = FontWeight.Bold,
-                    textAlign = TextAlign.Center
-                )
+                Text("ВИБРАЦИЯ! ДЕЛАЙ БРОСОК!", color = GoldAccent, fontSize = 24.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
                 Spacer(Modifier.height(32.dp))
                 Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(14.dp))
-                        .background(Accent)
-                        .clickable {
-                            dartsThrown++
-                            isFocusing = true
-                        }
-                        .padding(vertical = 20.dp),
+                    modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Accent).clickable { dartsThrown++; isFocusing = true }.padding(vertical = 20.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(
-                        "БРОСОК СДЕЛАН",
-                        color = Color(0xFF121212),
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold
-                    )
+                    Text("БРОСОК СДЕЛАН", color = Color(0xFF121212), fontSize = 18.sp, fontWeight = FontWeight.Bold)
                 }
             }
         }
@@ -467,19 +340,9 @@ private fun TunnelVisionExerciseContent(onFinish: () -> Unit) {
 @Composable
 private fun FinishButton(onFinish: () -> Unit) {
     Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
-            .background(GoldAccent)
-            .clickable { onFinish() }
-            .padding(vertical = 16.dp),
+        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(GoldAccent).clickable { onFinish() }.padding(vertical = 16.dp),
         contentAlignment = Alignment.Center
     ) {
-        Text(
-            "ЗАВЕРШИТЬ",
-            color = Color(0xFF121212),
-            fontSize = 16.sp,
-            fontWeight = FontWeight.Bold
-        )
+        Text("ЗАВЕРШИТЬ", color = Color(0xFF121212), fontSize = 16.sp, fontWeight = FontWeight.Bold)
     }
 }
