@@ -71,13 +71,21 @@ fun DisciplineStatsScreen(
     var avgTriples by remember { mutableStateOf(0f) }
     var bullAccuracy by remember { mutableStateOf(0f) }
     
-    // Данные для графиков
+    // Данные для графиков 501
     var pprChartData by remember { mutableStateOf<List<Double>>(emptyList()) }
     var dblChartData by remember { mutableStateOf<List<Double>>(emptyList()) }
     var first9ChartData by remember { mutableStateOf<List<Double>>(emptyList()) }
     var c57mChartData by remember { mutableStateOf<List<Double>>(emptyList()) }
+    
+    // Данные для графиков Крикета
     var mprChartData by remember { mutableStateOf<List<Double>>(emptyList()) }
     var perfectRoundsChartData by remember { mutableStateOf<List<Double>>(emptyList()) }
+    var strongRoundsChartData by remember { mutableStateOf<List<Double>>(emptyList()) }
+
+    // Данные для графиков остальных дисциплин
+    var otherChartData by remember { mutableStateOf<List<Double>>(emptyList()) }
+    var otherAccuracyData by remember { mutableStateOf<List<Double>>(emptyList()) }
+    var otherChartTitle by remember { mutableStateOf("") }
 
     LaunchedEffect(disciplineId, period) {
         loading = true
@@ -134,7 +142,7 @@ fun DisciplineStatsScreen(
                 "cricket" -> {
                     var sumMpr = 0f; var sumPerfect = 0f; var sumStrong = 0f; var sumMisses = 0f; var sumTriples = 0f
                     var totalBullAttempts = 0; var totalBullHits = 0; var totalMatches = 0
-                    val mprs = mutableListOf<Double>(); val perfects = mutableListOf<Double>()
+                    val mprs = mutableListOf<Double>(); val perfects = mutableListOf<Double>(); val strongs = mutableListOf<Double>()
 
                     filtered.forEach { r ->
                         val details = parseDetails(r.detailsJson)
@@ -148,8 +156,10 @@ fun DisciplineStatsScreen(
                             totalBullAttempts += (details["bulla"]?.toIntOrNull() ?: 0)
                             totalBullHits += (details["bullh"]?.toIntOrNull() ?: 0)
                             totalMatches++
+                            
                             mprs.add(mpr.toDouble())
                             perfects.add((details["c9r"]?.toIntOrNull() ?: 0).toDouble())
+                            strongs.add((details["c6r"]?.toIntOrNull() ?: 0).toDouble())
                         }
                     }
 
@@ -166,15 +176,23 @@ fun DisciplineStatsScreen(
                     }
                     mprChartData = mprs
                     perfectRoundsChartData = perfects
+                    strongRoundsChartData = strongs
                 }
                 else -> {
                     // Для остальных дисциплин (Сектор 20, Большой раунд, Набор, Кругосветки)
                     var sumScore = 0f
                     var best = 0f
                     val isLowerBetter = disciplineId.startsWith("aroundclock_")
+                    val chartPoints = mutableListOf<Double>()
+                    val accuracyPoints = mutableListOf<Double>()
 
                     filtered.forEach { r ->
                         sumScore += r.score.toFloat()
+                        chartPoints.add(r.score.toDouble())
+                        if (isLowerBetter && r.score > 0) {
+                            val acc = (21f / r.score.toFloat() * 100f).coerceAtMost(100f)
+                            accuracyPoints.add(acc.toDouble())
+                        }
                         if (isLowerBetter) {
                             if (best == 0f || r.score < best) best = r.score.toFloat()
                         } else {
@@ -184,24 +202,17 @@ fun DisciplineStatsScreen(
                     
                     avgScore = sumScore / filtered.size
                     bestScore = best
+                    otherChartData = chartPoints
+                    otherAccuracyData = accuracyPoints
+                    otherChartTitle = if (isLowerBetter) "Затрачено дротиков (меньше = лучше)" else "Набрано очков"
 
-                    // Считаем уровень через DartsNorms
                     currentLevel = when (disciplineId) {
                         "sector20" -> DartsNorms.levelBySector20(avgScore.toInt())
                         "biground" -> DartsNorms.levelByBigRound(avgScore.toInt())
                         "scoreset" -> DartsNorms.levelByScoreSet(avgScore.toInt())
-                        "aroundclock_sectors" -> {
-                            val percent = (21f / avgScore * 100f)
-                            DartsNorms.levelBySectorsPercent(percent)
-                        }
-                        "aroundclock_doubles" -> {
-                            val percent = (21f / avgScore * 100f)
-                            DartsNorms.levelByDoubles(percent)
-                        }
-                        "aroundclock_trebles" -> {
-                            val percent = (21f / avgScore * 100f)
-                            DartsNorms.levelByTrebles(percent)
-                        }
+                        "aroundclock_sectors" -> DartsNorms.levelBySectorsPercent((21f / avgScore * 100f))
+                        "aroundclock_doubles" -> DartsNorms.levelByDoubles((21f / avgScore * 100f))
+                        "aroundclock_trebles" -> DartsNorms.levelByTrebles((21f / avgScore * 100f))
                         else -> 0
                     }
                 }
@@ -248,9 +259,11 @@ fun DisciplineStatsScreen(
                 modifier = Modifier.weight(1f)
             )
             // Кнопка графиков
-            val hasCharts = if (disciplineId == "game501") pprChartData.isNotEmpty() 
-                            else if (disciplineId == "cricket") mprChartData.isNotEmpty() 
-                            else false
+            val hasCharts = when(disciplineId) {
+                "game501" -> pprChartData.isNotEmpty()
+                "cricket" -> mprChartData.isNotEmpty()
+                else -> otherChartData.isNotEmpty()
+            }
             if (hasCharts) {
                 Box(
                     modifier = Modifier
@@ -355,7 +368,6 @@ fun DisciplineStatsScreen(
                     val isLowerBetter = disciplineId.startsWith("aroundclock_")
                     
                     if (isLowerBetter) {
-                        // Для кругосветок
                         StatRowCard("Среднее дротиков", String.format(Locale.US, "%.1f", avgScore))
                         Spacer(Modifier.height(6.dp))
                         StatRowCard("Лучший результат (мин. дротиков)", "${bestScore.toInt()}")
@@ -363,7 +375,6 @@ fun DisciplineStatsScreen(
                         val accuracy = if (avgScore > 0) (21f / avgScore * 100f) else 0f
                         StatRowCard("Средняя точность", String.format(Locale.US, "%.1f%%", accuracy))
                     } else {
-                        // Для набора очков, сектора 20, большого раунда
                         StatRowCard("Средний результат", String.format(Locale.US, "%.1f", avgScore))
                         Spacer(Modifier.height(6.dp))
                         StatRowCard("Лучший результат (макс. очков)", "${bestScore.toInt()}")
@@ -382,7 +393,15 @@ fun DisciplineStatsScreen(
         if (disciplineId == "game501") {
             AllCharts501Dialog(pprChartData, dblChartData, first9ChartData, c57mChartData) { showChartsDialog = false }
         } else if (disciplineId == "cricket") {
-            AllChartsCricketDialog(mprChartData, perfectRoundsChartData) { showChartsDialog = false }
+            AllChartsCricketDialog(mprChartData, perfectRoundsChartData, strongRoundsChartData) { showChartsDialog = false }
+        } else {
+            AllChartsGenericDialog(
+                title = otherChartTitle,
+                data = otherChartData,
+                accuracyData = otherAccuracyData,
+                isAroundClock = disciplineId.startsWith("aroundclock_"),
+                onDismiss = { showChartsDialog = false }
+            )
         }
     }
 }
@@ -418,7 +437,7 @@ private fun AllCharts501Dialog(
 
 @Composable
 private fun AllChartsCricketDialog(
-    mprData: List<Double>, perfectRoundsData: List<Double>, onDismiss: () -> Unit
+    mprData: List<Double>, perfectRoundsData: List<Double>, strongRoundsData: List<Double>, onDismiss: () -> Unit
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -429,9 +448,45 @@ private fun AllChartsCricketDialog(
             Column(modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
                 ChartBlock("Средний MPR", mprData, 0.0, 9.0, Accent)
                 Spacer(Modifier.height(24.dp))
-                ChartBlock("Идеальные раунды (9 марок)", perfectRoundsData, 0.0, 10.0, GoldAccent)
+                ChartBlock("Идеальные подходы (9 марок)", perfectRoundsData, 0.0, 10.0, GoldAccent)
+                Spacer(Modifier.height(24.dp))
+                ChartBlock("Сильные подходы (6-7 марок)", strongRoundsData, 0.0, 15.0, Color(0xFF4CAF50))
                 Spacer(Modifier.height(4.dp))
-                Text("Чем выше линия, тем больше ты делаешь идеальных подходов.", color = Color.White.copy(alpha = 0.5f), fontSize = 11.sp)
+                Text("Чем выше линии, тем больше ты делаешь классных подходов.", color = Color.White.copy(alpha = 0.5f), fontSize = 11.sp)
+            }
+        }
+    )
+}
+
+@Composable
+private fun AllChartsGenericDialog(
+    title: String,
+    data: List<Double>,
+    accuracyData: List<Double>,
+    isAroundClock: Boolean,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = TileBgDark,
+        confirmButton = { TextButton(onClick = onDismiss) { Text("ЗАКРЫТЬ", color = Accent) } },
+        title = { Text("Графики", color = GoldAccent, fontSize = 20.sp, fontWeight = FontWeight.Bold) },
+        text = {
+            Column(modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
+                val maxVal = (data.maxOrNull() ?: 100.0) * 1.1
+                ChartBlock(title, data, 0.0, maxVal, Accent)
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    if (isAroundClock) "Чем ниже линия, тем лучше твой результат." else "Чем выше линия, тем лучше твой результат.",
+                    color = Color.White.copy(alpha = 0.5f), fontSize = 11.sp
+                )
+
+                if (isAroundClock && accuracyData.isNotEmpty()) {
+                    Spacer(Modifier.height(24.dp))
+                    ChartBlock("Процент попадания", accuracyData, 0.0, 100.0, GoldAccent)
+                    Spacer(Modifier.height(4.dp))
+                    Text("Чем выше линия, тем точнее ты попадаешь.", color = Color.White.copy(alpha = 0.5f), fontSize = 11.sp)
+                }
             }
         }
     )
