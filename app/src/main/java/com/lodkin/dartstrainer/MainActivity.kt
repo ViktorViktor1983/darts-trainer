@@ -613,8 +613,8 @@ fun DartsTrainerApp() {
                                 val strengthMin = if (TrainingBlocksStorage.isStrengthEnabled(context)) 7 else 0
                                 val budgetMain = (trainingMinutes - warmupMin - psychoMin - strengthMin - 5).coerceAtLeast(10)
                                 val dynamicIds = TrainingPlanner.buildDynamicMainExerciseIds(analysis, budgetMain, completedCount)
-                                val baseMap = defaultMainExercises().associateBy { it.id }
-                                mainExercises = dynamicIds.mapNotNull { d -> baseMap[d.id]?.copy(minutes = d.minutes) }.ifEmpty { listOf(defaultMainExercises().first().copy(minutes = budgetMain.coerceIn(5, 20))) }
+                                val baseMap = getDefaultMainExercises().associateBy { it.id }
+                                mainExercises = dynamicIds.mapNotNull { d -> baseMap[d.id]?.copy(minutes = d.minutes) }.ifEmpty { listOf(getDefaultMainExercises().first().copy(minutes = budgetMain.coerceIn(5, 20))) }
                                 psychologyExercises = if (TrainingBlocksStorage.isPsychologyEnabled(context)) getNextPsychologyExercises(context) else emptyList()
                                 strengthExercises = if (TrainingBlocksStorage.isStrengthEnabled(context)) getNextStrengthExercises(context) else emptyList()
                                 currentPhase = activePhases().firstOrNull() ?: TrainingBlockPhase.MAIN
@@ -642,8 +642,8 @@ fun DartsTrainerApp() {
                                 trainingSessionId = trainingRepository.insertSession(session)
                                 trainingElapsedSeconds = 0; trainingPaused = false; trainingMinutes = 0
                                 val dynamicIds = TrainingPlanner.buildDynamicMainExerciseIds(analysis, 999, completedCount, ignoreHardLimit = true)
-                                val baseMap = defaultMainExercises().associateBy { it.id }
-                                mainExercises = dynamicIds.mapNotNull { d -> baseMap[d.id]?.copy(minutes = d.minutes) }.ifEmpty { defaultMainExercises() }
+                                val baseMap = getDefaultMainExercises().associateBy { it.id }
+                                mainExercises = dynamicIds.mapNotNull { d -> baseMap[d.id]?.copy(minutes = d.minutes) }.ifEmpty { getDefaultMainExercises() }
                                 psychologyExercises = emptyList(); strengthExercises = emptyList()
                                 currentPhase = TrainingBlockPhase.MAIN; currentExerciseIndex = 0; exerciseStatuses = emptyMap()
                                 isTrainingActive = true; isFreeTraining = true; freeNoRepeat = false; freeChooseMyself = false
@@ -722,7 +722,7 @@ fun DartsTrainerApp() {
                 currentPhase = runCatching { TrainingBlockPhase.valueOf(snap.phaseName) }.getOrDefault(TrainingBlockPhase.MAIN)
                 currentExerciseIndex = snap.exerciseIndex
                 exerciseStatuses = snap.statuses.mapNotNull { (k, v) -> runCatching { k to SummaryStatus.valueOf(v) }.getOrNull() }.toMap()
-                mainExercises = if (snap.mainExerciseIds.isNotEmpty()) snap.mainExerciseIds.mapNotNull { (id, m) -> defaultMainExercises().associateBy { it.id }[id]?.copy(minutes = m) }.ifEmpty { defaultMainExercises() } else defaultMainExercises()
+                mainExercises = if (snap.mainExerciseIds.isNotEmpty()) snap.mainExerciseIds.mapNotNull { (id, m) -> getDefaultMainExercises().associateBy { it.id }[id]?.copy(minutes = m) }.ifEmpty { getDefaultMainExercises() } else getDefaultMainExercises()
                 psychologyExercises = if (snap.psychologyEnabled) getNextPsychologyExercises(context) else emptyList()
                 strengthExercises = if (snap.strengthEnabled) getNextStrengthExercises(context) else emptyList()
                 trainingPaused = false; isTrainingActive = true; isFreeTraining = false
