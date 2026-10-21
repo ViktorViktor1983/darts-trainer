@@ -45,7 +45,7 @@ fun DisciplineStatsScreen(
     
     var showChartsDialog by remember { mutableStateOf(false) }
 
-    // Стейты для 501
+    // ── Стейты для 501 ──
     var avgPpr by remember { mutableStateOf(0f) }
     var avgDbl by remember { mutableStateOf(0f) }
     var avgFirst9 by remember { mutableStateOf(0f) }
@@ -57,11 +57,22 @@ fun DisciplineStatsScreen(
     var count57p by remember { mutableStateOf(0) }
     var count57m by remember { mutableStateOf(0) }
     
+    // ── Стейты для Крикета ──
+    var avgMpr by remember { mutableStateOf(0f) }
+    var avgPerfectRounds by remember { mutableStateOf(0f) }
+    var avgStrongRounds by remember { mutableStateOf(0f) }
+    var avgMisses by remember { mutableStateOf(0f) }
+    var avgTriples by remember { mutableStateOf(0f) }
+    var bullAccuracy by remember { mutableStateOf(0f) }
+    
     // Данные для графиков
     var pprChartData by remember { mutableStateOf<List<Double>>(emptyList()) }
     var dblChartData by remember { mutableStateOf<List<Double>>(emptyList()) }
     var first9ChartData by remember { mutableStateOf<List<Double>>(emptyList()) }
     var c57mChartData by remember { mutableStateOf<List<Double>>(emptyList()) }
+    
+    var mprChartData by remember { mutableStateOf<List<Double>>(emptyList()) }
+    var perfectRoundsChartData by remember { mutableStateOf<List<Double>>(emptyList()) }
 
     LaunchedEffect(disciplineId, period) {
         loading = true
@@ -81,12 +92,7 @@ fun DisciplineStatsScreen(
             var sumFirst9 = 0f
             var totalMatches = 0
 
-            var c180 = 0
-            var c170 = 0
-            var c130 = 0
-            var c90 = 0
-            var c57p = 0
-            var c57m = 0
+            var c180 = 0; var c170 = 0; var c130 = 0; var c90 = 0; var c57p = 0; var c57m = 0
             
             val pprs = mutableListOf<Double>()
             val dbls = mutableListOf<Double>()
@@ -101,15 +107,8 @@ fun DisciplineStatsScreen(
                 val c57 = details["c57m"]?.toIntOrNull() ?: 0
                 
                 if (ppr > 0f) {
-                    sumPpr += ppr
-                    sumDbl += dbl
-                    sumFirst9 += f9
-                    totalMatches++
-                    
-                    pprs.add(ppr.toDouble())
-                    dbls.add(dbl.toDouble())
-                    f9s.add(f9.toDouble())
-                    c57ms.add(c57.toDouble())
+                    sumPpr += ppr; sumDbl += dbl; sumFirst9 += f9; totalMatches++
+                    pprs.add(ppr.toDouble()); dbls.add(dbl.toDouble()); f9s.add(f9.toDouble()); c57ms.add(c57.toDouble())
                 }
 
                 c180 += details["c180"]?.toIntOrNull() ?: 0
@@ -138,6 +137,52 @@ fun DisciplineStatsScreen(
             dblChartData = dbls
             first9ChartData = f9s
             c57mChartData = c57ms
+            
+        } else if (disciplineId == "cricket" && filtered.isNotEmpty()) {
+            var sumMpr = 0f
+            var sumPerfect = 0f
+            var sumStrong = 0f
+            var sumMisses = 0f
+            var sumTriples = 0f
+            var totalBullAttempts = 0
+            var totalBullHits = 0
+            var totalMatches = 0
+            
+            val mprs = mutableListOf<Double>()
+            val perfects = mutableListOf<Double>()
+
+            filtered.forEach { r ->
+                val details = parseDetails(r.detailsJson)
+                val mpr = details["mpr"]?.toFloatOrNull() ?: 0f
+                
+                if (mpr > 0f) {
+                    sumMpr += mpr
+                    sumPerfect += (details["c9r"]?.toIntOrNull() ?: 0).toFloat()
+                    sumStrong += (details["c6r"]?.toIntOrNull() ?: 0).toFloat()
+                    sumMisses += (details["miss"]?.toIntOrNull() ?: 0).toFloat()
+                    sumTriples += (details["tripl"]?.toIntOrNull() ?: 0).toFloat()
+                    totalBullAttempts += (details["bulla"]?.toIntOrNull() ?: 0)
+                    totalBullHits += (details["bullh"]?.toIntOrNull() ?: 0)
+                    totalMatches++
+                    
+                    mprs.add(mpr.toDouble())
+                    perfects.add((details["c9r"]?.toIntOrNull() ?: 0).toDouble())
+                }
+            }
+
+            if (totalMatches > 0) {
+                avgMpr = sumMpr / totalMatches
+                avgPerfectRounds = sumPerfect / totalMatches
+                avgStrongRounds = sumStrong / totalMatches
+                avgMisses = sumMisses / totalMatches
+                avgTriples = sumTriples / totalMatches
+                if (totalBullAttempts > 0) {
+                    bullAccuracy = totalBullHits.toFloat() / totalBullAttempts * 100f
+                }
+            }
+            
+            mprChartData = mprs
+            perfectRoundsChartData = perfects
         }
         loading = false
     }
@@ -174,8 +219,9 @@ fun DisciplineStatsScreen(
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.weight(1f)
             )
-            // Кнопка графиков (только для 501)
-            if (disciplineId == "game501" && pprChartData.isNotEmpty()) {
+            // Кнопка графиков
+            val hasCharts = if (disciplineId == "game501") pprChartData.isNotEmpty() else mprChartData.isNotEmpty()
+            if (hasCharts) {
                 Box(
                     modifier = Modifier
                         .size(44.dp)
@@ -211,15 +257,13 @@ fun DisciplineStatsScreen(
                 Text("Загружаем данные...", color = Accent)
             }
         } else if (disciplineId == "game501" && avgPpr == 0f) {
-            Box(modifier = Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
-                Text("Нет данных за выбранный период", color = Color.White.copy(alpha = 0.5f))
-            }
+            EmptyStats()
+        } else if (disciplineId == "cricket" && avgMpr == 0f) {
+            EmptyStats()
         } else if (disciplineId == "game501") {
+            // ── 501 ──
             Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f)
-                    .verticalScroll(rememberScrollState())
+                modifier = Modifier.fillMaxWidth().weight(1f).verticalScroll(rememberScrollState())
             ) {
                 Text("ОСНОВНЫЕ", color = Accent, fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
                 Spacer(Modifier.height(8.dp))
@@ -243,6 +287,29 @@ fun DisciplineStatsScreen(
                 StatRowCard("57+", "$count57p")
                 Spacer(Modifier.height(6.dp))
                 StatRowCard("57-", "$count57m")
+                Spacer(Modifier.height(24.dp))
+            }
+        } else if (disciplineId == "cricket") {
+            // ── КРИКЕТ ──
+            Column(
+                modifier = Modifier.fillMaxWidth().weight(1f).verticalScroll(rememberScrollState())
+            ) {
+                Text("ОСНОВНЫЕ", color = Accent, fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
+                Spacer(Modifier.height(8.dp))
+                StatRowCard("Средний MPR", String.format(Locale.US, "%.2f", avgMpr))
+                Spacer(Modifier.height(6.dp))
+                StatRowCard("Точность Bull", if (bullAccuracy > 0) String.format(Locale.US, "%.1f%%", bullAccuracy) else "—")
+                Spacer(Modifier.height(6.dp))
+                StatRowCard("Промахи (в среднем за матч)", String.format(Locale.US, "%.1f", avgMisses))
+                Spacer(Modifier.height(6.dp))
+                StatRowCard("Утроения (в среднем за матч)", String.format(Locale.US, "%.1f", avgTriples))
+
+                Spacer(Modifier.height(20.dp))
+                Text("КАЧЕСТВЕННЫЕ ПОДХОДЫ (в среднем за матч)", color = Accent, fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
+                Spacer(Modifier.height(8.dp))
+                StatRowCard("Идеальные (9 марок)", String.format(Locale.US, "%.1f", avgPerfectRounds))
+                Spacer(Modifier.height(6.dp))
+                StatRowCard("Сильные (6-7 марок)", String.format(Locale.US, "%.1f", avgStrongRounds))
                 
                 Spacer(Modifier.height(24.dp))
             }
@@ -254,99 +321,85 @@ fun DisciplineStatsScreen(
     }
 
     if (showChartsDialog) {
-        AllChartsDialog(
-            pprData = pprChartData,
-            dblData = dblChartData,
-            first9Data = first9ChartData,
-            c57mData = c57mChartData,
-            onDismiss = { showChartsDialog = false }
-        )
+        if (disciplineId == "game501") {
+            AllCharts501Dialog(pprChartData, dblChartData, first9ChartData, c57mChartData) { showChartsDialog = false }
+        } else if (disciplineId == "cricket") {
+            AllChartsCricketDialog(mprChartData, perfectRoundsChartData) { showChartsDialog = false }
+        }
+    }
+}
+
+@Composable
+private fun EmptyStats() {
+    Box(modifier = Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
+        Text("Нет данных за выбранный период", color = Color.White.copy(alpha = 0.5f))
     }
 }
 
 // ─────────────────────────────────────────────
-// ДИАЛОГ СО ВСЕМИ ГРАФИКАМИ
+// ДИАЛОГИ С ГРАФИКАМИ
 // ─────────────────────────────────────────────
 
 @Composable
-private fun AllChartsDialog(
-    pprData: List<Double>,
-    dblData: List<Double>,
-    first9Data: List<Double>,
-    c57mData: List<Double>,
-    onDismiss: () -> Unit
+private fun AllCharts501Dialog(
+    pprData: List<Double>, dblData: List<Double>, first9Data: List<Double>, c57mData: List<Double>, onDismiss: () -> Unit
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = TileBgDark,
-        confirmButton = {
-            TextButton(onClick = onDismiss) { Text("ЗАКРЫТЬ", color = Accent) }
-        },
-        title = {
-            Text("Графики 501", color = GoldAccent, fontSize = 20.sp, fontWeight = FontWeight.Bold)
-        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("ЗАКРЫТЬ", color = Accent) } },
+        title = { Text("Графики 501", color = GoldAccent, fontSize = 20.sp, fontWeight = FontWeight.Bold) },
         text = {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .verticalScroll(rememberScrollState())
-            ) {
+            Column(modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
                 ChartBlock("Средний PPR", pprData, 0.0, 120.0, Accent)
                 Spacer(Modifier.height(24.dp))
-                
                 ChartBlock("Точность удвоений (%)", dblData, 0.0, 100.0, GoldAccent)
                 Spacer(Modifier.height(24.dp))
-                
                 ChartBlock("Набор за первые 9 дротиков", first9Data, 0.0, 180.0, Color(0xFF4CAF50))
                 Spacer(Modifier.height(24.dp))
-                
-                // График "мусорных рук" (чем ниже, тем лучше)
                 ChartBlock("Подходы < 57 (шт.)", c57mData, 0.0, 20.0, Color(0xFFE57373))
                 Spacer(Modifier.height(4.dp))
-                Text(
-                    "Чем ниже линия, тем меньше провальных подходов.",
-                    color = Color.White.copy(alpha = 0.5f),
-                    fontSize = 11.sp
-                )
+                Text("Чем ниже линия, тем меньше провальных подходов.", color = Color.White.copy(alpha = 0.5f), fontSize = 11.sp)
             }
         }
     )
 }
 
 @Composable
-private fun ChartBlock(
-    title: String,
-    points: List<Double>,
-    yMin: Double,
-    yMax: Double,
-    lineColor: Color
+private fun AllChartsCricketDialog(
+    mprData: List<Double>, perfectRoundsData: List<Double>, onDismiss: () -> Unit
 ) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = TileBgDark,
+        confirmButton = { TextButton(onClick = onDismiss) { Text("ЗАКРЫТЬ", color = Accent) } },
+        title = { Text("Графики Крикета", color = GoldAccent, fontSize = 20.sp, fontWeight = FontWeight.Bold) },
+        text = {
+            Column(modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
+                ChartBlock("Средний MPR", mprData, 0.0, 9.0, Accent)
+                Spacer(Modifier.height(24.dp))
+                ChartBlock("Идеальные раунды (9 марок)", perfectRoundsData, 0.0, 10.0, GoldAccent)
+                Spacer(Modifier.height(4.dp))
+                Text("Чем выше линия, тем больше ты делаешь идеальных подходов.", color = Color.White.copy(alpha = 0.5f), fontSize = 11.sp)
+            }
+        }
+    )
+}
+
+@Composable
+private fun ChartBlock(title: String, points: List<Double>, yMin: Double, yMax: Double, lineColor: Color) {
     Column(modifier = Modifier.fillMaxWidth()) {
         Text(title, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Medium)
         Spacer(Modifier.height(6.dp))
 
         if (points.size < 2) {
-            Text(
-                "Недостаточно матчей для графика",
-                color = Color.White.copy(alpha = 0.5f),
-                fontSize = 11.sp
-            )
+            Text("Недостаточно матчей для графика", color = Color.White.copy(alpha = 0.5f), fontSize = 11.sp)
         } else {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(150.dp)
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(Color.Black.copy(alpha = 0.2f))
-                    .padding(8.dp)
-            ) {
+            Box(modifier = Modifier.fillMaxWidth().height(150.dp).clip(RoundedCornerShape(10.dp)).background(Color.Black.copy(alpha = 0.2f)).padding(8.dp)) {
                 LineChart(points, yMin, yMax, lineColor)
             }
             Spacer(Modifier.height(4.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text("мин: %.1f".format(Locale.US, points.minOrNull() ?: 0.0), color = Color.White.copy(alpha = 0.5f), fontSize = 10.sp)
                 Text("сред: %.1f".format(Locale.US, points.average()), color = GoldAccent, fontSize = 10.sp)
                 Text("макс: %.1f".format(Locale.US, points.maxOrNull() ?: 0.0), color = Color.White.copy(alpha = 0.5f), fontSize = 10.sp)
@@ -360,12 +413,9 @@ private fun LineChart(points: List<Double>, yMin: Double, yMax: Double, lineColo
     val gridColor = Color.White.copy(alpha = 0.12f)
 
     Canvas(modifier = Modifier.fillMaxSize()) {
-        val w = size.width
-        val h = size.height
-        val leftPad = 36.dp.toPx()
-        val rightPad = 8.dp.toPx()
-        val topPad = 10.dp.toPx()
-        val bottomPad = 18.dp.toPx()
+        val w = size.width; val h = size.height
+        val leftPad = 36.dp.toPx(); val rightPad = 8.dp.toPx()
+        val topPad = 10.dp.toPx(); val bottomPad = 18.dp.toPx()
 
         val plotW = w - leftPad - rightPad
         val plotH = h - topPad - bottomPad
@@ -376,12 +426,7 @@ private fun LineChart(points: List<Double>, yMin: Double, yMax: Double, lineColo
         val gridSteps = 5
         for (i in 0..gridSteps) {
             val y = topPad + plotH * i / gridSteps
-            drawLine(
-                color = gridColor,
-                start = Offset(leftPad, y),
-                end = Offset(leftPad + plotW, y),
-                strokeWidth = 1f
-            )
+            drawLine(color = gridColor, start = Offset(leftPad, y), end = Offset(leftPad + plotW, y), strokeWidth = 1f)
         }
 
         val n = points.size
@@ -402,9 +447,7 @@ private fun LineChart(points: List<Double>, yMin: Double, yMax: Double, lineColo
         }
 
         val dotRadius = 3.dp.toPx()
-        coords.forEach { c ->
-            drawCircle(color = lineColor, radius = dotRadius, center = c)
-        }
+        coords.forEach { c -> drawCircle(color = lineColor, radius = dotRadius, center = c) }
     }
 }
 
@@ -415,11 +458,7 @@ private fun LineChart(points: List<Double>, yMin: Double, yMax: Double, lineColo
 @Composable
 private fun StatRowCard(label: String, value: String) {
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(10.dp))
-            .background(TileBg)
-            .padding(horizontal = 16.dp, vertical = 14.dp),
+        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(TileBg).padding(horizontal = 16.dp, vertical = 14.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -431,19 +470,10 @@ private fun StatRowCard(label: String, value: String) {
 @Composable
 private fun PeriodChip(label: String, selected: Boolean, onClick: () -> Unit, modifier: Modifier) {
     Box(
-        modifier = modifier
-            .clip(RoundedCornerShape(10.dp))
-            .background(if (selected) Accent else TileBgDark)
-            .clickable { onClick() }
-            .padding(vertical = 10.dp),
+        modifier = modifier.clip(RoundedCornerShape(10.dp)).background(if (selected) Accent else TileBgDark).clickable { onClick() }.padding(vertical = 10.dp),
         contentAlignment = Alignment.Center
     ) {
-        Text(
-            label,
-            color = if (selected) Color(0xFF121212) else Color.White,
-            fontSize = 12.sp,
-            fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium
-        )
+        Text(label, color = if (selected) Color(0xFF121212) else Color.White, fontSize = 12.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium)
     }
 }
 
