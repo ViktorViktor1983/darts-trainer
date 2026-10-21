@@ -64,6 +64,7 @@ fun PsychologyExerciseScreen(
 
         when (exerciseId) {
             "psy_ritual" -> TextExerciseContent(
+                modifier = Modifier.weight(1f),
                 title = "Ритуал трёх шагов",
                 description = "Стабильность — залог победы. Одинаковые действия перед броском успокаивают нервную систему и настраивают мозг на выполнение задачи.",
                 action = "Твоя задача: перед каждым броском выполнять одинаковую последовательность:\n\n1. Встань на одну и ту же точку на полу.\n2. Сделай глубокий вдох.\n3. Посмотри на цель 2 секунды.\n4. Брось дротик.",
@@ -71,6 +72,7 @@ fun PsychologyExerciseScreen(
             )
 
             "psy_visual" -> TextExerciseContent(
+                modifier = Modifier.weight(1f),
                 title = "Визуализация полёта",
                 description = "Мозг не различает реальное действие и яркое представление. Визуализация «прогревает» нейронные связи, и рука бросает точнее.",
                 action = "Твоя задача:\n\nПеред каждым броском закрой глаза на 3 секунды и представь, как дротик летит по идеальной дуге и втыкается ровно в центр цели. Открой глаза и бросай.",
@@ -78,6 +80,7 @@ fun PsychologyExerciseScreen(
             )
 
             "psy_ideomotor" -> TextExerciseContent(
+                modifier = Modifier.weight(1f),
                 title = "Идеомоторная тренировка",
                 description = "Реальное улучшение техники без физических бросков. Мозг запоминает правильные движения, и потом рука делает их автоматически.",
                 action = "Твоя задача:\n\nСядь на стул, закрой глаза и мысленно «прокрути» 3 идеальных броска: как ты встаешь, как замахиваешься, как разжимаешь пальцы, как дротик втыкается в центр.",
@@ -85,6 +88,7 @@ fun PsychologyExerciseScreen(
             )
 
             "psy_trigger_word" -> TextExerciseContent(
+                modifier = Modifier.weight(1f),
                 title = "Триггер-слово",
                 description = "Создаёт условный рефлекс. Короткое слово — это сигнал для тела начать правильное движение, отключая лишние мысли.",
                 action = "Твоя задача:\n\n1. Придумай короткое слово (например, «Цель», «Бросок», «Точно»).\n2. Сделай 5 подходов по 3 дротика.\n3. Перед каждым броском говори это слово про себя за секунду до замаха.",
@@ -92,19 +96,30 @@ fun PsychologyExerciseScreen(
             )
 
             "psy_mirror" -> TextExerciseContent(
+                modifier = Modifier.weight(1f),
                 title = "Зеркало",
                 description = "Контроль техники и осознанность движений. Помогает увидеть и исправить ошибки в замахе, которые ты не замечаешь на автомате.",
                 action = "Твоя задача:\n\n1. Встань перед зеркалом так, чтобы видеть руку с дротиком.\n2. Сделай 10 медленных, осознанных замахов без броска.\n3. Следи за тем, чтобы локоть не гулял, а кисть двигалась по прямой.",
                 onFinish = { onFinish(exerciseId) }
             )
 
-            "psy_breath" -> BreathExerciseContent(onFinish = { onFinish(exerciseId) })
+            "psy_breath" -> BreathExerciseContent(
+                modifier = Modifier.weight(1f),
+                onFinish = { onFinish(exerciseId) }
+            )
 
-            "psy_single" -> SingleDartExerciseContent(onFinish = { onFinish(exerciseId) })
+            "psy_single" -> SingleDartExerciseContent(
+                modifier = Modifier.weight(1f),
+                onFinish = { onFinish(exerciseId) }
+            )
 
-            "psy_tunnel" -> TunnelVisionExerciseContent(onFinish = { onFinish(exerciseId) })
+            "psy_tunnel" -> TunnelVisionExerciseContent(
+                modifier = Modifier.weight(1f),
+                onFinish = { onFinish(exerciseId) }
+            )
 
             else -> TextExerciseContent(
+                modifier = Modifier.weight(1f),
                 title = "Упражнение",
                 description = "Описание отсутствует.",
                 action = "",
@@ -114,15 +129,19 @@ fun PsychologyExerciseScreen(
     }
 }
 
+// ─────────────────────────────────────────────
+// Текстовые упражнения
+// ─────────────────────────────────────────────
 @Composable
 private fun TextExerciseContent(
+    modifier: Modifier = Modifier,
     title: String,
     description: String,
     action: String,
     onFinish: () -> Unit
 ) {
     Column(
-        modifier = Modifier.fillMaxWidth().weight(1f),
+        modifier = modifier.fillMaxWidth(),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.SpaceBetween
     ) {
@@ -162,8 +181,14 @@ private fun TextExerciseContent(
     }
 }
 
+// ─────────────────────────────────────────────
+// 4: Дыхание 4-4-7
+// ─────────────────────────────────────────────
 @Composable
-private fun BreathExerciseContent(onFinish: () -> Unit) {
+private fun BreathExerciseContent(
+    modifier: Modifier = Modifier,
+    onFinish: () -> Unit
+) {
     var currentPhase by remember { mutableStateOf(0) }
     var timeLeft by remember { mutableStateOf(4) }
     var cyclesDone by remember { mutableStateOf(0) }
@@ -188,7 +213,7 @@ private fun BreathExerciseContent(onFinish: () -> Unit) {
     }
 
     Column(
-        modifier = Modifier.fillMaxWidth().weight(1f),
+        modifier = modifier.fillMaxWidth(),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.SpaceBetween
     ) {
@@ -227,13 +252,19 @@ private fun PhaseBox(label: String, isActive: Boolean, time: Int) {
     }
 }
 
+// ─────────────────────────────────────────────
+// 7: Один дротик
+// ─────────────────────────────────────────────
 @Composable
-private fun SingleDartExerciseContent(onFinish: () -> Unit) {
+private fun SingleDartExerciseContent(
+    modifier: Modifier = Modifier,
+    onFinish: () -> Unit
+) {
     var dartsThrown by remember { mutableStateOf(0) }
     val totalDarts = 15
 
     Column(
-        modifier = Modifier.fillMaxWidth().weight(1f),
+        modifier = modifier.fillMaxWidth(),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.SpaceBetween
     ) {
@@ -261,8 +292,14 @@ private fun SingleDartExerciseContent(onFinish: () -> Unit) {
     }
 }
 
+// ─────────────────────────────────────────────
+// 8: Туннельное зрение
+// ─────────────────────────────────────────────
 @Composable
-private fun TunnelVisionExerciseContent(onFinish: () -> Unit) {
+private fun TunnelVisionExerciseContent(
+    modifier: Modifier = Modifier,
+    onFinish: () -> Unit
+) {
     val context = LocalContext.current
     var timeLeft by remember { mutableStateOf(15) }
     var isFocusing by remember { mutableStateOf(true) }
@@ -295,7 +332,7 @@ private fun TunnelVisionExerciseContent(onFinish: () -> Unit) {
     }
 
     Column(
-        modifier = Modifier.fillMaxWidth().weight(1f),
+        modifier = modifier.fillMaxWidth(),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.SpaceBetween
     ) {
@@ -319,7 +356,7 @@ private fun TunnelVisionExerciseContent(onFinish: () -> Unit) {
                     Text("ВИБРАЦИЯ! ДЕЛАЙ БРОСОК!", color = GoldAccent, fontSize = 24.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
                     Spacer(Modifier.height(32.dp))
                     Box(
-                        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Accent).clickable { dartsThrow += 1; isFocusing = true }.padding(vertical = 20.dp),
+                        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Accent).clickable { dartsThrown += 1; isFocusing = true }.padding(vertical = 20.dp),
                         contentAlignment = Alignment.Center
                     ) {
                         Text("БРОСОК СДЕЛАН", color = Color(0xFF121212), fontSize = 18.sp, fontWeight = FontWeight.Bold)
@@ -331,6 +368,9 @@ private fun TunnelVisionExerciseContent(onFinish: () -> Unit) {
     }
 }
 
+// ─────────────────────────────────────────────
+// Общие элементы
+// ─────────────────────────────────────────────
 @Composable
 private fun FinishButton(onFinish: () -> Unit) {
     Box(
