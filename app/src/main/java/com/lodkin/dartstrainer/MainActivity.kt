@@ -44,6 +44,7 @@ import com.lodkin.dartstrainer.data.sector.SectorRepository
 import com.lodkin.dartstrainer.data.training.BlockType
 import com.lodkin.dartstrainer.data.training.DartsNorms
 import com.lodkin.dartstrainer.data.training.ExerciseResult
+import com.lodkin.dartstrainer.data.training.InventoryStorage
 import com.lodkin.dartstrainer.data.training.NormativesStateStorage
 import com.lodkin.dartstrainer.data.training.TrainingBlocksStorage
 import com.lodkin.dartstrainer.data.training.TrainingBotLevelStorage
@@ -668,7 +669,12 @@ fun DartsTrainerApp() {
                         showResumeDialog = showResumeDialog, onShowResumeDialogChange = { showResumeDialog = it },
                         showTimeUpDialog = showTimeUpDialog, onShowTimeUpDialogChange = { showTimeUpDialog = it },
                         onTimeUpFinish = { showTimeUpDialog = false; resetTrainingState(); TrainingStateStorage.clear(context); screen = "training" },
-                        onTimeUpContinue = { showTimeUpDialog = false; trainingMinutes += 20 }, restSeconds = 0
+                        onTimeUpContinue = { showTimeUpDialog = false; trainingMinutes += 20 }, restSeconds = 0,
+                        onInventoryUpdated = {
+                            if (currentPhase == TrainingBlockPhase.STRENGTH) {
+                                strengthExercises = getNextStrengthExercises(context)
+                            }
+                        }
                     )
                 }
 
