@@ -230,7 +230,6 @@ fun TrainingRoutes(
 
             if (current != null) {
                 if (trainingPhase == "PSYCHOLOGY") {
-                    // Открываем наш новый экран психологии
                     PsychologyExerciseScreen(
                         exerciseId = current.id,
                         onFinish = { id ->
@@ -239,7 +238,6 @@ fun TrainingRoutes(
                         onBack = { onScreenChange(if (isFreeTraining) "training_free_next" else "training_block") }
                     )
                 } else if (trainingPhase != "MAIN") {
-                    // Для разминки и силовой пока оставляем заглушку
                     TrainingExercisePlaceholder(
                         title = current.title,
                         description = current.whyImportant,
