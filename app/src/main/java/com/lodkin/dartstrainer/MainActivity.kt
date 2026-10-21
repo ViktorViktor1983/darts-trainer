@@ -215,10 +215,7 @@ fun DartsTrainerApp() {
     // ────────────────────────────────────────────────────────
 
     fun showRestThen(restSeconds: Int, nextTitle: String?, nextStep: () -> Unit) {
-        restTimerSeconds = restSeconds
-        restNextTitle = nextTitle
-        pendingNextStep = nextStep
-        showRestTimer = true
+        restTimerSeconds = restSeconds; restNextTitle = nextTitle; pendingNextStep = nextStep; showRestTimer = true
     }
 
     fun pickNextFreeExercise() {
@@ -242,9 +239,7 @@ fun DartsTrainerApp() {
                 Player501(name = botNameFor(botLevel), isBot = true, botLevel = botLevel, teamIndex = 1)
             )
             game501 = Game501Logic.newGame(GameType.X501, OutMode.DOUBLE_OUT, players, 1, 1, false, startingTeamIndex, TRAINING_AUTO_OK_SECONDS, sessionStartTime, sessionForm)
-            game501ExistingId = 0L
-            isTraining501 = true
-            screen = "game501_game"
+            game501ExistingId = 0L; isTraining501 = true; screen = "game501_game"
         } else if (exerciseId == "cricket") {
             val playerName = SettingsStorage.getPlayerName(context).ifBlank { "Игрок" }
             val botLevel = TrainingBotLevelStorage.getLevelCricket(context, currentLevel)
@@ -253,9 +248,7 @@ fun DartsTrainerApp() {
                 CricketPlayer(name = botNameFor(botLevel), isBot = true, botLevel = botLevel, teamIndex = 1)
             )
             cricketGame = CricketLogic.newGame(CricketType.AMERICAN, players, 1, 1, false, startingTeamIndex, TRAINING_AUTO_OK_SECONDS, sessionStartTime, sessionForm)
-            cricketExistingId = 0L
-            isTrainingCricket = true
-            screen = "cricket_game"
+            cricketExistingId = 0L; isTrainingCricket = true; screen = "cricket_game"
         }
     }
 
@@ -295,44 +288,30 @@ fun DartsTrainerApp() {
 
             val session = TrainingSession(System.currentTimeMillis(), 30, 0, startLvl, TrainingMode.FLEXIBLE, null, true, false)
             trainingSessionId = trainingRepository.insertSession(session)
-            trainingElapsedSeconds = 0
-            trainingPaused = false
+            trainingElapsedSeconds = 0; trainingPaused = false
 
-            normativesActive = true
-            normativesCompletedSteps = emptySet()
-            normatives501Levels = buildBotLadder(startLvl)
-            normatives501PlayerWins = 0; normatives501BotWins = 0; normatives501CurrentLeg = 0
-            normativesCricketLevels = buildBotLadder(startLvl)
-            normativesCricketPlayerWins = 0; normativesCricketBotWins = 0; normativesCricketCurrentLeg = 0
-            normativesNewLevel = null
-            isNormativesExercise = false
-            isTrainingActive = true
-            isFreeTraining = false
+            normativesActive = true; normativesCompletedSteps = emptySet()
+            normatives501Levels = buildBotLadder(startLvl); normatives501PlayerWins = 0; normatives501BotWins = 0; normatives501CurrentLeg = 0
+            normativesCricketLevels = buildBotLadder(startLvl); normativesCricketPlayerWins = 0; normativesCricketBotWins = 0; normativesCricketCurrentLeg = 0
+            normativesNewLevel = null; isNormativesExercise = false; isTrainingActive = true; isFreeTraining = false
 
-            saveNormativesSnapshot()
-            screen = "normatives"
+            saveNormativesSnapshot(); screen = "normatives"
         }
     }
 
     fun evaluateAndFinishNormatives() {
         scope.launch {
             val analysis = TrainingStatsAnalyzer.analyze(trainingRepository)
-            val newLvl = analysis.level
-            val startLvl = normativesStartLevel
+            val newLvl = analysis.level; val startLvl = normativesStartLevel
             normativesNewLevel = if (newLvl > startLvl) newLvl else startLvl
 
             if (newLvl > startLvl) {
                 trainingRepository.clearStatisticsAfterNormatives()
-                TrainingStateStorage.clear(context)
-                NormativesStateStorage.clear(context)
+                TrainingStateStorage.clear(context); NormativesStateStorage.clear(context)
             } else {
                 NormativesStateStorage.clear(context)
             }
-            isTrainingActive = false
-            trainingSessionId = 0L
-            normativesActive = false
-            isNormativesExercise = false
-            screen = "normatives"
+            isTrainingActive = false; trainingSessionId = 0L; normativesActive = false; isNormativesExercise = false; screen = "normatives"
         }
     }
 
@@ -533,7 +512,12 @@ fun DartsTrainerApp() {
                         sectorToPlay = sectorToPlay, onSectorToPlayChange = { sectorToPlay = it }, aroundClockTarget = aroundClockTarget, onAroundClockTargetChange = { aroundClockTarget = it },
                         aroundClockOrder = aroundClockOrder, onAroundClockOrderChange = { aroundClockOrder = it }, aroundClockHits = aroundClockHits, onAroundClockHitsChange = { aroundClockHits = it },
                         bigRoundCategory = bigRoundCategory, onBigRoundCategoryChange = { bigRoundCategory = it },
-                        sessionStartTime = sessionStartTime, sessionForm = sessionForm, isTraining501 = isTraining501, isTrainingCricket = isTrainingCricket
+                        sessionStartTime = sessionStartTime, sessionForm = sessionForm, isTraining501 = isTraining501, isTrainingCricket = isTrainingCricket,
+                        trainingSessionId = trainingSessionId, exerciseStartMillis = exerciseStartMillis, isNormativesExercise = isNormativesExercise,
+                        onTrainingGameFinished = { playerWon, isGame501 ->
+                            isTraining501 = false; isTrainingCricket = false; game501 = null; game501ExistingId = 0L; cricketGame = null; cricketExistingId = 0L
+                            if (isNormativesExercise) afterNormativesLeg(playerWon, isGame501) else finishCurrentMainExercise()
+                        }
                     )
                 }
 
