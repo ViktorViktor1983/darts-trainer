@@ -548,6 +548,7 @@ fun DartsTrainerApp() {
                         freeCompletedIds = freeCompletedIds, onFreeCompletedIdsChange = { freeCompletedIds = it }, freeSkippedIds = freeSkippedIds, onFreeSkippedIdsChange = { freeSkippedIds = it },
                         freeCurrentId = freeCurrentId, onFreeCurrentIdChange = { freeCurrentId = it }, freeRouletteKey = freeRouletteKey, freeExercisesCompleted = freeExercisesCompleted,
                         onFreeExercisesCompletedChange = { freeExercisesCompleted = it }, showFreeNewRoundDialog = showFreeNewRoundDialog, onShowFreeNewRoundDialogChange = { showFreeNewRoundDialog = it },
+                        onPickNextFreeExercise = { pickNextFreeExercise() },
                         onFreePlayAction = { launchExercise(it ?: "") }, onFreePlayDirect = { id, isFriend ->
                             if (isFriend && (id == "game501" || id == "cricket")) {
                                 isSetupForTraining = true; scope.launch { screen = if (id == "game501") "game501_setup" else "cricket_setup" }
