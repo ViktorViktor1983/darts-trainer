@@ -1734,6 +1734,18 @@ fun DartsTrainerApp() {
                                     TrainingBotLevelStorage.updateLevelCricket(context, botPlayer.botLevel, playerWon)
                                 }
                                 val isNorm = isNormativesExercise
+                                
+                                // СОБИРАЕМ ДОПОЛНИТЕЛЬНУЮ СТАТИСТИКУ КРИКЕТА
+                                val c9r = player?.matchPerfectRounds ?: 0
+                                val c6r = player?.matchStrongRounds ?: 0
+                                val miss = player?.matchMissesThrown ?: 0
+                                val tripl = player?.matchTriplesHit ?: 0
+                                val bulla = player?.matchBullAttempts ?: 0
+                                val bullh = player?.matchBullHits ?: 0
+
+                                val details = "won=$playerWon;mpr=$mprStr" +
+                                        ";c9r=$c9r;c6r=$c6r;miss=$miss;tripl=$tripl;bulla=$bulla;bullh=$bullh"
+
                                 scope.launch {
                                     trainingRepository.insertExerciseResult(
                                         ExerciseResult(
@@ -1744,7 +1756,7 @@ fun DartsTrainerApp() {
                                             dartsThrown = player?.matchDartsThrown ?: 0,
                                             timestamp = System.currentTimeMillis(),
                                             durationSeconds = dur,
-                                            detailsJson = "won=$playerWon;mpr=$mprStr"
+                                            detailsJson = details
                                         )
                                     )
                                 }
