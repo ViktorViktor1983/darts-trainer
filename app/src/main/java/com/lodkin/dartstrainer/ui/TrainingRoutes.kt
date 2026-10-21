@@ -1,6 +1,11 @@
 package com.lodkin.dartstrainer.ui
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.key
+import androidx.compose.ui.Modifier
 import com.lodkin.dartstrainer.data.aroundclock.AroundClockRepository
 import com.lodkin.dartstrainer.data.biground.BigRoundRepository
 import com.lodkin.dartstrainer.data.cricket.CricketRepository
@@ -15,7 +20,6 @@ import kotlinx.coroutines.CoroutineScope
 
 /**
  * Маршрутизатор для экранов тренировки и нормативов.
- * Огромный кусок логики, вынесенный из MainActivity.
  */
 @Composable
 fun TrainingRoutes(
@@ -39,7 +43,7 @@ fun TrainingRoutes(
     trainingPaused: Boolean,
     onTogglePause: () -> Unit,
     
-    currentPhase: String, // Передаем название фазы строкой
+    currentPhase: String,
     mainExercises: List<PlannedExercise>,
     psychologyExercises: List<PlannedExercise>,
     strengthExercises: List<PlannedExercise>,
@@ -71,6 +75,7 @@ fun TrainingRoutes(
     onFreeExercisesCompletedChange: (Int) -> Unit,
     showFreeNewRoundDialog: Boolean,
     onShowFreeNewRoundDialogChange: (Boolean) -> Unit,
+    onPickNextFreeExercise: () -> Unit, // ВОТ ОНА - функция выбора упражнения
     onFreePlayAction: (String?) -> Unit,
     onFreePlayDirect: (String, Boolean) -> Unit,
     onFreeSkip: (String?) -> Unit,
@@ -128,7 +133,7 @@ fun TrainingRoutes(
         "training" -> TrainingMenuScreen(
             playerName = playerName,
             repository = trainingRepository,
-            autoOpenTimeDialog = false, // Управляется извне
+            autoOpenTimeDialog = false,
             normativesAvailable = normativesAvailable,
             onStartTraining = onStartTrainingClick,
             onStartFreeTraining = onStartFreeTrainingClick,
@@ -174,20 +179,31 @@ fun TrainingRoutes(
         }
 
         "training_free_next" -> {
-            if (freeCurrentId != null || freeChooseMyself) {
-                FreeRouletteScreen(
-                    finalExercise = mainExercises.firstOrNull { it.id == freeCurrentId },
-                    allExercises = mainExercises,
-                    completedCount = freeExercisesCompleted,
-                    noRepeat = freeNoRepeat,
-                    onToggleNoRepeat = onToggleNoRepeat,
-                    chooseMyself = freeChooseMyself,
-                    onToggleChooseMyself = onToggleChooseMyself,
-                    onPlay = { onFreePlayAction(freeCurrentId) },
-                    onPlayDirect = onFreePlayDirect,
-                    onSkip = { onFreeSkip(freeCurrentId) },
-                    onFinish = onFreeFinish
-                )
+            // Если упражнение не выбрано и режим "Выбрать самому" выключен,
+            // нужно автоматически запустить рулетку
+            if (freeCurrentId == null && !freeChooseMyself) {
+                LaunchedEffect(freeCurrentId, showFreeNewRoundDialog) {
+                    if (freeCurrentId == null && !showFreeNewRoundDialog) {
+                        onPickNextFreeExercise()
+                    }
+                }
+                Box(modifier = Modifier.fillMaxSize())
+            } else {
+                key(freeRouletteKey) {
+                    FreeRouletteScreen(
+                        finalExercise = mainExercises.firstOrNull { it.id == freeCurrentId },
+                        allExercises = mainExercises,
+                        completedCount = freeExercisesCompleted,
+                        noRepeat = freeNoRepeat,
+                        onToggleNoRepeat = onToggleNoRepeat,
+                        chooseMyself = freeChooseMyself,
+                        onToggleChooseMyself = onToggleChooseMyself,
+                        onPlay = { onFreePlayAction(freeCurrentId) },
+                        onPlayDirect = onFreePlayDirect,
+                        onSkip = { onFreeSkip(freeCurrentId) },
+                        onFinish = onFreeFinish
+                    )
+                }
             }
         }
 
@@ -316,7 +332,6 @@ fun TrainingRoutes(
                     bigRoundRepository = bigRoundRepository,
                     scoreSetRepository = scoreSetRepository,
                     onExerciseFinished = { stepId ->
-                        // Передаем наверх, чтобы MainActivity сохранила
                         onExerciseFinished(stepId, BlockType.SCORE, 0, 0, "")
                     },
                     onBack = onBackFromNormativesExercise
