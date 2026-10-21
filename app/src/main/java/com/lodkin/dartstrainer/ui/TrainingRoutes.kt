@@ -4,7 +4,11 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import com.lodkin.dartstrainer.data.aroundclock.AroundClockRepository
 import com.lodkin.dartstrainer.data.biground.BigRoundRepository
@@ -125,9 +129,33 @@ fun TrainingRoutes(
     onShowTimeUpDialogChange: (Boolean) -> Unit,
     onTimeUpFinish: () -> Unit,
     onTimeUpContinue: () -> Unit,
-    restSeconds: Int
+    restSeconds: Int,
+
+    // Колбэк для обновления инвентаря
+    onInventoryUpdated: () -> Unit
 ) {
     val trainingPhase = currentPhase
+
+    // Локальное состояние для диалога инвентаря
+    var showInventoryDialog by remember { mutableStateOf(false) }
+    var inventoryChecked by remember { mutableStateOf(false) }
+
+    if (trainingPhase == "STRENGTH" && !inventoryChecked) {
+        LaunchedEffect(Unit) {
+            showInventoryDialog = true
+            inventoryChecked = true
+        }
+    }
+
+    if (showInventoryDialog) {
+        InventoryDialog(
+            onDismiss = { showInventoryDialog = false },
+            onConfirm = {
+                showInventoryDialog = false
+                onInventoryUpdated()
+            }
+        )
+    }
 
     when (screen) {
         "training" -> TrainingMenuScreen(
