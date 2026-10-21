@@ -1,5 +1,6 @@
 package com.lodkin.dartstrainer.ui.training
 
+import android.content.Context
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -26,6 +27,7 @@ import com.lodkin.dartstrainer.data.biground.BigRoundRepository
 import com.lodkin.dartstrainer.data.scoreset.ScoreSetRepository
 import com.lodkin.dartstrainer.data.sector.SectorRepository
 import com.lodkin.dartstrainer.data.training.BlockType
+import com.lodkin.dartstrainer.data.training.InventoryStorage
 import com.lodkin.dartstrainer.data.training.TrainingRepository
 import com.lodkin.dartstrainer.data.training.WeaknessType
 import com.lodkin.dartstrainer.theme.Accent
@@ -40,9 +42,6 @@ import com.lodkin.dartstrainer.ui.sector.SectorGameScreen
 /**
  * Запуск упражнения основной части. Используется и в обычной,
  * и в свободной тренировке.
- *
- * onFinish передаёт: (blockType, score, darts, detailsJson).
- * detailsJson — строка с подробностями (для кругосветок: "1:2,2:1,3:4").
  */
 @Composable
 internal fun MainExerciseRunner(
@@ -139,9 +138,6 @@ internal fun MainExerciseRunner(
     }
 }
 
-/**
- * Рекомендуемые игры по слабому месту.
- */
 internal fun recommendedGameIds(weakness: WeaknessType?): Set<String> = when (weakness) {
     WeaknessType.DOUBLES -> setOf("aroundclock_doubles", "game501")
     WeaknessType.SCORE -> setOf("sector20", "scoreset")
@@ -150,9 +146,6 @@ internal fun recommendedGameIds(weakness: WeaknessType?): Set<String> = when (we
     null -> emptySet()
 }
 
-/**
- * Заглушка для упражнения в разработке.
- */
 @Composable
 internal fun TrainingExercisePlaceholder(
     title: String,
@@ -196,7 +189,7 @@ internal fun TrainingExercisePlaceholder(
 }
 
 // ─────────────────────────────────────────────
-// СПИСКИ УПРАЖНЕНИЙ ПО УМОЛЧАНИЮ
+// МОДЕЛИ И СПИСКИ УПРАЖНЕНИЙ
 // ─────────────────────────────────────────────
 
 data class PlannedExercise(
@@ -222,7 +215,11 @@ internal fun defaultMainExercises(): List<PlannedExercise> = listOf(
     PlannedExercise("cricket", "Крикет", 12, "Тренирует утроения и стратегию.")
 )
 
-internal fun defaultPsychologyExercises(): List<PlannedExercise> = listOf(
+// ─────────────────────────────────────────────
+// ПСИХОЛОГИЯ (выбор по 3 в цикле)
+// ─────────────────────────────────────────────
+
+private val ALL_PSYCHOLOGY_EXERCISES = listOf(
     PlannedExercise("psy_breath", "Дыхание 4-4-7", 3, "Снижает пульс и убирает дрожь в руках перед важным броском."),
     PlannedExercise("psy_tunnel", "Туннельное зрение", 3, "Учит мозг не отвлекаться на фон и концентрироваться только на цели."),
     PlannedExercise("psy_ritual", "Ритуал трёх шагов", 3, "Стабильность — залог победы. Одинаковые действия настраивают на бросок."),
@@ -233,12 +230,81 @@ internal fun defaultPsychologyExercises(): List<PlannedExercise> = listOf(
     PlannedExercise("psy_ideomotor", "Идеомоторная тренировка", 3, "Улучшение техники без физических бросков.")
 )
 
-internal fun defaultStrengthExercises(): List<PlannedExercise> = listOf(
-    PlannedExercise("str_1", "Силовая: Плечи", 2, "Укрепляет плечевой пояс."),
-    PlannedExercise("str_2", "Силовая: Кисти", 2, "Разрабатывает кисть для контроля дротика."),
-    PlannedExercise("str_3", "Силовая: Спина", 2, "Стабильная стойка."),
-    PlannedExercise("str_4", "Силовая: Растяжка", 1, "Снимает напряжение после тренировки.")
+internal fun getNextPsychologyExercises(context: Context): List<PlannedExercise> {
+    val size = ALL_PSYCHOLOGY_EXERCISES.size
+    val startIndex = InventoryStorage.getPsychologyIndex(context) % size
+    
+    val result = mutableListOf<PlannedExercise>()
+    for (i in 0 until 3) {
+        val index = (startIndex + i) % size
+        result.add(ALL_PSYCHOLOGY_EXERCISES[index])
+    }
+    
+    // Сдвигаем индекс на 3
+    InventoryStorage.incrementPsychologyIndex(context)
+    return result
+}
+
+// ─────────────────────────────────────────────
+// СИЛОВЫЕ (выбор по инвентарю и по 3 в цикле)
+// ─────────────────────────────────────────────
+
+private data class StrengthTemplate(
+    val id: String,
+    val title: String,
+    val minutes: Int,
+    val whyImportant: String,
+    val requiresDumbbells: Boolean = false,
+    val requiresBand: Boolean = false
 )
+
+private val ALL_STRENGTH_EXERCISES = listOf(
+    StrengthTemplate("str_plank", "Планка", 2, "Укрепляет мышцы кора. Твое тело не будет гулять при броске."),
+    StrengthTemplate("str_wall_pushups", "Отжимания от стены", 2, "Разогревает плечевой пояс. Рука меньше устает."),
+    StrengthTemplate("str_triceps_stretch", "Растяжка трицепса", 1, "Убирает зажатость в локте. Бросок становится свободным."),
+    StrengthTemplate("str_boat", "Лодочка", 2, "Укрепляет мышцы спины. Помогает держать осанку."),
+    StrengthTemplate("str_side_plank", "Боковая планка", 2, "Тренирует косые мышцы. Нужно для стабильности корпуса."),
+    StrengthTemplate("str_chest_stretch", "Растяжка грудных", 1, "Раскрывает плечи. Правильная стойка для броска."),
+    StrengthTemplate("str_dumbbell_imitation", "Имитация броска с гантелью", 3, "Медленно повторяй движение броска с гантелью. Укрепляет нужные мышцы.", requiresDumbbells = true),
+    StrengthTemplate("str_dumbbell_wrist", "Вращения кистью с гантелью", 2, "Разрабатывает предплечье и кисть. Улучшает выпуск дротика.", requiresDumbbells = true),
+    StrengthTemplate("str_band_pull", "Разведение рук с резинкой", 2, "Укрепляет плечи и улучшает подвижность сустава.", requiresBand = true)
+)
+
+internal fun getNextStrengthExercises(context: Context): List<PlannedExercise> {
+    val hasDumbbells = InventoryStorage.hasDumbbells(context)
+    val hasBand = InventoryStorage.hasResistanceBand(context)
+
+    // Фильтруем список по инвентарю
+    val available = ALL_STRENGTH_EXERCISES.filter { ex ->
+        (!ex.requiresDumbbells || hasDumbbells) && (!ex.requiresBand || hasBand)
+    }
+
+    if (available.isEmpty()) return emptyList()
+
+    val size = available.size
+    val startIndex = InventoryStorage.getStrengthIndex(context) % size
+    
+    val result = mutableListOf<PlannedExercise>()
+    for (i in 0 until 3) {
+        val index = (startIndex + i) % size
+        val template = available[index]
+        result.add(
+            PlannedExercise(
+                id = template.id,
+                title = template.title,
+                minutes = template.minutes,
+                whyImportant = template.whyImportant
+            )
+        )
+    }
+    
+    InventoryStorage.incrementStrengthIndex(context)
+    return result
+}
+
+// ─────────────────────────────────────────────
+// РАЗМИНКА И ОСНОВНАЯ ЧАСТЬ (блоки)
+// ─────────────────────────────────────────────
 
 internal fun warmupBlockItems(): List<BlockExerciseItem> = listOf(
     BlockExerciseItem("warm_muscles", "Разминка: мышцы"),
