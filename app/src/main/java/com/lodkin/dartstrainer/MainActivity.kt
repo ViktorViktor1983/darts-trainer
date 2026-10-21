@@ -4,19 +4,14 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.unit.sp
 import com.lodkin.dartstrainer.data.SettingsStorage
 import com.lodkin.dartstrainer.data.aroundclock.AroundClockDatabase
 import com.lodkin.dartstrainer.data.aroundclock.AroundClockOrder
@@ -61,139 +56,40 @@ import com.lodkin.dartstrainer.data.training.TrainingStateStorage
 import com.lodkin.dartstrainer.data.training.TrainingStatsAnalyzer
 import com.lodkin.dartstrainer.data.training.WeaknessType
 import com.lodkin.dartstrainer.theme.DarkBg
-import com.lodkin.dartstrainer.ui.GameSelectScreen
-import com.lodkin.dartstrainer.ui.LoadingScreen
-import com.lodkin.dartstrainer.ui.MainMenuScreen
-import com.lodkin.dartstrainer.ui.OnboardingResult
-import com.lodkin.dartstrainer.ui.OnboardingScreen
-import com.lodkin.dartstrainer.ui.SettingsScreen
-import com.lodkin.dartstrainer.ui.StatsMenuScreen
-import com.lodkin.dartstrainer.ui.StatsScreen
-import com.lodkin.dartstrainer.ui.WelcomeScreen
-import com.lodkin.dartstrainer.ui.about.AboutScreen
-import com.lodkin.dartstrainer.ui.aroundclock.AroundClockGameScreen
-import com.lodkin.dartstrainer.ui.aroundclock.AroundClockSetupScreen
-import com.lodkin.dartstrainer.ui.aroundclock.AroundClockStatsScreen
-import com.lodkin.dartstrainer.ui.biground.BigRoundSetupScreen
-import com.lodkin.dartstrainer.ui.biground.BigRoundStatsScreen
-import com.lodkin.dartstrainer.ui.cricket.CricketGameScreen
-import com.lodkin.dartstrainer.ui.cricket.CricketSetupScreen
-import com.lodkin.dartstrainer.ui.cricket.CricketStatsScreen
-import com.lodkin.dartstrainer.ui.game501.Game501Screen
-import com.lodkin.dartstrainer.ui.game501.Game501SetupScreen
-import com.lodkin.dartstrainer.ui.game501.Game501StatsScreen
-import com.lodkin.dartstrainer.ui.scoreset.ScoreSetSetupScreen
-import com.lodkin.dartstrainer.ui.scoreset.ScoreSetStatsScreen
-import com.lodkin.dartstrainer.ui.sector.SectorGameScreen
-import com.lodkin.dartstrainer.ui.sector.SectorSetupScreen
-import com.lodkin.dartstrainer.ui.sector.SectorStatsScreen
-import com.lodkin.dartstrainer.ui.training.BlockExerciseItem
-import com.lodkin.dartstrainer.ui.training.BullDrawDialog
-import com.lodkin.dartstrainer.ui.training.DetailedStatsScreen
-import com.lodkin.dartstrainer.ui.training.DisciplineStatsScreen
-import com.lodkin.dartstrainer.ui.training.ExerciseSummary
-import com.lodkin.dartstrainer.ui.training.ExitTrainingDialog
-import com.lodkin.dartstrainer.ui.training.FreeNewRoundDialog
-import com.lodkin.dartstrainer.ui.training.FreeRouletteScreen
-import com.lodkin.dartstrainer.ui.training.FreeTrainingSummaryScreen
-import com.lodkin.dartstrainer.ui.training.MainExerciseRunner
-import com.lodkin.dartstrainer.ui.training.NormativeStep
-import com.lodkin.dartstrainer.ui.training.NormativesExerciseScreen
-import com.lodkin.dartstrainer.ui.training.NormativesResumeDialog
-import com.lodkin.dartstrainer.ui.training.NormativesScreen
-import com.lodkin.dartstrainer.ui.training.PlannedExercise
-import com.lodkin.dartstrainer.ui.training.RestTimerOverlay
-import com.lodkin.dartstrainer.ui.training.ResumeTrainingDialog
-import com.lodkin.dartstrainer.ui.training.SummaryBlockType
-import com.lodkin.dartstrainer.ui.training.SummaryStatus
-import com.lodkin.dartstrainer.ui.training.TargetedPracticeScreen
-import com.lodkin.dartstrainer.ui.training.TimeUpDialog
-import com.lodkin.dartstrainer.ui.training.TrainingBlockScreen
-import com.lodkin.dartstrainer.ui.training.TrainingExercisePlaceholder
-import com.lodkin.dartstrainer.ui.training.TrainingMenuScreen
-import com.lodkin.dartstrainer.ui.training.TrainingProgressScreen
-import com.lodkin.dartstrainer.ui.training.TrainingSettingsScreen
-import com.lodkin.dartstrainer.ui.training.TrainingSummaryScreen
-import com.lodkin.dartstrainer.ui.training.TrainingTimerOverlay
-import com.lodkin.dartstrainer.ui.training.TrainingWarmupScreen
-import com.lodkin.dartstrainer.ui.training.defaultMainBlockItems
-import com.lodkin.dartstrainer.ui.training.defaultMainExercises
-import com.lodkin.dartstrainer.ui.training.defaultPsychologyExercises
-import com.lodkin.dartstrainer.ui.training.defaultStrengthExercises
-import com.lodkin.dartstrainer.ui.training.recommendedGameIds
-import com.lodkin.dartstrainer.ui.training.warmupBlockItems
+import com.lodkin.dartstrainer.ui.*
+import com.lodkin.dartstrainer.ui.training.*
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.util.Locale
 import kotlin.random.Random
 
-/**
- * Авто-OK в тренировочных партиях 501 и Крикета.
- */
 private const val TRAINING_AUTO_OK_SECONDS = 3
 
 private val PARENT_SCREEN: Map<String, String> = mapOf(
-    "stats_menu" to "main",
-    "stats_cricket" to "stats_menu",
-    "stats_501" to "stats_menu",
-    "settings" to "main",
-    "about" to "settings",
-    "training" to "main",
-    "training_settings" to "training",
-    "training_progress" to "training",
-    "detailed_stats" to "main",
-    "discipline_stats" to "detailed_stats",
-    "training_warmup" to "training",
-    "training_block" to "training",
-    "training_exercise" to "training_block",
-    "training_summary" to "training",
-    "training_block_exercise" to "training_summary",
-    "training_extra_game" to "training_summary",
-    "training_free_next" to "main",
-    "training_free_summary" to "main",
-    "normatives" to "training",
-    "game_select" to "main",
-
-    "cricket_setup" to "game_select",
-    "cricket_game" to "game_select",
-    "cricket_stats" to "main",
-
-    "game501_setup" to "game_select",
-    "game501_game" to "game_select",
-    "game501_stats" to "main",
-
-    "sector_setup" to "game_select",
-    "sector_game" to "game_select",
-    "sector_stats" to "stats_menu",
-
-    "aroundclock_setup" to "game_select",
-    "aroundclock_game" to "game_select",
-    "aroundclock_stats" to "stats_menu",
-
-    "biground_setup" to "game_select",
-    "biground_game" to "game_select",
-    "biground_stats" to "stats_menu",
-
-    "scoreset_setup" to "game_select",
-    "scoreset_game" to "game_select",
-    "scoreset_stats" to "stats_menu"
+    "stats_menu" to "main", "stats_cricket" to "stats_menu", "stats_501" to "stats_menu",
+    "settings" to "main", "about" to "settings",
+    "training" to "main", "training_settings" to "training", "training_progress" to "training",
+    "detailed_stats" to "main", "discipline_stats" to "detailed_stats",
+    "training_warmup" to "training", "training_block" to "training",
+    "training_exercise" to "training_block", "training_summary" to "training",
+    "training_block_exercise" to "training_summary", "training_extra_game" to "training_summary",
+    "training_free_next" to "main", "training_free_summary" to "main",
+    "normatives" to "training", "game_select" to "main",
+    "cricket_setup" to "game_select", "cricket_game" to "game_select", "cricket_stats" to "main",
+    "game501_setup" to "game_select", "game501_game" to "game_select", "game501_stats" to "main",
+    "sector_setup" to "game_select", "sector_game" to "game_select", "sector_stats" to "stats_menu",
+    "aroundclock_setup" to "game_select", "aroundclock_game" to "game_select", "aroundclock_stats" to "stats_menu",
+    "biground_setup" to "game_select", "biground_game" to "game_select", "biground_stats" to "stats_menu",
+    "scoreset_setup" to "game_select", "scoreset_game" to "game_select", "scoreset_stats" to "stats_menu"
 )
 
 private val TRAINING_SCREENS: Set<String> = setOf(
-    "training_warmup",
-    "training_block",
-    "training_exercise",
-    "training_block_exercise",
-    "training_extra_game",
-    "training_free_next"
+    "training_warmup", "training_block", "training_exercise",
+    "training_block_exercise", "training_extra_game", "training_free_next"
 )
 
 private enum class TrainingBlockPhase {
-    WARMUP,
-    MAIN,
-    PSYCHOLOGY,
-    STRENGTH,
-    FINISHED
+    WARMUP, MAIN, PSYCHOLOGY, STRENGTH, FINISHED
 }
 
 class MainActivity : ComponentActivity() {
@@ -214,30 +110,27 @@ fun DartsTrainerApp() {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
+    // ── РЕПОЗИТОРИИ ──
     val cricketRepository = remember { CricketRepository(CricketDatabase.get(context).cricketDao()) }
     val game501Repository = remember { Game501Repository(Game501Database.get(context).game501Dao()) }
     val sectorRepository = remember { SectorRepository(SectorDatabase.get(context).sectorDao()) }
     val aroundClockRepository = remember { AroundClockRepository(AroundClockDatabase.get(context).aroundClockDao()) }
     val bigRoundRepository = remember { BigRoundRepository(BigRoundDatabase.get(context).bigRoundDao()) }
     val scoreSetRepository = remember { ScoreSetRepository(ScoreSetDatabase.get(context).scoreSetDao()) }
-    
-    // Передаем context в конструктор
     val trainingRepository = remember { TrainingRepository(TrainingDatabase.getInstance(context), context) }
-    
-    val freePlayRecordsRepository = remember {
-        FreePlayRecordsRepository(FreePlayRecordsDatabase.get(context))
-    }
+    val freePlayRecordsRepository = remember { FreePlayRecordsRepository(FreePlayRecordsDatabase.get(context)) }
 
+    // ── БАЗОВЫЕ СТЕЙТЫ ──
     val sessionStartTime = remember { System.currentTimeMillis() }
     val sessionForm = remember { 0.85 + Random.nextDouble() * 0.30 }
-
     var onboardingDone by remember { mutableStateOf(SettingsStorage.isOnboardingDone(context)) }
     var stage by remember { mutableStateOf(if (onboardingDone) "loading" else "welcome") }
     var screen by remember { mutableStateOf("main") }
     
-    // Выбранная дисциплина для детальной статистики
     var selectedDiscipline by remember { mutableStateOf<String?>(null) }
+    var statsMenuKey by remember { mutableStateOf(0) }
 
+    // ── СТЕЙТЫ ИГР ──
     var cricketGame by remember { mutableStateOf<CricketGame?>(null) }
     var cricketExistingId by remember { mutableStateOf(0L) }
     var game501 by remember { mutableStateOf<Game501?>(null) }
@@ -247,15 +140,11 @@ fun DartsTrainerApp() {
     var aroundClockOrder by remember { mutableStateOf<AroundClockOrder?>(null) }
     var aroundClockHits by remember { mutableStateOf(1) }
     var bigRoundCategory by remember { mutableStateOf<BigRoundCategory?>(null) }
-    var statsMenuKey by remember { mutableStateOf(0) }
 
+    // ── СТЕЙТЫ ТРЕНИРОВКИ ──
     var trainingMinutes by remember {
-        mutableStateOf(
-            context.getSharedPreferences("training_prefs", android.content.Context.MODE_PRIVATE)
-                .getInt("session_minutes", SettingsStorage.getTrainingMinutes(context))
-        )
+        mutableStateOf(context.getSharedPreferences("training_prefs", android.content.Context.MODE_PRIVATE).getInt("session_minutes", SettingsStorage.getTrainingMinutes(context)))
     }
-
     var trainingSessionId by remember { mutableStateOf(0L) }
     var isTrainingActive by remember { mutableStateOf(false) }
     var trainingElapsedSeconds by remember { mutableStateOf(0) }
@@ -272,19 +161,12 @@ fun DartsTrainerApp() {
     var currentWeakness by remember { mutableStateOf<WeaknessType?>(null) }
     var currentLevel by remember { mutableStateOf(1) }
     var currentTargetGoals by remember { mutableStateOf<List<String>>(emptyList()) }
-
-    var blockExerciseId by remember { mutableStateOf<String?>(null) }
-    var extraGameId by remember { mutableStateOf<String?>(null) }
-
     var exerciseStartMillis by remember { mutableStateOf(0L) }
 
     var isTraining501 by remember { mutableStateOf(false) }
     var isTrainingCricket by remember { mutableStateOf(false) }
 
-    var showResumeDialog by remember { mutableStateOf(false) }
-    var pendingResume by remember { mutableStateOf<TrainingStateStorage.Snapshot?>(null) }
-    var showExitTrainingDialog by remember { mutableStateOf(false) }
-
+    // ── СТЕЙТЫ СВОБОДНОЙ ТРЕНИРОВКИ ──
     var isFreeTraining by remember { mutableStateOf(false) }
     var isSingleExercisePlay by remember { mutableStateOf(false) }
     var isSetupForTraining by remember { mutableStateOf(false) }
@@ -297,14 +179,20 @@ fun DartsTrainerApp() {
     var freeExercisesCompleted by remember { mutableStateOf(0) }
     var showFreeNewRoundDialog by remember { mutableStateOf(false) }
 
+    // ── СТЕЙТЫ ОТДЫХА ──
     var showRestTimer by remember { mutableStateOf(false) }
     var restTimerSeconds by remember { mutableStateOf(0) }
     var restNextTitle by remember { mutableStateOf<String?>(null) }
     var pendingNextStep by remember { mutableStateOf<(() -> Unit)?>(null) }
 
+    // ── СТЕЙТЫ ДИАЛОГОВ ──
+    var showResumeDialog by remember { mutableStateOf(false) }
+    var pendingResume by remember { mutableStateOf<TrainingStateStorage.Snapshot?>(null) }
+    var showExitTrainingDialog by remember { mutableStateOf(false) }
     var showBullDraw by remember { mutableStateOf(false) }
     var bullDrawExerciseId by remember { mutableStateOf<String?>(null) }
 
+    // ── СТЕЙТЫ НОРМАТИВОВ ──
     var normativesAvailable by remember { mutableStateOf(false) }
     var normativesActive by remember { mutableStateOf(false) }
     var normativesCompletedSteps by remember { mutableStateOf<Set<String>>(emptySet()) }
@@ -322,6 +210,10 @@ fun DartsTrainerApp() {
     var pendingNormativesResume by remember { mutableStateOf<NormativesStateStorage.Snapshot?>(null) }
     var isNormativesExercise by remember { mutableStateOf(false) }
 
+    // ────────────────────────────────────────────────────────
+    // ЛОГИКА (ФУНКЦИИ)
+    // ────────────────────────────────────────────────────────
+
     fun showRestThen(restSeconds: Int, nextTitle: String?, nextStep: () -> Unit) {
         restTimerSeconds = restSeconds
         restNextTitle = nextTitle
@@ -331,23 +223,11 @@ fun DartsTrainerApp() {
 
     fun pickNextFreeExercise() {
         val all = mainExercises.map { it.id }
-        if (all.isEmpty()) {
-            freeCurrentId = null
-            return
-        }
-        if (!freeNoRepeat) {
-            freeCurrentId = all.random()
-            freeRouletteKey += 1
-            return
-        }
+        if (all.isEmpty()) { freeCurrentId = null; return }
+        if (!freeNoRepeat) { freeCurrentId = all.random(); freeRouletteKey += 1; return }
         val candidates = all.filterNot { it in freeCompletedIds || it in freeSkippedIds }
-        if (candidates.isEmpty()) {
-            freeCurrentId = null
-            showFreeNewRoundDialog = true
-        } else {
-            freeCurrentId = candidates.random()
-            freeRouletteKey += 1
-        }
+        if (candidates.isEmpty()) { freeCurrentId = null; showFreeNewRoundDialog = true }
+        else { freeCurrentId = candidates.random(); freeRouletteKey += 1 }
     }
 
     fun botNameFor(level: Int): String = DartsNorms.getLevelName(level.coerceIn(1, 16))
@@ -361,18 +241,7 @@ fun DartsTrainerApp() {
                 Player501(name = playerName, isBot = false, botLevel = 0, teamIndex = 0),
                 Player501(name = botNameFor(botLevel), isBot = true, botLevel = botLevel, teamIndex = 1)
             )
-            game501 = Game501Logic.newGame(
-                gameType = GameType.X501,
-                outMode = OutMode.DOUBLE_OUT,
-                players = players,
-                legsPerSet = 1,
-                setsPerMatch = 1,
-                isPairGame = false,
-                startingTeamIndex = startingTeamIndex,
-                autoOkSeconds = TRAINING_AUTO_OK_SECONDS,
-                sessionStartTime = sessionStartTime,
-                sessionForm = sessionForm
-            )
+            game501 = Game501Logic.newGame(GameType.X501, OutMode.DOUBLE_OUT, players, 1, 1, false, startingTeamIndex, TRAINING_AUTO_OK_SECONDS, sessionStartTime, sessionForm)
             game501ExistingId = 0L
             isTraining501 = true
             screen = "game501_game"
@@ -383,17 +252,7 @@ fun DartsTrainerApp() {
                 CricketPlayer(name = playerName, isBot = false, botLevel = 0, teamIndex = 0),
                 CricketPlayer(name = botNameFor(botLevel), isBot = true, botLevel = botLevel, teamIndex = 1)
             )
-            cricketGame = CricketLogic.newGame(
-                type = CricketType.AMERICAN,
-                players = players,
-                legsPerSet = 1,
-                setsPerMatch = 1,
-                isPairGame = false,
-                startingTeamIndex = startingTeamIndex,
-                autoOkSeconds = TRAINING_AUTO_OK_SECONDS,
-                sessionStartTime = sessionStartTime,
-                sessionForm = sessionForm
-            )
+            cricketGame = CricketLogic.newGame(CricketType.AMERICAN, players, 1, 1, false, startingTeamIndex, TRAINING_AUTO_OK_SECONDS, sessionStartTime, sessionForm)
             cricketExistingId = 0L
             isTrainingCricket = true
             screen = "cricket_game"
@@ -403,63 +262,29 @@ fun DartsTrainerApp() {
     fun launchExercise(id: String) {
         exerciseStartMillis = System.currentTimeMillis()
         when (id) {
-            "game501", "cricket" -> {
-                bullDrawExerciseId = id
-                showBullDraw = true
-            }
+            "game501", "cricket" -> { bullDrawExerciseId = id; showBullDraw = true }
             else -> screen = "training_exercise"
         }
     }
 
     fun saveCurrentTrainingState() {
-        if (trainingSessionId <= 0L) return
-        if (isFreeTraining) return
-        if (currentPhase == TrainingBlockPhase.FINISHED) return
+        if (trainingSessionId <= 0L || isFreeTraining || currentPhase == TrainingBlockPhase.FINISHED) return
         TrainingStateStorage.save(
-            context = context,
-            sessionId = trainingSessionId,
-            minutes = trainingMinutes,
-            elapsedSeconds = trainingElapsedSeconds,
-            phaseName = currentPhase.name,
-            exerciseIndex = currentExerciseIndex,
-            statuses = exerciseStatuses.mapValues { it.value.name },
-            mainExerciseIds = mainExercises.map { it.id to it.minutes },
-            psychologyEnabled = psychologyExercises.isNotEmpty(),
-            strengthEnabled = strengthExercises.isNotEmpty()
+            context, trainingSessionId, trainingMinutes, trainingElapsedSeconds,
+            currentPhase.name, currentExerciseIndex, exerciseStatuses.mapValues { it.value.name },
+            mainExercises.map { it.id to it.minutes }, psychologyExercises.isNotEmpty(), strengthExercises.isNotEmpty()
         )
     }
 
     fun saveNormativesSnapshot() {
-        val g501Results = mutableListOf<Boolean>()
-        repeat(normatives501PlayerWins) { g501Results.add(true) }
-        repeat(normatives501BotWins) { g501Results.add(false) }
-
-        val crResults = mutableListOf<Boolean>()
-        repeat(normativesCricketPlayerWins) { crResults.add(true) }
-        repeat(normativesCricketBotWins) { crResults.add(false) }
-
-        NormativesStateStorage.save(
-            context = context,
-            completedSteps = normativesCompletedSteps,
-            game501Levels = normatives501Levels,
-            game501Results = g501Results,
-            cricketLevels = normativesCricketLevels,
-            cricketResults = crResults
-        )
+        val g501Results = mutableListOf<Boolean>().apply { repeat(normatives501PlayerWins) { add(true) }; repeat(normatives501BotWins) { add(false) } }
+        val crResults = mutableListOf<Boolean>().apply { repeat(normativesCricketPlayerWins) { add(true) }; repeat(normativesCricketBotWins) { add(false) } }
+        NormativesStateStorage.save(context, normativesCompletedSteps, normatives501Levels, g501Results, normativesCricketLevels, crResults)
     }
 
     fun buildBotLadder(startLevel: Int): List<Int> {
-        return if (startLevel in 2..15) {
-            listOf(
-                startLevel - 1,
-                startLevel,
-                startLevel + 1,
-                startLevel - 1,
-                startLevel
-            ).map { it.coerceIn(1, 16) }
-        } else {
-            List(5) { startLevel.coerceIn(1, 16) }
-        }
+        return if (startLevel in 2..15) listOf(startLevel - 1, startLevel, startLevel + 1, startLevel - 1, startLevel).map { it.coerceIn(1, 16) }
+        else List(5) { startLevel.coerceIn(1, 16) }
     }
 
     fun startNewNormatives() {
@@ -468,16 +293,7 @@ fun DartsTrainerApp() {
             val startLvl = analysis.level.coerceAtLeast(1)
             normativesStartLevel = startLvl
 
-            val session = TrainingSession(
-                dateMillis = System.currentTimeMillis(),
-                plannedMinutes = 30,
-                actualMinutes = 0,
-                levelAtStart = startLvl,
-                mode = TrainingMode.FLEXIBLE,
-                focus = null,
-                isControl = true,
-                isCompleted = false
-            )
+            val session = TrainingSession(System.currentTimeMillis(), 30, 0, startLvl, TrainingMode.FLEXIBLE, null, true, false)
             trainingSessionId = trainingRepository.insertSession(session)
             trainingElapsedSeconds = 0
             trainingPaused = false
@@ -485,13 +301,9 @@ fun DartsTrainerApp() {
             normativesActive = true
             normativesCompletedSteps = emptySet()
             normatives501Levels = buildBotLadder(startLvl)
-            normatives501PlayerWins = 0
-            normatives501BotWins = 0
-            normatives501CurrentLeg = 0
+            normatives501PlayerWins = 0; normatives501BotWins = 0; normatives501CurrentLeg = 0
             normativesCricketLevels = buildBotLadder(startLvl)
-            normativesCricketPlayerWins = 0
-            normativesCricketBotWins = 0
-            normativesCricketCurrentLeg = 0
+            normativesCricketPlayerWins = 0; normativesCricketBotWins = 0; normativesCricketCurrentLeg = 0
             normativesNewLevel = null
             isNormativesExercise = false
             isTrainingActive = true
@@ -502,30 +314,22 @@ fun DartsTrainerApp() {
         }
     }
 
-    fun currentNormativeStep(): NormativeStep? =
-        NormativeStep.entries.firstOrNull { it.id !in normativesCompletedSteps }
-
     fun evaluateAndFinishNormatives() {
         scope.launch {
             val analysis = TrainingStatsAnalyzer.analyze(trainingRepository)
             val newLvl = analysis.level
             val startLvl = normativesStartLevel
-
             normativesNewLevel = if (newLvl > startLvl) newLvl else startLvl
 
             if (newLvl > startLvl) {
-                // Начинаем новый период!
                 trainingRepository.clearStatisticsAfterNormatives()
                 TrainingStateStorage.clear(context)
                 NormativesStateStorage.clear(context)
-                isTrainingActive = false
-                trainingSessionId = 0L
             } else {
                 NormativesStateStorage.clear(context)
-                isTrainingActive = false
-                trainingSessionId = 0L
             }
-
+            isTrainingActive = false
+            trainingSessionId = 0L
             normativesActive = false
             isNormativesExercise = false
             screen = "normatives"
@@ -542,23 +346,8 @@ fun DartsTrainerApp() {
                     Player501(name = playerName, isBot = false, botLevel = 0, teamIndex = 0),
                     Player501(name = botNameFor(botLevel), isBot = true, botLevel = botLevel, teamIndex = 1)
                 )
-                game501 = Game501Logic.newGame(
-                    gameType = GameType.X501,
-                    outMode = OutMode.DOUBLE_OUT,
-                    players = players,
-                    legsPerSet = 1,
-                    setsPerMatch = 1,
-                    isPairGame = false,
-                    startingTeamIndex = 0,
-                    autoOkSeconds = TRAINING_AUTO_OK_SECONDS,
-                    sessionStartTime = sessionStartTime,
-                    sessionForm = sessionForm
-                )
-                game501ExistingId = 0L
-                isTraining501 = true
-                isNormativesExercise = true
-                exerciseStartMillis = System.currentTimeMillis()
-                screen = "game501_game"
+                game501 = Game501Logic.newGame(GameType.X501, OutMode.DOUBLE_OUT, players, 1, 1, false, 0, TRAINING_AUTO_OK_SECONDS, sessionStartTime, sessionForm)
+                game501ExistingId = 0L; isTraining501 = true; isNormativesExercise = true; exerciseStartMillis = System.currentTimeMillis(); screen = "game501_game"
             }
             NormativeStep.CRICKET -> {
                 val leg = normativesCricketCurrentLeg
@@ -568,33 +357,13 @@ fun DartsTrainerApp() {
                     CricketPlayer(name = playerName, isBot = false, botLevel = 0, teamIndex = 0),
                     CricketPlayer(name = botNameFor(botLevel), isBot = true, botLevel = botLevel, teamIndex = 1)
                 )
-                cricketGame = CricketLogic.newGame(
-                    type = CricketType.AMERICAN,
-                    players = players,
-                    legsPerSet = 1,
-                    setsPerMatch = 1,
-                    isPairGame = false,
-                    startingTeamIndex = 0,
-                    autoOkSeconds = TRAINING_AUTO_OK_SECONDS,
-                    sessionStartTime = sessionStartTime,
-                    sessionForm = sessionForm
-                )
-                cricketExistingId = 0L
-                isTrainingCricket = true
-                isNormativesExercise = true
-                exerciseStartMillis = System.currentTimeMillis()
-                screen = "cricket_game"
+                cricketGame = CricketLogic.newGame(CricketType.AMERICAN, players, 1, 1, false, 0, TRAINING_AUTO_OK_SECONDS, sessionStartTime, sessionForm)
+                cricketExistingId = 0L; isTrainingCricket = true; isNormativesExercise = true; exerciseStartMillis = System.currentTimeMillis(); screen = "cricket_game"
             }
-            NormativeStep.SECTOR_20,
-            NormativeStep.BIG_ROUND,
-            NormativeStep.SCORE_SET -> {
-                isNormativesExercise = true
-                exerciseStartMillis = System.currentTimeMillis()
-                when (step) {
-                    NormativeStep.SECTOR_20 -> sectorToPlay = 20
-                    NormativeStep.BIG_ROUND -> bigRoundCategory = BigRoundCategory.MALE
-                    else -> Unit
-                }
+            NormativeStep.SECTOR_20, NormativeStep.BIG_ROUND, NormativeStep.SCORE_SET -> {
+                isNormativesExercise = true; exerciseStartMillis = System.currentTimeMillis()
+                if (step == NormativeStep.SECTOR_20) sectorToPlay = 20
+                if (step == NormativeStep.BIG_ROUND) bigRoundCategory = BigRoundCategory.MALE
                 screen = "normatives_exercise"
             }
         }
@@ -602,129 +371,40 @@ fun DartsTrainerApp() {
 
     fun afterNormativesLeg(playerWon: Boolean, isGame501: Boolean) {
         if (isGame501) {
-            if (playerWon) normatives501PlayerWins += 1
-            else normatives501BotWins += 1
+            if (playerWon) normatives501PlayerWins += 1 else normatives501BotWins += 1
             normatives501CurrentLeg += 1
-
-            val finished = normatives501PlayerWins >= 3 ||
-                    normatives501BotWins >= 3 ||
-                    normatives501CurrentLeg >= 5
-
-            if (finished) {
-                normativesCompletedSteps = normativesCompletedSteps + NormativeStep.GAME_501.id
-            }
+            val finished = normatives501PlayerWins >= 3 || normatives501BotWins >= 3 || normatives501CurrentLeg >= 5
+            if (finished) normativesCompletedSteps = normativesCompletedSteps + NormativeStep.GAME_501.id
             saveNormativesSnapshot()
         } else {
-            if (playerWon) normativesCricketPlayerWins += 1
-            else normativesCricketBotWins += 1
+            if (playerWon) normativesCricketPlayerWins += 1 else normativesCricketBotWins += 1
             normativesCricketCurrentLeg += 1
-
-            val finished = normativesCricketPlayerWins >= 3 ||
-                    normativesCricketBotWins >= 3 ||
-                    normativesCricketCurrentLeg >= 5
-
-            if (finished) {
-                normativesCompletedSteps = normativesCompletedSteps + NormativeStep.CRICKET.id
-            }
+            val finished = normativesCricketPlayerWins >= 3 || normativesCricketBotWins >= 3 || normativesCricketCurrentLeg >= 5
+            if (finished) normativesCompletedSteps = normativesCompletedSteps + NormativeStep.CRICKET.id
             saveNormativesSnapshot()
         }
 
-        if (normativesCompletedSteps.size == NormativeStep.entries.size) {
-            evaluateAndFinishNormatives()
-        } else {
-            screen = "normatives"
-        }
+        if (normativesCompletedSteps.size == NormativeStep.entries.size) evaluateAndFinishNormatives()
+        else screen = "normatives"
     }
 
     fun cancelNormatives() {
-        NormativesStateStorage.clear(context)
-        normativesActive = false
-        normativesCompletedSteps = emptySet()
-        normativesNewLevel = null
-        isNormativesExercise = false
-        isTrainingActive = false
-        trainingSessionId = 0L
-        screen = "training"
-    }
-
-    LaunchedEffect(isTrainingActive, trainingPaused, screen) {
-        if (!isTrainingActive || trainingPaused || screen !in TRAINING_SCREENS) return@LaunchedEffect
-        while (true) {
-            delay(1000L)
-            trainingElapsedSeconds += 1
-            if (!isFreeTraining && !normativesActive && trainingElapsedSeconds >= trainingMinutes * 60) {
-                showTimeUpDialog = true
-                break
-            }
-        }
-    }
-    val trainingSecondsLeft = if (isFreeTraining) trainingElapsedSeconds
-        else (trainingMinutes * 60 - trainingElapsedSeconds).coerceAtLeast(0)
-
-    LaunchedEffect(
-        trainingSessionId, currentPhase, currentExerciseIndex, exerciseStatuses, mainExercises
-    ) {
-        if (isTrainingActive && trainingSessionId > 0L && !isFreeTraining && !normativesActive) {
-            saveCurrentTrainingState()
-        }
-    }
-
-    LaunchedEffect(isTrainingActive, screen) {
-        if (!isTrainingActive || screen !in TRAINING_SCREENS) return@LaunchedEffect
-        while (true) {
-            delay(30_000L)
-            if (!isFreeTraining && !normativesActive) saveCurrentTrainingState()
-        }
+        NormativesStateStorage.clear(context); normativesActive = false; normativesCompletedSteps = emptySet()
+        normativesNewLevel = null; isNormativesExercise = false; isTrainingActive = false; trainingSessionId = 0L; screen = "training"
     }
 
     fun resetTrainingState() {
-        isTrainingActive = false
-        trainingElapsedSeconds = 0
-        trainingPaused = false
-        trainingSessionId = 0L
-        currentPhase = TrainingBlockPhase.WARMUP
-        mainExercises = emptyList()
-        psychologyExercises = emptyList()
-        strengthExercises = emptyList()
-        currentExerciseIndex = 0
-        exerciseStatuses = emptyMap()
-        blockExerciseId = null
-        extraGameId = null
-        exerciseStartMillis = 0L
-        isTraining501 = false
-        isTrainingCricket = false
-        showRestTimer = false
-        restNextTitle = null
-        pendingNextStep = null
-        showExitTrainingDialog = false
-        isFreeTraining = false
-        isSingleExercisePlay = false
-        isSetupForTraining = false
-        freeNoRepeat = false
-        freeChooseMyself = false
-        freeCompletedIds = emptySet()
-        freeSkippedIds = emptySet()
-        freeCurrentId = null
-        freeRouletteKey = 0
-        freeExercisesCompleted = 0
-        showFreeNewRoundDialog = false
-        showBullDraw = false
-        bullDrawExerciseId = null
-        normativesActive = false
-        normativesCompletedSteps = emptySet()
-        normatives501Levels = emptyList()
-        normatives501PlayerWins = 0
-        normatives501BotWins = 0
-        normatives501CurrentLeg = 0
-        normativesCricketLevels = emptyList()
-        normativesCricketPlayerWins = 0
-        normativesCricketBotWins = 0
-        normativesCricketCurrentLeg = 0
-        normativesNewLevel = null
-        isNormativesExercise = false
-        currentWeakness = null
-        currentLevel = 1
-        currentTargetGoals = emptyList()
+        isTrainingActive = false; trainingElapsedSeconds = 0; trainingPaused = false; trainingSessionId = 0L
+        currentPhase = TrainingBlockPhase.WARMUP; mainExercises = emptyList(); psychologyExercises = emptyList(); strengthExercises = emptyList()
+        currentExerciseIndex = 0; exerciseStatuses = emptyMap(); exerciseStartMillis = 0L
+        isTraining501 = false; isTrainingCricket = false; showRestTimer = false; restNextTitle = null; pendingNextStep = null
+        showExitTrainingDialog = false; isFreeTraining = false; isSingleExercisePlay = false; isSetupForTraining = false
+        freeNoRepeat = false; freeChooseMyself = false; freeCompletedIds = emptySet(); freeSkippedIds = emptySet(); freeCurrentId = null
+        freeRouletteKey = 0; freeExercisesCompleted = 0; showFreeNewRoundDialog = false; showBullDraw = false; bullDrawExerciseId = null
+        normativesActive = false; normativesCompletedSteps = emptySet(); normatives501Levels = emptyList()
+        normatives501PlayerWins = 0; normatives501BotWins = 0; normatives501CurrentLeg = 0; normativesCricketLevels = emptyList()
+        normativesCricketPlayerWins = 0; normativesCricketBotWins = 0; normativesCricketCurrentLeg = 0; normativesNewLevel = null
+        isNormativesExercise = false; currentWeakness = null; currentLevel = 1; currentTargetGoals = emptyList()
     }
 
     fun activePhases(): List<TrainingBlockPhase> {
@@ -736,166 +416,71 @@ fun DartsTrainerApp() {
         return list
     }
 
-    fun exercisesForPhase(phase: TrainingBlockPhase): List<PlannedExercise> = when (phase) {
-        TrainingBlockPhase.MAIN -> mainExercises
-        TrainingBlockPhase.PSYCHOLOGY -> psychologyExercises
-        TrainingBlockPhase.STRENGTH -> strengthExercises
-        else -> emptyList()
-    }
-
     fun nextPhaseAfter(phase: TrainingBlockPhase): TrainingBlockPhase {
         val phases = activePhases()
         val idx = phases.indexOf(phase)
         return if (idx >= 0 && idx < phases.lastIndex) phases[idx + 1] else TrainingBlockPhase.FINISHED
     }
 
-    fun isLastActivePhase(phase: TrainingBlockPhase): Boolean {
-        val phases = activePhases()
-        return phases.isNotEmpty() && phases.last() == phase
-    }
-
-    fun goToNextPhase() {
-        val next = nextPhaseAfter(currentPhase)
-        currentPhase = next
-        currentExerciseIndex = 0
-        exerciseStatuses = emptyMap()
-        if (next == TrainingBlockPhase.FINISHED) {
-            screen = "training_summary"
-        } else {
-            screen = "training_block"
-        }
-    }
-
-    fun blockTypeForPhase(phase: TrainingBlockPhase): SummaryBlockType = when (phase) {
-        TrainingBlockPhase.WARMUP -> SummaryBlockType.WARMUP
-        TrainingBlockPhase.MAIN -> SummaryBlockType.MAIN
-        TrainingBlockPhase.PSYCHOLOGY -> SummaryBlockType.PSYCHOLOGY
-        TrainingBlockPhase.STRENGTH -> SummaryBlockType.STRENGTH
-        TrainingBlockPhase.FINISHED -> SummaryBlockType.STRENGTH
-    }
-
-    fun blockItemsForPhase(phase: TrainingBlockPhase, recommendedIds: Set<String>): List<BlockExerciseItem> = when (phase) {
-        TrainingBlockPhase.WARMUP -> warmupBlockItems()
-        TrainingBlockPhase.MAIN -> defaultMainBlockItems(recommendedIds)
-        TrainingBlockPhase.PSYCHOLOGY -> psychologyExercises.map { BlockExerciseItem(it.id, it.title) }
-        TrainingBlockPhase.STRENGTH -> strengthExercises.map { BlockExerciseItem(it.id, it.title) }
-        TrainingBlockPhase.FINISHED -> defaultMainBlockItems(recommendedIds)
-    }
-
     fun advanceAfterExercise(finishedExerciseId: String) {
         if (isSingleExercisePlay) {
-            isSingleExercisePlay = false
-            isTrainingActive = false
-            trainingSessionId = 0L
-            isFreeTraining = false
-            screen = "main"
-            return
+            isSingleExercisePlay = false; isTrainingActive = false; trainingSessionId = 0L; isFreeTraining = false; screen = "main"; return
         }
-
         if (isFreeTraining) {
-            freeExercisesCompleted += 1
-            freeCompletedIds = freeCompletedIds + finishedExerciseId
-            freeCurrentId = null
-            val restSec = TrainingPlanner.restSecondsAfter(finishedExerciseId)
-            showRestThen(restSec, null) {
-                pickNextFreeExercise()
-                screen = "training_free_next"
-            }
+            freeExercisesCompleted += 1; freeCompletedIds = freeCompletedIds + finishedExerciseId; freeCurrentId = null
+            showRestThen(TrainingPlanner.restSecondsAfter(finishedExerciseId), null) { pickNextFreeExercise(); screen = "training_free_next" }
         } else {
-            val list = exercisesForPhase(TrainingBlockPhase.MAIN)
+            val list = if (currentPhase == TrainingBlockPhase.MAIN) mainExercises else if (currentPhase == TrainingBlockPhase.PSYCHOLOGY) psychologyExercises else strengthExercises
             if (currentExerciseIndex + 1 < list.size) {
-                val nextExercise = list[currentExerciseIndex + 1]
-                val restSec = TrainingPlanner.restSecondsAfter(finishedExerciseId)
-                showRestThen(restSec, nextExercise.title) {
-                    currentExerciseIndex += 1
-                    screen = "training_block"
+                showRestThen(TrainingPlanner.restSecondsAfter(finishedExerciseId), list[currentExerciseIndex + 1].title) {
+                    currentExerciseIndex += 1; screen = "training_block"
                 }
-            } else {
-                screen = "training_summary"
-            }
+            } else screen = "training_summary"
         }
     }
 
     fun finishCurrentMainExercise() {
-        val finishedId = if (isFreeTraining) {
-            freeCurrentId ?: ""
-        } else {
-            mainExercises.getOrNull(currentExerciseIndex)?.id ?: ""
-        }
+        val finishedId = if (isFreeTraining) freeCurrentId ?: "" else mainExercises.getOrNull(currentExerciseIndex)?.id ?: ""
         if (!isFreeTraining && !isSingleExercisePlay) {
-            exerciseStatuses = exerciseStatuses.toMutableMap().apply {
-                put(currentExerciseIndex, SummaryStatus.DONE)
-            }
+            exerciseStatuses = exerciseStatuses.toMutableMap().apply { put(currentExerciseIndex, SummaryStatus.DONE) }
         }
         advanceAfterExercise(finishedId)
     }
 
-    BackHandler(
-        enabled = stage == "main" && screen != "main" && !showRestTimer && !showExitTrainingDialog && !showBullDraw
-    ) {
-        val isTrainingScreen = screen in TRAINING_SCREENS || screen == "training"
-
-        when {
-            screen == "normatives" -> {
-                cancelNormatives()
-            }
-            screen == "normatives_exercise" -> {
-                isNormativesExercise = false
-                sectorToPlay = null
-                bigRoundCategory = null
-                screen = "normatives"
-            }
-            isFreeTraining -> {
-                if (screen == "training_free_summary") {
-                    resetTrainingState()
-                    TrainingStateStorage.clear(context)
-                    autoOpenTimeDialog = false
-                    screen = "main"
-                } else if (isSingleExercisePlay) {
-                    isSingleExercisePlay = false
-                    isTrainingActive = false
-                    trainingSessionId = 0L
-                    isFreeTraining = false
-                    screen = "main"
-                } else {
-                    screen = "training_free_summary"
-                }
-            }
-            isTrainingScreen && isTrainingActive && trainingSessionId > 0L && screen != "training_summary" && !normativesActive -> {
-                showExitTrainingDialog = true
-            }
-            else -> {
-                PARENT_SCREEN[screen]?.let { parent ->
-                    if (parent == "stats_menu") statsMenuKey++
-                    if (parent == "main") {
-                        resetTrainingState()
-                        TrainingStateStorage.clear(context)
-                        autoOpenTimeDialog = true
-                    }
-                    if (screen == "training_summary") return@BackHandler
-                    if (screen in TRAINING_SCREENS && parent == "training") {
-                        autoOpenTimeDialog = false
-                    }
-                    screen = parent
-                }
-            }
+    // ────────────────────────────────────────────────────────
+    // ЭФФЕКТЫ
+    // ────────────────────────────────────────────────────────
+    LaunchedEffect(isTrainingActive, trainingPaused, screen) {
+        if (!isTrainingActive || trainingPaused || screen !in TRAINING_SCREENS) return@LaunchedEffect
+        while (true) {
+            delay(1000L)
+            trainingElapsedSeconds += 1
+            if (!isFreeTraining && !normativesActive && trainingElapsedSeconds >= trainingMinutes * 60) { showTimeUpDialog = true; break }
         }
+    }
+    
+    LaunchedEffect(trainingSessionId, currentPhase, currentExerciseIndex, exerciseStatuses, mainExercises) {
+        if (isTrainingActive && trainingSessionId > 0L && !isFreeTraining && !normativesActive) saveCurrentTrainingState()
+    }
+
+    LaunchedEffect(isTrainingActive, screen) {
+        if (!isTrainingActive || screen !in TRAINING_SCREENS) return@LaunchedEffect
+        while (true) { delay(30_000L); if (!isFreeTraining && !normativesActive) saveCurrentTrainingState() }
     }
 
     if (stage == "loading") LaunchedEffect(Unit) { delay(3000); stage = "main" }
 
+    // ────────────────────────────────────────────────────────
+    // UI И НАВИГАЦИЯ
+    // ────────────────────────────────────────────────────────
     Box(modifier = Modifier.fillMaxSize()) {
         when (stage) {
             "welcome" -> WelcomeScreen(onStart = { stage = "onboarding" })
-            "onboarding" -> OnboardingScreen(onFinish = { result: OnboardingResult ->
-                SettingsStorage.setPlayerName(context, result.name)
-                SettingsStorage.setTrainingMinutes(context, result.trainingMinutes)
-                SettingsStorage.setTrainingsPerWeek(context, result.trainingsPerWeek)
-                SettingsStorage.setTrainingMode(context, result.trainingMode)
-                SettingsStorage.setStartMode(context, result.startMode)
-                SettingsStorage.setOnboardingDone(context)
-                onboardingDone = true
-                stage = "main"
+            "onboarding" -> OnboardingScreen(onFinish = { result ->
+                SettingsStorage.setPlayerName(context, result.name); SettingsStorage.setTrainingMinutes(context, result.trainingMinutes)
+                SettingsStorage.setTrainingsPerWeek(context, result.trainingsPerWeek); SettingsStorage.setTrainingMode(context, result.trainingMode)
+                SettingsStorage.setStartMode(context, result.startMode); SettingsStorage.setOnboardingDone(context)
+                onboardingDone = true; stage = "main"
             })
             "loading" -> LoadingScreen()
 
@@ -904,1326 +489,227 @@ fun DartsTrainerApp() {
                     onTraining = {
                         val snapN = NormativesStateStorage.load(context)
                         if (snapN != null) {
-                            if (NormativesStateStorage.isExpired(snapN)) {
-                                NormativesStateStorage.clear(context)
-                                pendingNormativesResume = null
-                            } else {
-                                pendingNormativesResume = snapN
-                                showResumeNormativesDialog = true
-                                autoOpenTimeDialog = false
-                            }
+                            if (NormativesStateStorage.isExpired(snapN)) NormativesStateStorage.clear(context)
+                            else { pendingNormativesResume = snapN; showResumeNormativesDialog = true; autoOpenTimeDialog = false }
                         }
                         val snap = TrainingStateStorage.load(context)
                         if (snap != null && snap.sessionId > 0L) {
-                            if (TrainingStateStorage.isExpired(snap)) {
-                                TrainingStateStorage.clear(context)
-                                resetTrainingState()
-                                autoOpenTimeDialog = true
-                            } else {
-                                pendingResume = snap
-                                showResumeDialog = true
-                                autoOpenTimeDialog = false
-                            }
-                        } else {
-                            autoOpenTimeDialog = true
-                        }
-                        scope.launch {
-                            val analysis = TrainingStatsAnalyzer.analyze(trainingRepository)
-                            normativesAvailable = analysis.isReadyForNormatives
-                        }
+                            if (TrainingStateStorage.isExpired(snap)) { TrainingStateStorage.clear(context); resetTrainingState(); autoOpenTimeDialog = true }
+                            else { pendingResume = snap; showResumeDialog = true; autoOpenTimeDialog = false }
+                        } else autoOpenTimeDialog = true
+                        scope.launch { normativesAvailable = TrainingStatsAnalyzer.analyze(trainingRepository).isReadyForNormatives }
                         screen = "training"
                     },
-                    onFreePlay = { screen = "game_select" },
-                    onStatsClick = { statsMenuKey++; screen = "stats_menu" },
-                    onSettingsClick = { screen = "settings" },
-                    onOpenDetailedStats = { screen = "detailed_stats" }
+                    onFreePlay = { screen = "game_select" }, onStatsClick = { statsMenuKey++; screen = "stats_menu" },
+                    onSettingsClick = { screen = "settings" }, onOpenDetailedStats = { screen = "detailed_stats" }
                 )
 
-                "detailed_stats" -> DetailedStatsScreen(
-                    repository = trainingRepository,
-                    onBack = { screen = "main" },
-                    onOpenDiscipline = { id ->
-                        selectedDiscipline = id
-                        screen = "discipline_stats"
-                    }
-                )
+                "detailed_stats" -> DetailedStatsScreen(repository = trainingRepository, onBack = { screen = "main" }, onOpenDiscipline = { selectedDiscipline = it; screen = "discipline_stats" })
+                
+                "discipline_stats" -> DisciplineStatsScreen(repository = trainingRepository, disciplineId = selectedDiscipline ?: "game501", onBack = { screen = "detailed_stats" })
 
-                "discipline_stats" -> {
-                    val discId = selectedDiscipline
-                    if (discId != null) {
-                        DisciplineStatsScreen(
-                            repository = trainingRepository,
-                            disciplineId = discId,
-                            onBack = { screen = "detailed_stats" }
-                        )
-                    } else {
-                        screen = "detailed_stats"
-                    }
+                // --- СТАТИСТИКА ---
+                "stats_menu", "stats_cricket", "stats_501", "sector_stats", "aroundclock_stats", "biground_stats", "scoreset_stats" -> {
+                    StatsRoutes(
+                        screen = screen, onScreenChange = { screen = it },
+                        onResumeGame501 = { entity -> Game501Serializer.fromJson(entity.stateBlob)?.let { game501 = it; game501ExistingId = entity.id; screen = "game501_game" } },
+                        onResumeCricket = { entity -> CricketSerializer.fromJson(entity.stateBlob)?.let { cricketGame = it; cricketExistingId = entity.id; screen = "cricket_game" } },
+                        cricketRepository = cricketRepository, game501Repository = game501Repository, sectorRepository = sectorRepository,
+                        aroundClockRepository = aroundClockRepository, bigRoundRepository = bigRoundRepository, scoreSetRepository = scoreSetRepository,
+                        freePlayRecordsRepository = freePlayRecordsRepository, statsMenuKey = statsMenuKey, onStatsMenuKeyChange = { statsMenuKey = it }
+                    )
                 }
 
-                "stats_menu" -> StatsMenuScreen(
-                    cricketRepository = cricketRepository,
-                    reloadKey = statsMenuKey,
-                    onResumeGame501 = { entity ->
-                        val r = Game501Serializer.fromJson(entity.stateBlob)
-                        if (r != null) { game501 = r; game501ExistingId = entity.id; screen = "game501_game" }
-                    },
-                    onResumeCricket = { entity ->
-                        val r = CricketSerializer.fromJson(entity.stateBlob)
-                        if (r != null) { cricketGame = r; cricketExistingId = entity.id; screen = "cricket_game" }
-                    },
-                    onCricket = { screen = "stats_cricket" },
-                    on501 = { screen = "stats_501" },
-                    onSector = { screen = "sector_stats" },
-                    onBigRound = { screen = "biground_stats" },
-                    onScoreSet = { screen = "scoreset_stats" },
-                    onAroundClock = { screen = "aroundclock_stats" },
-                    onBack = { screen = "main" }
-                )
+                // --- ИГРЫ ---
+                "game_select", "cricket_setup", "cricket_game", "cricket_stats", "game501_setup", "game501_game", "game501_stats",
+                "sector_setup", "sector_game", "aroundclock_setup", "aroundclock_game", "biground_setup", "biground_game", "scoreset_setup", "scoreset_game" -> {
+                    GameRoutes(
+                        screen = screen, onScreenChange = { screen = it }, playerName = SettingsStorage.getPlayerName(context), context = context, scope = scope,
+                        cricketRepository = cricketRepository, game501Repository = game501Repository, sectorRepository = sectorRepository,
+                        aroundClockRepository = aroundClockRepository, bigRoundRepository = bigRoundRepository, scoreSetRepository = scoreSetRepository,
+                        freePlayRecordsRepository = freePlayRecordsRepository, trainingRepository = trainingRepository,
+                        cricketGame = cricketGame, onCricketGameChange = { cricketGame = it }, cricketExistingId = cricketExistingId, onCricketExistingIdChange = { cricketExistingId = it },
+                        game501 = game501, onGame501Change = { game501 = it }, game501ExistingId = game501ExistingId, onGame501ExistingIdChange = { game501ExistingId = it },
+                        sectorToPlay = sectorToPlay, onSectorToPlayChange = { sectorToPlay = it }, aroundClockTarget = aroundClockTarget, onAroundClockTargetChange = { aroundClockTarget = it },
+                        aroundClockOrder = aroundClockOrder, onAroundClockOrderChange = { aroundClockOrder = it }, aroundClockHits = aroundClockHits, onAroundClockHitsChange = { aroundClockHits = it },
+                        bigRoundCategory = bigRoundCategory, onBigRoundCategoryChange = { bigRoundCategory = it },
+                        sessionStartTime = sessionStartTime, sessionForm = sessionForm, isTraining501 = isTraining501, isTrainingCricket = isTrainingCricket
+                    )
+                }
 
-                "stats_cricket" -> StatsScreen(
-                    repository = cricketRepository,
-                    freePlayRecordsRepository = freePlayRecordsRepository,
-                    initialTab = 0, showTabs = false,
-                    onResumeCricket = { entity ->
-                        val r = CricketSerializer.fromJson(entity.stateBlob)
-                        if (r != null) { cricketGame = r; cricketExistingId = entity.id; screen = "cricket_game" }
-                    },
-                    onBack = { statsMenuKey++; screen = "stats_menu" }
-                )
-
-                "stats_501" -> StatsScreen(
-                    repository = cricketRepository,
-                    freePlayRecordsRepository = freePlayRecordsRepository,
-                    initialTab = 1, showTabs = false,
-                    onResumeGame501 = { entity ->
-                        val r = Game501Serializer.fromJson(entity.stateBlob)
-                        if (r != null) { game501 = r; game501ExistingId = entity.id; screen = "game501_game" }
-                    },
-                    onBack = { statsMenuKey++; screen = "stats_menu" }
-                )
-
-                "settings" -> SettingsScreen(
-                    onBack = { screen = "main" },
-                    onOpenAbout = { screen = "about" },
-                    onFactoryReset = {
-                        cricketGame = null; cricketExistingId = 0L
-                        game501 = null; game501ExistingId = 0L
-                        sectorToPlay = null
-                        aroundClockTarget = null; aroundClockOrder = null; aroundClockHits = 1
-                        bigRoundCategory = null
-                        NormativesStateStorage.clear(context)
-                        resetTrainingState(); autoOpenTimeDialog = true
-                        onboardingDone = false; screen = "main"; stage = "welcome"
-                    }
-                )
-
-                "about" -> AboutScreen(
-                    onBack = { screen = "settings" }
-                )
-
-                "training" -> TrainingMenuScreen(
-                    playerName = SettingsStorage.getPlayerName(context),
-                    repository = trainingRepository,
-                    autoOpenTimeDialog = autoOpenTimeDialog,
-                    normativesAvailable = normativesAvailable,
-                    onStartTraining = {
-                        autoOpenTimeDialog = false
-                        trainingMinutes = context
-                            .getSharedPreferences("training_prefs", android.content.Context.MODE_PRIVATE)
-                            .getInt("session_minutes", SettingsStorage.getTrainingMinutes(context))
-                        scope.launch {
-                            val analysis = TrainingStatsAnalyzer.analyze(trainingRepository)
-                            val completedCount = trainingRepository.getCompletedSessionCount()
-                            currentWeakness = analysis.weakestType
-                            currentLevel = analysis.level
-                            currentTargetGoals = analysis.targetPracticeGoals
-
-                            val session = TrainingSession(
-                                dateMillis = System.currentTimeMillis(),
-                                plannedMinutes = trainingMinutes,
-                                actualMinutes = 0,
-                                levelAtStart = analysis.level,
-                                mode = TrainingMode.FLEXIBLE,
-                                focus = analysis.weakestType,
-                                isControl = false,
-                                isCompleted = false
-                            )
-                            trainingSessionId = trainingRepository.insertSession(session)
-                            trainingElapsedSeconds = 0
-                            trainingPaused = false
-                            showTimeUpDialog = false
-
-                            val warmupMin = if (TrainingBlocksStorage.isWarmupEnabled(context)) 6 else 0
-                            val psychoMin = if (TrainingBlocksStorage.isPsychologyEnabled(context)) 8 else 0
-                            val strengthMin = if (TrainingBlocksStorage.isStrengthEnabled(context)) 7 else 0
-                            val reserveMin = 5
-                            val budgetMain = (trainingMinutes - warmupMin - psychoMin - strengthMin - reserveMin)
-                                .coerceAtLeast(10)
-
-                            val dynamicIds = TrainingPlanner.buildDynamicMainExerciseIds(
-                                analysis = analysis,
-                                budgetMinutes = budgetMain,
-                                completedTrainingCount = completedCount
-                            )
-                            val baseMap = defaultMainExercises().associateBy { it.id }
-                            val fromPlanner = dynamicIds
-                                .mapNotNull { d -> baseMap[d.id]?.copy(minutes = d.minutes) }
-
-                            mainExercises = if (fromPlanner.isNotEmpty()) {
-                                fromPlanner
-                            } else {
-                                val fallback = defaultMainExercises().first()
-                                listOf(fallback.copy(minutes = budgetMain.coerceIn(5, 20)))
-                            }
-
-                            psychologyExercises = if (TrainingBlocksStorage.isPsychologyEnabled(context))
-                                defaultPsychologyExercises() else emptyList()
-                            strengthExercises = if (TrainingBlocksStorage.isStrengthEnabled(context))
-                                defaultStrengthExercises() else emptyList()
-
-                            val first = activePhases().firstOrNull() ?: TrainingBlockPhase.MAIN
-                            currentPhase = first
-                            currentExerciseIndex = 0
-                            exerciseStatuses = emptyMap()
-                            blockExerciseId = null
-                            extraGameId = null
+                // --- ТРЕНИРОВКА ---
+                "training", "training_settings", "training_progress", "training_warmup", "training_block", "training_exercise",
+                "training_summary", "training_free_next", "training_free_summary", "normatives", "normatives_exercise" -> {
+                    TrainingRoutes(
+                        screen = screen, onScreenChange = { screen = it },
+                        trainingRepository = trainingRepository, aroundClockRepository = aroundClockRepository, sectorRepository = sectorRepository,
+                        scoreSetRepository = scoreSetRepository, bigRoundRepository = bigRoundRepository, playerName = SettingsStorage.getPlayerName(context),
+                        context = context, scope = scope, trainingMinutes = trainingMinutes, isTrainingActive = isTrainingActive,
+                        trainingElapsedSeconds = trainingElapsedSeconds, trainingPaused = trainingPaused, onTogglePause = { trainingPaused = !trainingPaused },
+                        currentPhase = currentPhase.name, mainExercises = mainExercises, psychologyExercises = psychologyExercises, strengthExercises = strengthExercises,
+                        currentExerciseIndex = currentExerciseIndex, onCurrentExerciseIndexChange = { currentExerciseIndex = it }, exerciseStatuses = exerciseStatuses,
+                        onExerciseStatusesChange = { exerciseStatuses = it }, currentWeakness = currentWeakness, currentLevel = currentLevel, currentTargetGoals = currentTargetGoals,
+                        isFreeTraining = isFreeTraining, isSingleExercisePlay = isSingleExercisePlay, isSetupForTraining = isSetupForTraining, onIsSetupForTrainingChange = { isSetupForTraining = it },
+                        freeNoRepeat = freeNoRepeat, onToggleNoRepeat = { freeNoRepeat = it }, freeChooseMyself = freeChooseMyself, onToggleChooseMyself = { freeChooseMyself = it },
+                        freeCompletedIds = freeCompletedIds, onFreeCompletedIdsChange = { freeCompletedIds = it }, freeSkippedIds = freeSkippedIds, onFreeSkippedIdsChange = { freeSkippedIds = it },
+                        freeCurrentId = freeCurrentId, onFreeCurrentIdChange = { freeCurrentId = it }, freeRouletteKey = freeRouletteKey, freeExercisesCompleted = freeExercisesCompleted,
+                        onFreeExercisesCompletedChange = { freeExercisesCompleted = it }, showFreeNewRoundDialog = showFreeNewRoundDialog, onShowFreeNewRoundDialogChange = { showFreeNewRoundDialog = it },
+                        onFreePlayAction = { launchExercise(it ?: "") }, onFreePlayDirect = { id, isFriend ->
+                            if (isFriend && (id == "game501" || id == "cricket")) {
+                                isSetupForTraining = true; scope.launch { screen = if (id == "game501") "game501_setup" else "cricket_setup" }
+                            } else { freeCurrentId = id; launchExercise(id) }
+                        }, onFreeSkip = { id -> if (id != null) freeSkippedIds = freeSkippedIds + id; freeCurrentId = null }, onFreeFinish = { screen = "training_free_summary" },
+                        showRestTimer = showRestTimer, restTimerSeconds = restTimerSeconds, restNextTitle = restNextTitle,
+                        onSkipRestTimer = { showRestTimer = false; val step = pendingNextStep; pendingNextStep = null; restNextTitle = null; step?.invoke() },
+                        normativesAvailable = normativesAvailable, normativesActive = normativesActive, normativesStartLevel = normativesStartLevel,
+                        normativesCompletedSteps = normativesCompletedSteps, normativesNewLevel = normativesNewLevel, onStartStep = { launchNormativesStep(it) },
+                        onFinishNormatives = { normativesActive = false; normativesNewLevel = null; normativesCompletedSteps = emptySet(); isNormativesExercise = false; isTrainingActive = false; trainingSessionId = 0L; screen = "training" },
+                        onCancelNormatives = { cancelNormatives() }, exerciseStartMillis = exerciseStartMillis, trainingSessionId = trainingSessionId,
+                        onExerciseFinished = { id, blockType, score, darts, details ->
+                            val duration = if (exerciseStartMillis > 0L) ((System.currentTimeMillis() - exerciseStartMillis) / 1000L).toInt() else 0
                             exerciseStartMillis = 0L
-                            isTraining501 = false
-                            isTrainingCricket = false
-                            isTrainingActive = true
-                            isFreeTraining = false
-                            isSingleExercisePlay = false
-                            freeChooseMyself = false
-                            isSetupForTraining = false
-                            showRestTimer = false
-                            pendingNextStep = null
-
-                            TrainingStateStorage.save(
-                                context = context,
-                                sessionId = trainingSessionId,
-                                minutes = trainingMinutes,
-                                elapsedSeconds = 0,
-                                phaseName = first.name,
-                                exerciseIndex = 0,
-                                statuses = emptyMap(),
-                                mainExerciseIds = mainExercises.map { it.id to it.minutes },
-                                psychologyEnabled = psychologyExercises.isNotEmpty(),
-                                strengthEnabled = strengthExercises.isNotEmpty()
-                            )
-
-                            screen = if (first == TrainingBlockPhase.WARMUP) "training_warmup" else "training_block"
-                        }
-                    },
-                    onStartFreeTraining = {
-                        autoOpenTimeDialog = false
-                        scope.launch {
-                            val analysis = TrainingStatsAnalyzer.analyze(trainingRepository)
-                            val completedCount = trainingRepository.getCompletedSessionCount()
-                            currentWeakness = analysis.weakestType
-                            currentLevel = analysis.level
-                            currentTargetGoals = analysis.targetPracticeGoals
-
-                            val session = TrainingSession(
-                                dateMillis = System.currentTimeMillis(),
-                                plannedMinutes = 0,
-                                actualMinutes = 0,
-                                levelAtStart = analysis.level,
-                                mode = TrainingMode.FLEXIBLE,
-                                focus = analysis.weakestType,
-                                isControl = false,
-                                isCompleted = false
-                            )
-                            trainingSessionId = trainingRepository.insertSession(session)
-                            trainingElapsedSeconds = 0
-                            trainingPaused = false
-                            showTimeUpDialog = false
-                            trainingMinutes = 0
-
-                            val dynamicIds = TrainingPlanner.buildDynamicMainExerciseIds(
-                                analysis = analysis,
-                                budgetMinutes = 999,
-                                completedTrainingCount = completedCount,
-                                ignoreHardLimit = true
-                            )
-                            val baseMap = defaultMainExercises().associateBy { it.id }
-                            mainExercises = dynamicIds
-                                .mapNotNull { d -> baseMap[d.id]?.copy(minutes = d.minutes) }
-                                .ifEmpty { defaultMainExercises() }
-
-                            psychologyExercises = emptyList()
-                            strengthExercises = emptyList()
-
-                            currentPhase = TrainingBlockPhase.MAIN
-                            currentExerciseIndex = 0
-                            exerciseStatuses = emptyMap()
-                            blockExerciseId = null
-                            extraGameId = null
-                            exerciseStartMillis = 0L
-                            isTraining501 = false
-                            isTrainingCricket = false
-                            isTrainingActive = true
-                            isFreeTraining = true
-                            isSingleExercisePlay = false
-                            isSetupForTraining = false
-                            freeNoRepeat = false
-                            freeChooseMyself = false
-                            freeCompletedIds = emptySet()
-                            freeSkippedIds = emptySet()
-                            freeCurrentId = null
-                            freeRouletteKey = 0
-                            freeExercisesCompleted = 0
-                            showFreeNewRoundDialog = false
-                            showRestTimer = false
-                            pendingNextStep = null
-
-                            screen = "training_free_next"
-                        }
-                    },
-                    onStartNormatives = { startNewNormatives() },
-                    onOpenSettings = {
-                        autoOpenTimeDialog = false
-                        screen = "training_settings"
-                    },
-                    onOpenProgress = {
-                        autoOpenTimeDialog = false
-                        screen = "training_progress"
-                    },
-                    onBack = {
-                        if (isTrainingActive && trainingSessionId > 0L && !isFreeTraining && !normativesActive) {
-                            showExitTrainingDialog = true
-                        } else {
-                            autoOpenTimeDialog = true
-                            screen = "main"
-                        }
-                    }
-                )
-
-                "normatives" -> {
-                    NormativesScreen(
-                        playerName = SettingsStorage.getPlayerName(context),
-                        currentLevel = normativesStartLevel,
-                        completedSteps = normativesCompletedSteps,
-                        currentStep = currentNormativeStep(),
-                        newLevel = normativesNewLevel,
-                        onStartStep = { step -> launchNormativesStep(step) },
-                        onFinish = {
-                            normativesActive = false
-                            normativesNewLevel = null
-                            normativesCompletedSteps = emptySet()
-                            isNormativesExercise = false
-                            isTrainingActive = false
-                            trainingSessionId = 0L
-                            screen = "training"
-                        },
-                        onCancel = { cancelNormatives() }
-                    )
-                }
-
-                "normatives_exercise" -> {
-                    val step = currentNormativeStep()
-                    if (step == null) {
-                        screen = "normatives"
-                    } else {
-                        NormativesExerciseScreen(
-                            step = step,
-                            startMillis = exerciseStartMillis,
-                            trainingSessionId = trainingSessionId,
-                            trainingRepository = trainingRepository,
-                            sectorRepository = sectorRepository,
-                            bigRoundRepository = bigRoundRepository,
-                            scoreSetRepository = scoreSetRepository,
-                            onExerciseFinished = { stepId ->
-                                exerciseStartMillis = 0L
-                                normativesCompletedSteps = normativesCompletedSteps + stepId
-                                saveNormativesSnapshot()
-                                if (normativesCompletedSteps.size == NormativeStep.entries.size) {
-                                    evaluateAndFinishNormatives()
-                                } else {
-                                    isNormativesExercise = false
-                                    sectorToPlay = null
-                                    bigRoundCategory = null
-                                    screen = "normatives"
+                            if (isNormativesExercise) {
+                                normativesCompletedSteps = normativesCompletedSteps + id; saveNormativesSnapshot()
+                                if (normativesCompletedSteps.size == NormativeStep.entries.size) evaluateAndFinishNormatives()
+                                else { isNormativesExercise = false; sectorToPlay = null; bigRoundCategory = null; screen = "normatives" }
+                            } else {
+                                scope.launch {
+                                    trainingRepository.insertExerciseResult(ExerciseResult(trainingSessionId, blockType, id, score, darts, System.currentTimeMillis(), duration, details))
+                                    trainingRepository.updateTrainingRecordIfBetter(id, score, darts, id.startsWith("aroundclock_"))
                                 }
-                            },
-                            onBack = {
-                                isNormativesExercise = false
-                                sectorToPlay = null
-                                bigRoundCategory = null
-                                screen = "normatives"
+                                if (!isFreeTraining && !isSingleExercisePlay) exerciseStatuses = exerciseStatuses.toMutableMap().apply { put(currentExerciseIndex, SummaryStatus.DONE) }
+                                advanceAfterExercise(id)
                             }
-                        )
-                    }
-                }
-
-                "training_settings" -> TrainingSettingsScreen(
-                    repository = trainingRepository,
-                    onBack = { screen = "training" }
-                )
-
-                "training_progress" -> TrainingProgressScreen(
-                    repository = trainingRepository,
-                    onBack = { screen = "training" }
-                )
-
-                "training_warmup" -> TrainingWarmupScreen(
-                    longWarmup = trainingMinutes >= 100,
-                    onFinish = {
-                        val next = nextPhaseAfter(TrainingBlockPhase.WARMUP)
-                        currentPhase = next
-                        currentExerciseIndex = 0
-                        exerciseStatuses = emptyMap()
-                        if (next == TrainingBlockPhase.FINISHED) {
-                            screen = "training_summary"
-                        } else {
-                            screen = "training_block"
-                        }
-                    },
-                    onBack = { screen = "training" }
-                )
-
-                "training_block" -> {
-                    val list = exercisesForPhase(currentPhase)
-                    TrainingBlockScreen(
-                        exercises = list,
-                        currentIndex = currentExerciseIndex,
-                        onStartCurrent = {
-                            val current = list.getOrNull(currentExerciseIndex)
-                            if (current != null) launchExercise(current.id)
                         },
-                        onSkipCurrent = {
-                            exerciseStatuses = exerciseStatuses.toMutableMap().apply {
-                                put(currentExerciseIndex, SummaryStatus.SKIPPED)
-                            }
-                            if (currentExerciseIndex + 1 < list.size) currentExerciseIndex += 1
-                            else screen = "training_summary"
-                        },
-                        onBack = { showExitTrainingDialog = true }
-                    )
-                }
-
-                "training_free_next" -> {
-                    val current = mainExercises.firstOrNull { it.id == freeCurrentId }
-
-                    if (current == null && !freeChooseMyself) {
-                        LaunchedEffect(freeCurrentId, showFreeNewRoundDialog) {
-                            if (freeCurrentId == null && !showFreeNewRoundDialog) {
-                                pickNextFreeExercise()
-                            }
-                        }
-                        Box(modifier = Modifier.fillMaxSize())
-                    } else {
-                        key(freeRouletteKey) {
-                            FreeRouletteScreen(
-                                finalExercise = current,
-                                allExercises = mainExercises,
-                                completedCount = freeExercisesCompleted,
-                                noRepeat = freeNoRepeat,
-                                onToggleNoRepeat = { newValue ->
-                                    freeNoRepeat = newValue
-                                    if (newValue) {
-                                        freeSkippedIds = emptySet()
-                                    } else {
-                                        freeSkippedIds = emptySet()
-                                        freeCompletedIds = emptySet()
-                                    }
-                                },
-                                chooseMyself = freeChooseMyself,
-                                onToggleChooseMyself = { newValue ->
-                                    freeChooseMyself = newValue
-                                },
-                                onPlay = { launchExercise(current?.id ?: "") },
-                                onPlayDirect = { id, isWithFriend ->
-                                    if (isWithFriend && (id == "game501" || id == "cricket")) {
-                                        isSetupForTraining = true
-                                        autoOpenTimeDialog = false
-                                        scope.launch {
-                                            val analysis = TrainingStatsAnalyzer.analyze(trainingRepository)
-                                            currentWeakness = analysis.weakestType
-                                            currentLevel = analysis.level
-                                            currentTargetGoals = analysis.targetPracticeGoals
-
-                                            val session = TrainingSession(
-                                                dateMillis = System.currentTimeMillis(),
-                                                plannedMinutes = 0,
-                                                actualMinutes = 0,
-                                                levelAtStart = analysis.level,
-                                                mode = TrainingMode.FLEXIBLE,
-                                                focus = null,
-                                                isControl = false,
-                                                isCompleted = false
-                                            )
-                                            trainingSessionId = trainingRepository.insertSession(session)
-                                            trainingElapsedSeconds = 0
-                                            trainingPaused = false
-                                            isTrainingActive = true
-                                            isFreeTraining = true
-                                            isSingleExercisePlay = false
-                                            
-                                            screen = if (id == "game501") "game501_setup" else "cricket_setup"
-                                        }
-                                    } else {
-                                        freeCurrentId = id
-                                        launchExercise(id)
-                                    }
-                                },
-                                onSkip = {
-                                    freeSkippedIds = freeSkippedIds + (current?.id ?: "")
-                                    freeCurrentId = null
-                                },
-                                onFinish = { screen = "training_free_summary" }
-                            )
-                        }
-                    }
-                }
-
-                "training_free_summary" -> {
-                    FreeTrainingSummaryScreen(
-                        playerName = SettingsStorage.getPlayerName(context),
-                        sessionId = trainingSessionId,
-                        actualSeconds = trainingElapsedSeconds,
-                        repository = trainingRepository,
-                        onFinishTraining = {
-                            resetTrainingState()
-                            TrainingStateStorage.clear(context)
+                        onBackFromNormativesExercise = { isNormativesExercise = false; sectorToPlay = null; bigRoundCategory = null; screen = "normatives" },
+                        onStartTrainingClick = {
                             autoOpenTimeDialog = false
-                            screen = "main"
-                        }
-                    )
-                }
-
-                "training_exercise" -> {
-                    val list = exercisesForPhase(currentPhase)
-                    val current = if (isFreeTraining) {
-                        mainExercises.firstOrNull { it.id == freeCurrentId }
-                    } else {
-                        list.getOrNull(currentExerciseIndex)
-                    }
-                    if (current == null) {
-                        screen = if (isFreeTraining) "training_free_next" else "training_block"
-                    } else if (currentPhase != TrainingBlockPhase.MAIN) {
-                        TrainingExercisePlaceholder(
-                            title = current.title,
-                            description = current.whyImportant,
-                            onDone = {
-                                val duration = if (exerciseStartMillis > 0L)
-                                    ((System.currentTimeMillis() - exerciseStartMillis) / 1000L).toInt()
-                                else 0
-                                exerciseStartMillis = 0L
-
-                                if (currentPhase == TrainingBlockPhase.PSYCHOLOGY) {
-                                    scope.launch {
-                                        trainingRepository.insertExerciseResult(
-                                            ExerciseResult(
-                                                sessionId = trainingSessionId,
-                                                blockType = BlockType.WARMUP,
-                                                exerciseId = current.id,
-                                                score = 0,
-                                                dartsThrown = 0,
-                                                timestamp = System.currentTimeMillis(),
-                                                durationSeconds = duration,
-                                                detailsJson = ""
-                                            )
-                                        )
-                                    }
-                                }
-
-                                exerciseStatuses = exerciseStatuses.toMutableMap().apply {
-                                    put(currentExerciseIndex, SummaryStatus.DONE)
-                                }
-                                if (currentExerciseIndex + 1 < list.size) {
-                                    currentExerciseIndex += 1; screen = "training_block"
-                                } else screen = "training_summary"
-                            },
-                            onBack = {
-                                screen = if (isFreeTraining) "training_free_next" else "training_block"
-                            }
-                        )
-                    } else {
-                        if (current.id == "targeted_practice") {
-                            TargetedPracticeScreen(
-                                targets = currentTargetGoals,
-                                dartsPerTarget = 15,
-                                onFinish = { hits, totalDarts ->
-                                    val duration = if (exerciseStartMillis > 0L)
-                                        ((System.currentTimeMillis() - exerciseStartMillis) / 1000L).toInt()
-                                    else 0
-                                    exerciseStartMillis = 0L
-
-                                    scope.launch {
-                                        trainingRepository.insertExerciseResult(
-                                            ExerciseResult(
-                                                sessionId = trainingSessionId,
-                                                blockType = BlockType.SCORE,
-                                                exerciseId = "targeted_practice",
-                                                score = hits,
-                                                dartsThrown = totalDarts,
-                                                timestamp = System.currentTimeMillis(),
-                                                durationSeconds = duration,
-                                                detailsJson = ""
-                                            )
-                                        )
-                                        trainingRepository.updateTrainingRecordIfBetter(
-                                            exerciseId = "targeted_practice",
-                                            score = hits,
-                                            darts = totalDarts,
-                                            lowerDartsBetter = false
-                                        )
-                                    }
-                                    if (!isFreeTraining && !isSingleExercisePlay) {
-                                        exerciseStatuses = exerciseStatuses.toMutableMap().apply {
-                                            put(currentExerciseIndex, SummaryStatus.DONE)
-                                        }
-                                    }
-                                    advanceAfterExercise(current.id)
-                                },
-                                onBack = {
-                                    if (isSingleExercisePlay) {
-                                        isSingleExercisePlay = false
-                                        isTrainingActive = false
-                                        trainingSessionId = 0L
-                                        isFreeTraining = false
-                                        screen = "main"
-                                    } else {
-                                        screen = if (isFreeTraining) "training_free_next" else "training_block"
-                                    }
-                                }
-                            )
-                        } else {
-                            MainExerciseRunner(
-                                exerciseId = current.id,
-                                playerLevel = currentLevel,
-                                aroundClockRepository = aroundClockRepository,
-                                sectorRepository = sectorRepository,
-                                scoreSetRepository = scoreSetRepository,
-                                bigRoundRepository = bigRoundRepository,
-                                trainingRepository = trainingRepository,
-                                onFinish = { blockType, score, darts, details ->
-                                    val duration = if (exerciseStartMillis > 0L)
-                                        ((System.currentTimeMillis() - exerciseStartMillis) / 1000L).toInt()
-                                    else 0
-                                    exerciseStartMillis = 0L
-
-                                    scope.launch {
-                                        trainingRepository.insertExerciseResult(
-                                            ExerciseResult(
-                                                sessionId = trainingSessionId,
-                                                blockType = blockType,
-                                                exerciseId = current.id,
-                                                score = score,
-                                                dartsThrown = darts,
-                                                timestamp = System.currentTimeMillis(),
-                                                durationSeconds = duration,
-                                                detailsJson = details
-                                            )
-                                        )
-                                        val lowerDartsBetter = current.id.startsWith("aroundclock_")
-                                        trainingRepository.updateTrainingRecordIfBetter(
-                                            exerciseId = current.id,
-                                            score = score,
-                                            darts = darts,
-                                            lowerDartsBetter = lowerDartsBetter
-                                        )
-                                    }
-                                    if (!isFreeTraining && !isSingleExercisePlay) {
-                                        exerciseStatuses = exerciseStatuses.toMutableMap().apply {
-                                            put(currentExerciseIndex, SummaryStatus.DONE)
-                                        }
-                                    }
-                                    advanceAfterExercise(current.id)
-                                },
-                                onBack = {
-                                    if (isSingleExercisePlay) {
-                                        isSingleExercisePlay = false
-                                        isTrainingActive = false
-                                        trainingSessionId = 0L
-                                        isFreeTraining = false
-                                        screen = "main"
-                                    } else {
-                                        screen = if (isFreeTraining) "training_free_next" else "training_block"
-                                    }
-                                }
-                            )
-                        }
-                    }
-                }
-
-                "training_summary" -> {
-                    val list = exercisesForPhase(currentPhase)
-                    val summaries = list.mapIndexed { index, ex ->
-                        ExerciseSummary(
-                            title = ex.title,
-                            minutes = ex.minutes,
-                            status = exerciseStatuses[index] ?: SummaryStatus.NOT_DONE
-                        )
-                    }
-                    val recommendedIds = recommendedGameIds(currentWeakness)
-                    val isLast = isLastActivePhase(currentPhase)
-
-                    TrainingSummaryScreen(
-                        playerName = SettingsStorage.getPlayerName(context),
-                        planMinutes = trainingMinutes,
-                        actualSeconds = trainingElapsedSeconds,
-                        exercises = summaries,
-                        blockType = blockTypeForPhase(currentPhase),
-                        blockExercises = blockItemsForPhase(currentPhase, recommendedIds),
-                        isLastBlock = isLast,
-                        recommendedIds = recommendedIds,
-                        onContinue = {
-                            if (isLast) {
-                                resetTrainingState()
-                                TrainingStateStorage.clear(context)
-                                autoOpenTimeDialog = false
-                                screen = "main"
-                            } else {
-                                goToNextPhase()
-                            }
-                        },
-                        onPlayExercise = { id -> launchExercise(id) },
-                        onPlayGame = { id ->
-                            extraGameId = id
-                            exerciseStartMillis = System.currentTimeMillis()
-                            screen = "training_extra_game"
-                        },
-                        onFinishTraining = {
-                            resetTrainingState()
-                            TrainingStateStorage.clear(context)
-                            autoOpenTimeDialog = false
-                            screen = "main"
-                        }
-                    )
-                }
-
-                "training_block_exercise" -> {
-                    val id = blockExerciseId
-                    if (id == null) {
-                        screen = "training_summary"
-                    } else {
-                        val title = blockItemsForPhase(currentPhase, recommendedGameIds(currentWeakness))
-                            .firstOrNull { it.id == id }?.title ?: "Упражнение"
-                        TrainingExercisePlaceholder(
-                            title = title,
-                            description = "",
-                            onDone = {
-                                exerciseStartMillis = 0L
-                                blockExerciseId = null
-                                screen = "training_summary"
-                            },
-                            onBack = {
-                                exerciseStartMillis = 0L
-                                blockExerciseId = null
-                                screen = "training_summary"
-                            }
-                        )
-                    }
-                }
-
-                "training_extra_game" -> {
-                    val gameId = extraGameId
-                    if (gameId == null) screen = "training_summary"
-                    else {
-                        MainExerciseRunner(
-                            exerciseId = gameId,
-                            playerLevel = currentLevel,
-                            aroundClockRepository = aroundClockRepository,
-                            sectorRepository = sectorRepository,
-                            scoreSetRepository = scoreSetRepository,
-                            bigRoundRepository = bigRoundRepository,
-                            trainingRepository = trainingRepository,
-                            onFinish = { blockType, score, darts, details ->
-                                val duration = if (exerciseStartMillis > 0L)
-                                    ((System.currentTimeMillis() - exerciseStartMillis) / 1000L).toInt()
-                                else 0
-                                exerciseStartMillis = 0L
-
-                                scope.launch {
-                                    trainingRepository.insertExerciseResult(
-                                        ExerciseResult(
-                                            sessionId = trainingSessionId,
-                                            blockType = blockType,
-                                            exerciseId = "extra_" + gameId,
-                                            score = score,
-                                            dartsThrown = darts,
-                                            timestamp = System.currentTimeMillis(),
-                                            durationSeconds = duration,
-                                            detailsJson = details
-                                        )
-                                    )
-                                    val lowerDartsBetter = gameId.startsWith("aroundclock_")
-                                    trainingRepository.updateTrainingRecordIfBetter(
-                                        exerciseId = gameId,
-                                        score = score,
-                                        darts = darts,
-                                        lowerDartsBetter = lowerDartsBetter
-                                    )
-                                }
-                                extraGameId = null
-                                screen = "training_summary"
-                            },
-                            onBack = {
-                                exerciseStartMillis = 0L
-                                extraGameId = null
-                                screen = "training_summary"
-                            }
-                        )
-                    }
-                }
-
-                "game_select" -> GameSelectScreen(
-                    onCricket = { screen = "cricket_setup" },
-                    on501 = { screen = "game501_setup" },
-                    onSector = { screen = "sector_setup" },
-                    onAroundClock = { screen = "aroundclock_setup" },
-                    onBigRound = { screen = "biground_setup" },
-                    onScoreSet = { screen = "scoreset_setup" },
-                    onBack = { screen = "main" }
-                )
-
-                "cricket_setup" -> CricketSetupScreen(
-                    playerName = SettingsStorage.getPlayerName(context),
-                    onStartGame = { type, players, legsPerSet, setsPerMatch, isPairGame, startingTeam, autoOkSeconds ->
-                        cricketGame = CricketLogic.newGame(
-                            type, players, legsPerSet, setsPerMatch, isPairGame,
-                            startingTeam, autoOkSeconds, sessionStartTime, sessionForm
-                        )
-                        cricketExistingId = 0L
-                        isTrainingCricket = isSetupForTraining
-                        if (isSetupForTraining) isSetupForTraining = false
-                        screen = "cricket_game"
-                    },
-                    onBack = {
-                        if (isSetupForTraining) {
-                            isSetupForTraining = false
-                            isTrainingActive = false
-                            trainingSessionId = 0L
-                            isFreeTraining = false
-                            isSingleExercisePlay = false
-                            screen = "training_free_next"
-                        } else {
-                            screen = "game_select"
-                        }
-                    }
-                )
-
-                "cricket_game" -> {
-                    val g = cricketGame
-                    if (g != null) CricketGameScreen(
-                        repository = cricketRepository,
-                        freePlayRecordsRepository = freePlayRecordsRepository,
-                        initialGame = g,
-                        existingId = cricketExistingId,
-                        isTrainingMode = isTrainingCricket,
-                        trainingRepository = trainingRepository,
-                        onGameFinish = { f, id ->
-                            if (isTrainingCricket) {
-                                val playerWon = f.winnerIndex == 0
-                                val player = f.players.getOrNull(0)
-                                val mpr = player?.let { p ->
-                                    if (p.matchDartsThrown > 0) {
-                                        val marks = p.matchHits.values.sum().toFloat()
-                                        marks / (p.matchDartsThrown / 3f)
-                                    } else 0f
-                                } ?: 0f
-                                val mprStr = String.format(Locale.US, "%.1f", mpr)
-                                val dur = if (exerciseStartMillis > 0L)
-                                    ((System.currentTimeMillis() - exerciseStartMillis) / 1000L).toInt()
-                                else 0
-                                exerciseStartMillis = 0L
-                                val botPlayer = g.players.getOrNull(1)
-                                if (botPlayer?.isBot == true) {
-                                    TrainingBotLevelStorage.updateLevelCricket(context, botPlayer.botLevel, playerWon)
-                                }
-                                val isNorm = isNormativesExercise
-                                
-                                // СОБИРАЕМ ДОПОЛНИТЕЛЬНУЮ СТАТИСТИКУ КРИКЕТА
-                                val c9r = player?.matchPerfectRounds ?: 0
-                                val c6r = player?.matchStrongRounds ?: 0
-                                val miss = player?.matchMissesThrown ?: 0
-                                val tripl = player?.matchTriplesHit ?: 0
-                                val bulla = player?.matchBullAttempts ?: 0
-                                val bullh = player?.matchBullHits ?: 0
-
-                                val details = "won=$playerWon;mpr=$mprStr" +
-                                        ";c9r=$c9r;c6r=$c6r;miss=$miss;tripl=$tripl;bulla=$bulla;bullh=$bullh"
-
-                                scope.launch {
-                                    trainingRepository.insertExerciseResult(
-                                        ExerciseResult(
-                                            sessionId = trainingSessionId,
-                                            blockType = BlockType.CRICKET,
-                                            exerciseId = "cricket",
-                                            score = mpr.toInt(),
-                                            dartsThrown = player?.matchDartsThrown ?: 0,
-                                            timestamp = System.currentTimeMillis(),
-                                            durationSeconds = dur,
-                                            detailsJson = details
-                                        )
-                                    )
-                                }
-                                isTrainingCricket = false
-                                cricketGame = null
-                                cricketExistingId = 0L
-
-                                if (isNorm) {
-                                    afterNormativesLeg(playerWon, isGame501 = false)
-                                } else {
-                                    finishCurrentMainExercise()
-                                }
-                            } else {
-                                scope.launch { cricketRepository.saveGame(f, existingId = id) }
-                                cricketGame = f; cricketExistingId = 0L; screen = "cricket_stats"
-                            }
-                        },
-                        onBack = {
-                            val wasTraining = isTrainingCricket
-                            val wasNorm = isNormativesExercise
-                            isTrainingCricket = false
-                            isNormativesExercise = false
-                            cricketGame = null; cricketExistingId = 0L
-                            screen = when {
-                                wasNorm -> "normatives"
-                                isSingleExercisePlay -> {
-                                    isSingleExercisePlay = false
-                                    isTrainingActive = false
-                                    trainingSessionId = 0L
-                                    isFreeTraining = false
-                                    "main"
-                                }
-                                wasTraining -> if (isFreeTraining) "training_free_next" else "training_block"
-                                else -> "game_select"
-                            }
-                        }
-                    ) else screen = "cricket_setup"
-                }
-
-                "cricket_stats" -> {
-                    val g = cricketGame
-                    if (g != null) CricketStatsScreen(
-                        game = g,
-                        onPlayAgain = { screen = "cricket_setup" },
-                        onBackToMenu = { cricketGame = null; screen = "main" }
-                    ) else screen = "main"
-                }
-
-                "game501_setup" -> Game501SetupScreen(
-                    playerName = SettingsStorage.getPlayerName(context),
-                    onStartGame = { gameType, outMode, players, legsPerSet, setsPerMatch, isPairGame, startingTeam, autoOkSeconds ->
-                        game501 = Game501Logic.newGame(
-                            gameType, outMode, players, legsPerSet, setsPerMatch, isPairGame,
-                            startingTeam, autoOkSeconds, sessionStartTime, sessionForm
-                        )
-                        game501ExistingId = 0L
-                        isTraining501 = isSetupForTraining
-                        if (isSetupForTraining) isSetupForTraining = false
-                        screen = "game501_game"
-                    },
-                    onBack = {
-                        if (isSetupForTraining) {
-                            isSetupForTraining = false
-                            isTrainingActive = false
-                            trainingSessionId = 0L
-                            isFreeTraining = false
-                            isSingleExercisePlay = false
-                            screen = "training_free_next"
-                        } else {
-                            screen = "game_select"
-                        }
-                    }
-                )
-
-                "game501_game" -> {
-                    val g = game501
-                    if (g != null) Game501Screen(
-                        repository = game501Repository,
-                        freePlayRecordsRepository = freePlayRecordsRepository,
-                        initialGame = g,
-                        existingId = game501ExistingId,
-                        isTrainingMode = isTraining501,
-                        trainingRepository = trainingRepository,
-                        onGameFinish = { f, id ->
-                            if (isTraining501) {
-                                val playerWon = f.winnerIndex == 0
-                                val player = f.players.getOrNull(0)
-                                val ppr = player?.let { p -> Game501Logic.matchPpr(p) } ?: 0.0
-                                val dbl = player?.let { p -> Game501Logic.doublesAccuracy(p) } ?: 0.0
-                                val pprStr = String.format(Locale.US, "%.1f", ppr)
-                                val dblStr = dbl.toInt().toString()
-                                val closeValues = player?.listOfCloseValues ?: emptyList()
-                                val dur = if (exerciseStartMillis > 0L)
-                                    ((System.currentTimeMillis() - exerciseStartMillis) / 1000L).toInt()
-                                else 0
-                                exerciseStartMillis = 0L
-                                val botPlayer = g.players.getOrNull(1)
-                                if (botPlayer?.isBot == true) {
-                                    TrainingBotLevelStorage.updateLevel501(context, botPlayer.botLevel, playerWon)
-                                }
-                                val isNorm = isNormativesExercise
-                                
-                                // СОБИРАЕМ ДОПОЛНИТЕЛЬНУЮ СТАТИСТИКУ
-                                val c180 = player?.matchCount180 ?: 0
-                                val c170 = player?.matchCount170plus ?: 0
-                                val c130 = player?.matchCount130plus ?: 0
-                                val c90 = player?.matchCount90plus ?: 0
-                                val c57p = player?.matchCount57plus ?: 0
-                                val c57m = player?.matchCount57minus ?: 0
-                                val first9 = player?.listOfFirst9Ppr?.average() ?: 0.0
-
-                                val details = "won=$playerWon;ppr=$pprStr;dbl=$dblStr" +
-                                        ";c180=$c180;c170=$c170;c130=$c130;c90=$c90;c57p=$c57p;c57m=$c57m" +
-                                        ";first9=${String.format(Locale.US, "%.2f", first9)}"
-
-                                scope.launch {
-                                    trainingRepository.insertExerciseResult(
-                                        ExerciseResult(
-                                            sessionId = trainingSessionId,
-                                            blockType = BlockType.GAME_501,
-                                            exerciseId = "game501",
-                                            score = ppr.toInt(),
-                                            dartsThrown = player?.matchDarts ?: 0,
-                                            timestamp = System.currentTimeMillis(),
-                                            durationSeconds = dur,
-                                            detailsJson = details
-                                        )
-                                    )
-                                    closeValues.forEach { value ->
-                                        trainingRepository.recordCheckout(value)
-                                    }
-                                }
-                                isTraining501 = false
-                                game501 = null
-                                game501ExistingId = 0L
-
-                                if (isNorm) {
-                                    afterNormativesLeg(playerWon, isGame501 = true)
-                                } else {
-                                    finishCurrentMainExercise()
-                                }
-                            } else {
-                                scope.launch { game501Repository.saveGame(f, existingId = id) }
-                                game501 = f; game501ExistingId = 0L; screen = "game501_stats"
-                            }
-                        },
-                        onBack = {
-                            val wasTraining = isTraining501
-                            val wasNorm = isNormativesExercise
-                            isTraining501 = false
-                            isNormativesExercise = false
-                            game501 = null; game501ExistingId = 0L
-                            screen = when {
-                                wasNorm -> "normatives"
-                                isSingleExercisePlay -> {
-                                    isSingleExercisePlay = false
-                                    isTrainingActive = false
-                                    trainingSessionId = 0L
-                                    isFreeTraining = false
-                                    "main"
-                                }
-                                wasTraining -> if (isFreeTraining) "training_free_next" else "training_block"
-                                else -> "game_select"
-                            }
-                        }
-                    ) else screen = "game501_setup"
-                }
-
-                "game501_stats" -> {
-                    val g = game501
-                    if (g != null) Game501StatsScreen(
-                        game = g,
-                        onPlayAgain = { screen = "game501_setup" },
-                        onBackToMenu = { game501 = null; screen = "main" }
-                    ) else screen = "main"
-                }
-
-                "sector_setup" -> SectorSetupScreen(
-                    sectorRepository = sectorRepository,
-                    onStartGame = { s -> sectorToPlay = s; screen = "sector_game" },
-                    onOpenStats = { screen = "sector_stats" },
-                    onBack = { screen = "game_select" }
-                )
-
-                "sector_game" -> {
-                    val s = sectorToPlay
-                    if (s != null) SectorGameScreen(
-                        sector = s, repository = sectorRepository,
-                        isTrainingMode = false,
-                        onFinish = { _ -> sectorToPlay = null; screen = "game_select" },
-                        onBack = { screen = "game_select" }
-                    ) else screen = "sector_setup"
-                }
-
-                "sector_stats" -> SectorStatsScreen(
-                    repository = sectorRepository,
-                    onBack = { statsMenuKey++; screen = "stats_menu" }
-                )
-
-                "aroundclock_setup" -> AroundClockSetupScreen(
-                    playerName = SettingsStorage.getPlayerName(context),
-                    repository = aroundClockRepository,
-                    onStartGame = { t, o, h -> aroundClockTarget = t; aroundClockOrder = o; aroundClockHits = h; screen = "aroundclock_game" },
-                    onOpenStats = { screen = "aroundclock_stats" },
-                    onBack = { screen = "game_select" }
-                )
-
-                "aroundclock_game" -> {
-                    val t = aroundClockTarget; val o = aroundClockOrder
-                    if (t != null && o != null) AroundClockGameScreen(
-                        target = t, order = o, hitsRequired = aroundClockHits,
-                        repository = aroundClockRepository,
-                        onFinish = { td, c, sr ->
+                            trainingMinutes = context.getSharedPreferences("training_prefs", android.content.Context.MODE_PRIVATE).getInt("session_minutes", SettingsStorage.getTrainingMinutes(context))
                             scope.launch {
-                                aroundClockRepository.saveGame(t, o, aroundClockHits, td, c, sr)
+                                val analysis = TrainingStatsAnalyzer.analyze(trainingRepository)
+                                val completedCount = trainingRepository.getCompletedSessionCount()
+                                currentWeakness = analysis.weakestType; currentLevel = analysis.level; currentTargetGoals = analysis.targetPracticeGoals
+                                val session = TrainingSession(System.currentTimeMillis(), trainingMinutes, 0, analysis.level, TrainingMode.FLEXIBLE, analysis.weakestType, false, false)
+                                trainingSessionId = trainingRepository.insertSession(session)
+                                trainingElapsedSeconds = 0; trainingPaused = false; showTimeUpDialog = false
+                                val warmupMin = if (TrainingBlocksStorage.isWarmupEnabled(context)) 6 else 0
+                                val psychoMin = if (TrainingBlocksStorage.isPsychologyEnabled(context)) 8 else 0
+                                val strengthMin = if (TrainingBlocksStorage.isStrengthEnabled(context)) 7 else 0
+                                val budgetMain = (trainingMinutes - warmupMin - psychoMin - strengthMin - 5).coerceAtLeast(10)
+                                val dynamicIds = TrainingPlanner.buildDynamicMainExerciseIds(analysis, budgetMain, completedCount)
+                                val baseMap = defaultMainExercises().associateBy { it.id }
+                                mainExercises = dynamicIds.mapNotNull { d -> baseMap[d.id]?.copy(minutes = d.minutes) }.ifEmpty { listOf(defaultMainExercises().first().copy(minutes = budgetMain.coerceIn(5, 20))) }
+                                psychologyExercises = if (TrainingBlocksStorage.isPsychologyEnabled(context)) defaultPsychologyExercises() else emptyList()
+                                strengthExercises = if (TrainingBlocksStorage.isStrengthEnabled(context)) defaultStrengthExercises() else emptyList()
+                                currentPhase = activePhases().firstOrNull() ?: TrainingBlockPhase.MAIN
+                                currentExerciseIndex = 0; exerciseStatuses = emptyMap(); isTrainingActive = true; isFreeTraining = false
+                                TrainingStateStorage.save(context, trainingSessionId, trainingMinutes, 0, currentPhase.name, 0, emptyMap(), mainExercises.map { it.id to it.minutes }, psychologyExercises.isNotEmpty(), strengthExercises.isNotEmpty())
+                                screen = if (currentPhase == TrainingBlockPhase.WARMUP) "training_warmup" else "training_block"
                             }
-                            aroundClockTarget = null; aroundClockOrder = null; aroundClockHits = 1
-                            screen = "game_select"
                         },
-                        onBack = { screen = "game_select" }
-                    ) else screen = "aroundclock_setup"
+                        onStartFreeTrainingClick = {
+                            autoOpenTimeDialog = false
+                            scope.launch {
+                                val analysis = TrainingStatsAnalyzer.analyze(trainingRepository)
+                                val completedCount = trainingRepository.getCompletedSessionCount()
+                                currentWeakness = analysis.weakestType; currentLevel = analysis.level; currentTargetGoals = analysis.targetPracticeGoals
+                                val session = TrainingSession(System.currentTimeMillis(), 0, 0, analysis.level, TrainingMode.FLEXIBLE, analysis.weakestType, false, false)
+                                trainingSessionId = trainingRepository.insertSession(session)
+                                trainingElapsedSeconds = 0; trainingPaused = false; trainingMinutes = 0
+                                val dynamicIds = TrainingPlanner.buildDynamicMainExerciseIds(analysis, 999, completedCount, ignoreHardLimit = true)
+                                val baseMap = defaultMainExercises().associateBy { it.id }
+                                mainExercises = dynamicIds.mapNotNull { d -> baseMap[d.id]?.copy(minutes = d.minutes) }.ifEmpty { defaultMainExercises() }
+                                psychologyExercises = emptyList(); strengthExercises = emptyList()
+                                currentPhase = TrainingBlockPhase.MAIN; currentExerciseIndex = 0; exerciseStatuses = emptyMap()
+                                isTrainingActive = true; isFreeTraining = true; freeNoRepeat = false; freeChooseMyself = false
+                                freeCompletedIds = emptySet(); freeSkippedIds = emptySet(); freeCurrentId = null; freeRouletteKey = 0; freeExercisesCompleted = 0
+                                screen = "training_free_next"
+                            }
+                        },
+                        onStartNormativesClick = { startNewNormatives() }, onOpenSettingsClick = { screen = "training_settings" }, onOpenProgressClick = { screen = "training_progress" },
+                        onBackFromTrainingClick = { if (isTrainingActive && trainingSessionId > 0L && !isFreeTraining && !normativesActive) showExitTrainingDialog = true else { screen = "main" } },
+                        onWarmupFinish = {
+                            val next = nextPhaseAfter(TrainingBlockPhase.WARMUP); currentPhase = next; currentExerciseIndex = 0; exerciseStatuses = emptyMap()
+                            screen = if (next == TrainingBlockPhase.FINISHED) "training_summary" else "training_block"
+                        },
+                        onStartCurrentExercise = { current -> launchExercise(current.id) },
+                        onSkipCurrentExercise = { list ->
+                            exerciseStatuses = exerciseStatuses.toMutableMap().apply { put(currentExerciseIndex, SummaryStatus.SKIPPED) }
+                            if (currentExerciseIndex + 1 < list.size) currentExerciseIndex += 1 else screen = "training_summary"
+                        },
+                        onBackFromBlock = { showExitTrainingDialog = true }, onFinishFreeTraining = { resetTrainingState(); TrainingStateStorage.clear(context); screen = "main" },
+                        showExitTrainingDialog = showExitTrainingDialog, onShowExitTrainingDialogChange = { showExitTrainingDialog = it },
+                        onSaveAndPostpone = { showExitTrainingDialog = false; saveCurrentTrainingState(); screen = "main" },
+                        onFinishAndClear = { resetTrainingState(); TrainingStateStorage.clear(context); screen = "main" },
+                        showResumeDialog = showResumeDialog, onShowResumeDialogChange = { showResumeDialog = it },
+                        showTimeUpDialog = showTimeUpDialog, onShowTimeUpDialogChange = { showTimeUpDialog = it },
+                        onTimeUpFinish = { showTimeUpDialog = false; resetTrainingState(); TrainingStateStorage.clear(context); screen = "training" },
+                        onTimeUpContinue = { showTimeUpDialog = false; trainingMinutes += 20 }, restSeconds = 0
+                    )
                 }
 
-                "aroundclock_stats" -> AroundClockStatsScreen(
-                    repository = aroundClockRepository,
-                    onBack = { statsMenuKey++; screen = "stats_menu" }
-                )
-
-                "biground_setup" -> BigRoundSetupScreen(
-                    playerName = SettingsStorage.getPlayerName(context),
-                    repository = bigRoundRepository,
-                    onStartGame = { c -> bigRoundCategory = c; screen = "biground_game" },
-                    onOpenStats = { screen = "biground_stats" },
-                    onBack = { screen = "game_select" }
-                )
-
-                "biground_game" -> {
-                    val c = bigRoundCategory
-                    if (c != null) com.lodkin.dartstrainer.ui.biground.BigRoundGameScreen(
-                        category = c, repository = bigRoundRepository,
-                        isTrainingMode = false,
-                        onFinish = { _ -> bigRoundCategory = null; screen = "game_select" },
-                        onBack = { screen = "game_select" }
-                    ) else screen = "biground_setup"
-                }
-
-                "biground_stats" -> BigRoundStatsScreen(
-                    repository = bigRoundRepository,
-                    onBack = { statsMenuKey++; screen = "stats_menu" }
-                )
-
-                "scoreset_setup" -> ScoreSetSetupScreen(
-                    playerName = SettingsStorage.getPlayerName(context),
-                    repository = scoreSetRepository,
-                    onStartGame = { screen = "scoreset_game" },
-                    onOpenStats = { screen = "scoreset_stats" },
-                    onBack = { screen = "game_select" }
-                )
-
-                "scoreset_game" -> com.lodkin.dartstrainer.ui.scoreset.ScoreSetGameScreen(
-                    repository = scoreSetRepository,
-                    isTrainingMode = false,
-                    onFinish = { ts, ap ->
-                        scope.launch { scoreSetRepository.saveGame(ts, ap) }
-                        screen = "game_select"
-                    },
-                    onBack = { screen = "game_select" }
-                )
-
-                "scoreset_stats" -> ScoreSetStatsScreen(
-                    repository = scoreSetRepository,
-                    onBack = { statsMenuKey++; screen = "stats_menu" }
-                )
+                "settings" -> SettingsScreen(onBack = { screen = "main" }, onOpenAbout = { screen = "about" }, onFactoryReset = {
+                    cricketGame = null; cricketExistingId = 0L; game501 = null; game501ExistingId = 0L; sectorToPlay = null
+                    aroundClockTarget = null; aroundClockOrder = null; aroundClockHits = 1; bigRoundCategory = null
+                    NormativesStateStorage.clear(context); resetTrainingState(); autoOpenTimeDialog = true
+                    onboardingDone = false; screen = "main"; stage = "welcome"
+                })
+                "about" -> AboutScreen(onBack = { screen = "settings" })
             }
         }
 
+        // Оверлеи (таймер и отдых)
         if (isTrainingActive && screen in TRAINING_SCREENS && !showRestTimer && screen != "training_free_summary" && !normativesActive) {
             TrainingTimerOverlay(
-                secondsLeft = if (isFreeTraining) trainingElapsedSeconds else trainingSecondsLeft,
-                isPaused = trainingPaused,
-                onTogglePause = { trainingPaused = !trainingPaused }
+                secondsLeft = if (isFreeTraining) trainingElapsedSeconds else (trainingMinutes * 60 - trainingElapsedSeconds).coerceAtLeast(0),
+                isPaused = trainingPaused, onTogglePause = { trainingPaused = !trainingPaused }
             )
         }
-
         if (showRestTimer) {
-            RestTimerOverlay(
-                totalSeconds = restTimerSeconds,
-                nextExerciseTitle = restNextTitle,
-                onSkip = {
-                    showRestTimer = false
-                    val step = pendingNextStep
-                    pendingNextStep = null
-                    restNextTitle = null
-                    step?.invoke()
-                }
-            )
+            RestTimerOverlay(totalSeconds = restTimerSeconds, nextExerciseTitle = restNextTitle, onSkip = { showRestTimer = false; val step = pendingNextStep; pendingNextStep = null; restNextTitle = null; step?.invoke() })
         }
     }
 
-    if (showBullDraw && bullDrawExerciseId != null) {
-        val id = bullDrawExerciseId!!
-        val playerName = SettingsStorage.getPlayerName(context).ifBlank { "Игрок" }
-        val botLevel = if (id == "game501") {
-            TrainingBotLevelStorage.getLevel501(context, currentLevel)
-        } else {
-            TrainingBotLevelStorage.getLevelCricket(context, currentLevel)
-        }
-        BullDrawDialog(
-            playerName = playerName,
-            botName = botNameFor(botLevel),
-            botLevel = botLevel,
-            onWinnerChosen = { winner ->
-                showBullDraw = false
-                startTrainingGame(id, winner)
-                bullDrawExerciseId = null
-            },
-            onCancel = {
-                showBullDraw = false
-                bullDrawExerciseId = null
-                startTrainingGame(id, 0)
-            }
-        )
-    }
-
-    if (showExitTrainingDialog) {
-        ExitTrainingDialog(
-            onFinish = {
-                showExitTrainingDialog = false
-                resetTrainingState()
-                TrainingStateStorage.clear(context)
-                autoOpenTimeDialog = false
-                screen = "main"
-            },
-            onPostpone = {
-                showExitTrainingDialog = false
-                saveCurrentTrainingState()
-                autoOpenTimeDialog = false
-                screen = "main"
-            }
-        )
-    }
-
-    if (showResumeNormativesDialog && pendingNormativesResume != null) {
-        val snap = pendingNormativesResume!!
-        val minutesAgo = NormativesStateStorage.minutesSinceLastUpdate(context)
-
-        NormativesResumeDialog(
-            minutesAgo = minutesAgo,
-            onContinue = {
-                normativesCompletedSteps = snap.completedSteps
-                normatives501Levels = snap.game501Levels
-                normativesCricketLevels = snap.cricketLevels
-                normatives501PlayerWins = snap.game501Results.count { it }
-                normatives501BotWins = snap.game501Results.count { !it }
-                normatives501CurrentLeg = snap.game501Results.size
-                normativesCricketPlayerWins = snap.cricketResults.count { it }
-                normativesCricketBotWins = snap.cricketResults.count { !it }
-                normativesCricketCurrentLeg = snap.cricketResults.size
-
-                scope.launch {
-                    val analysis = TrainingStatsAnalyzer.analyze(trainingRepository)
-                    normativesStartLevel = analysis.level.coerceAtLeast(1)
-                }
-                normativesActive = true
-                normativesNewLevel = null
-                showResumeNormativesDialog = false
-                pendingNormativesResume = null
-                screen = "normatives"
-            },
-            onRestart = {
-                NormativesStateStorage.clear(context)
-                showResumeNormativesDialog = false
-                pendingNormativesResume = null
-                autoOpenTimeDialog = true
-            }
-        )
-    }
-
-    if (showFreeNewRoundDialog) {
-        FreeNewRoundDialog(
-            onNewRound = {
-                showFreeNewRoundDialog = false
-                freeCompletedIds = emptySet()
-                freeSkippedIds = emptySet()
-                pickNextFreeExercise()
-            },
-            onFinish = {
-                showFreeNewRoundDialog = false
-                screen = "training_free_summary"
-            }
-        )
-    }
-
-    if (showResumeDialog && pendingResume != null) {
-        val snap = pendingResume!!
-        val minutesAgo = TrainingStateStorage.minutesSinceLastUpdate(context)
-        ResumeTrainingDialog(
-            minutesAgo = minutesAgo,
-            onContinue = {
-                trainingSessionId = snap.sessionId
-                trainingMinutes = snap.minutes
-                trainingElapsedSeconds = snap.elapsedSeconds
-                currentPhase = runCatching {
-                    TrainingBlockPhase.valueOf(snap.phaseName)
-                }.getOrDefault(TrainingBlockPhase.MAIN)
+    // ────────────────────────────────────────────────────────
+    // ДИАЛОГИ
+    // ────────────────────────────────────────────────────────
+    val botLvlForBull = if (bullDrawExerciseId == "game501") TrainingBotLevelStorage.getLevel501(context, currentLevel) else TrainingBotLevelStorage.getLevelCricket(context, currentLevel)
+    DialogsRoutes(
+        context = context, showBullDraw = showBullDraw, bullDrawExerciseId = bullDrawExerciseId, playerName = SettingsStorage.getPlayerName(context).ifBlank { "Игрок" },
+        botName = botNameFor(botLvlForBull), botLevel = botLvlForBull,
+        onBullWinnerChosen = { showBullDraw = false; startTrainingGame(bullDrawExerciseId ?: "", it); bullDrawExerciseId = null },
+        onBullCancel = { showBullDraw = false; startTrainingGame(bullDrawExerciseId ?: "", 0); bullDrawExerciseId = null },
+        showExitTrainingDialog = showExitTrainingDialog, onExitFinish = { showExitTrainingDialog = false; resetTrainingState(); TrainingStateStorage.clear(context); screen = "main" },
+        onExitPostpone = { showExitTrainingDialog = false; saveCurrentTrainingState(); screen = "main" },
+        showTimeUpDialog = showTimeUpDialog, trainingMinutes = trainingMinutes,
+        onTimeUpFinish = { showTimeUpDialog = false; resetTrainingState(); TrainingStateStorage.clear(context); screen = "training" },
+        onTimeUpContinue = { showTimeUpDialog = false; trainingMinutes += 20 },
+        showFreeNewRoundDialog = showFreeNewRoundDialog, onNewRound = { showFreeNewRoundDialog = false; freeCompletedIds = emptySet(); freeSkippedIds = emptySet(); pickNextFreeExercise() }, onFinishTraining = { showFreeNewRoundDialog = false; screen = "training_free_summary" },
+        showResumeDialog = showResumeDialog, pendingResume = pendingResume,
+        onResumeContinue = {
+            pendingResume?.let { snap ->
+                trainingSessionId = snap.sessionId; trainingMinutes = snap.minutes; trainingElapsedSeconds = snap.elapsedSeconds
+                currentPhase = runCatching { TrainingBlockPhase.valueOf(snap.phaseName) }.getOrDefault(TrainingBlockPhase.MAIN)
                 currentExerciseIndex = snap.exerciseIndex
-                exerciseStatuses = snap.statuses.mapNotNull { (k, v) ->
-                    runCatching { k to SummaryStatus.valueOf(v) }.getOrNull()
-                }.toMap()
-
-                mainExercises = if (snap.mainExerciseIds.isNotEmpty()) {
-                    val baseMap = defaultMainExercises().associateBy { it.id }
-                    snap.mainExerciseIds
-                        .mapNotNull { (id, m) -> baseMap[id]?.copy(minutes = m) }
-                        .ifEmpty { defaultMainExercises() }
-                } else {
-                    defaultMainExercises()
-                }
-                psychologyExercises = if (snap.psychologyEnabled)
-                    defaultPsychologyExercises() else emptyList()
-                strengthExercises = if (snap.strengthEnabled)
-                    defaultStrengthExercises() else emptyList()
-
-                trainingPaused = false
-                isTrainingActive = true
-                isFreeTraining = false
-                isSingleExercisePlay = false
-                freeChooseMyself = false
-                isSetupForTraining = false
-                autoOpenTimeDialog = false
-                showResumeDialog = false
-                exerciseStartMillis = 0L
-                isTraining501 = false
-                isTrainingCricket = false
-                showRestTimer = false
-                pendingNextStep = null
-
-                screen = when (currentPhase) {
-                    TrainingBlockPhase.WARMUP -> "training_warmup"
-                    else -> "training_block"
-                }
-                pendingResume = null
-            },
-            onRestart = {
-                TrainingStateStorage.clear(context)
-                resetTrainingState()
-                autoOpenTimeDialog = true
-                showResumeDialog = false
-                pendingResume = null
+                exerciseStatuses = snap.statuses.mapNotNull { (k, v) -> runCatching { k to SummaryStatus.valueOf(v) }.getOrNull() }.toMap()
+                mainExercises = if (snap.mainExerciseIds.isNotEmpty()) snap.mainExerciseIds.mapNotNull { (id, m) -> defaultMainExercises().associateBy { it.id }[id]?.copy(minutes = m) }.ifEmpty { defaultMainExercises() } else defaultMainExercises()
+                psychologyExercises = if (snap.psychologyEnabled) defaultPsychologyExercises() else emptyList()
+                strengthExercises = if (snap.strengthEnabled) defaultStrengthExercises() else emptyList()
+                trainingPaused = false; isTrainingActive = true; isFreeTraining = false
+                screen = if (currentPhase == TrainingBlockPhase.WARMUP) "training_warmup" else "training_block"
+                pendingResume = null; showResumeDialog = false
             }
-        )
-    }
-
-    if (showTimeUpDialog) {
-        TimeUpDialog(
-            trainingMinutes = trainingMinutes,
-            onFinish = {
-                showTimeUpDialog = false
-                resetTrainingState()
-                TrainingStateStorage.clear(context)
-                autoOpenTimeDialog = false
-                screen = "training"
-            },
-            onContinuePlus20 = {
-                showTimeUpDialog = false
-                trainingMinutes += 20
+        }, onResumeRestart = { TrainingStateStorage.clear(context); resetTrainingState(); showResumeDialog = false; pendingResume = null },
+        showResumeNormativesDialog = showResumeNormativesDialog, pendingNormativesResume = pendingNormativesResume,
+        onNormativesResumeContinue = {
+            pendingNormativesResume?.let { snap ->
+                normativesCompletedSteps = snap.completedSteps; normatives501Levels = snap.game501Levels; normativesCricketLevels = snap.cricketLevels
+                normatives501PlayerWins = snap.game501Results.count { it }; normatives501BotWins = snap.game501Results.count { !it }; normatives501CurrentLeg = snap.game501Results.size
+                normativesCricketPlayerWins = snap.cricketResults.count { it }; normativesCricketBotWins = snap.cricketResults.count { !it }; normativesCricketCurrentLeg = snap.cricketResults.size
+                scope.launch { normativesStartLevel = TrainingStatsAnalyzer.analyze(trainingRepository).level.coerceAtLeast(1) }
+                normativesActive = true; normativesNewLevel = null; screen = "normatives"
+                showResumeNormativesDialog = false; pendingNormativesResume = null
             }
-        )
-    }
+        }, onNormativesResumeRestart = { NormativesStateStorage.clear(context); showResumeNormativesDialog = false; pendingNormativesResume = null }
+    )
 }
