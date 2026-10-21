@@ -674,6 +674,20 @@ fun DartsTrainerApp() {
                             if (currentPhase == TrainingBlockPhase.STRENGTH) {
                                 strengthExercises = getNextStrengthExercises(context)
                             }
+                        },
+                        isLastPhase = nextPhaseAfter(currentPhase) == TrainingBlockPhase.FINISHED,
+                        onContinueToNextPhase = {
+                            val next = nextPhaseAfter(currentPhase)
+                            currentPhase = next
+                            currentExerciseIndex = 0
+                            exerciseStatuses = emptyMap()
+                            if (next == TrainingBlockPhase.FINISHED) {
+                                resetTrainingState()
+                                TrainingStateStorage.clear(context)
+                                screen = "main"
+                            } else {
+                                screen = "training_block"
+                            }
                         }
                     )
                 }
