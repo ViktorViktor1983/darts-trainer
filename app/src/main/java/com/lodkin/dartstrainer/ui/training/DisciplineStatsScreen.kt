@@ -22,6 +22,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.lodkin.dartstrainer.data.training.DartsNorms
 import com.lodkin.dartstrainer.data.training.TrainingRepository
 import com.lodkin.dartstrainer.theme.Accent
 import com.lodkin.dartstrainer.theme.GoldAccent
@@ -45,11 +46,16 @@ fun DisciplineStatsScreen(
     
     var showChartsDialog by remember { mutableStateOf(false) }
 
+    // ── Общие стейты ──
+    var totalAttempts by remember { mutableStateOf(0) }
+    var avgScore by remember { mutableStateOf(0f) }
+    var bestScore by remember { mutableStateOf(0f) }
+    var currentLevel by remember { mutableStateOf(0) }
+
     // ── Стейты для 501 ──
     var avgPpr by remember { mutableStateOf(0f) }
     var avgDbl by remember { mutableStateOf(0f) }
     var avgFirst9 by remember { mutableStateOf(0f) }
-    
     var count180 by remember { mutableStateOf(0) }
     var count170 by remember { mutableStateOf(0) }
     var count130 by remember { mutableStateOf(0) }
@@ -70,7 +76,6 @@ fun DisciplineStatsScreen(
     var dblChartData by remember { mutableStateOf<List<Double>>(emptyList()) }
     var first9ChartData by remember { mutableStateOf<List<Double>>(emptyList()) }
     var c57mChartData by remember { mutableStateOf<List<Double>>(emptyList()) }
-    
     var mprChartData by remember { mutableStateOf<List<Double>>(emptyList()) }
     var perfectRoundsChartData by remember { mutableStateOf<List<Double>>(emptyList()) }
 
@@ -85,104 +90,122 @@ fun DisciplineStatsScreen(
         }
         
         val filtered = if (cutoff == null) allResults else allResults.filter { it.timestamp >= cutoff }
+        totalAttempts = filtered.size
 
-        if (disciplineId == "game501" && filtered.isNotEmpty()) {
-            var sumPpr = 0f
-            var sumDbl = 0f
-            var sumFirst9 = 0f
-            var totalMatches = 0
+        if (filtered.isNotEmpty()) {
+            when (disciplineId) {
+                "game501" -> {
+                    var sumPpr = 0f; var sumDbl = 0f; var sumFirst9 = 0f; var totalMatches = 0
+                    var c180 = 0; var c170 = 0; var c130 = 0; var c90 = 0; var c57p = 0; var c57m = 0
+                    val pprs = mutableListOf<Double>(); val dbls = mutableListOf<Double>(); val f9s = mutableListOf<Double>(); val c57ms = mutableListOf<Double>()
 
-            var c180 = 0; var c170 = 0; var c130 = 0; var c90 = 0; var c57p = 0; var c57m = 0
-            
-            val pprs = mutableListOf<Double>()
-            val dbls = mutableListOf<Double>()
-            val f9s = mutableListOf<Double>()
-            val c57ms = mutableListOf<Double>()
+                    filtered.forEach { r ->
+                        val details = parseDetails(r.detailsJson)
+                        val ppr = details["ppr"]?.toFloatOrNull() ?: 0f
+                        val dbl = details["dbl"]?.toFloatOrNull() ?: 0f
+                        val f9 = details["first9"]?.toFloatOrNull() ?: 0f
+                        val c57 = details["c57m"]?.toIntOrNull() ?: 0
+                        
+                        if (ppr > 0f) {
+                            sumPpr += ppr; sumDbl += dbl; sumFirst9 += f9; totalMatches++
+                            pprs.add(ppr.toDouble()); dbls.add(dbl.toDouble()); f9s.add(f9.toDouble()); c57ms.add(c57.toDouble())
+                        }
+                        c180 += details["c180"]?.toIntOrNull() ?: 0
+                        c170 += details["c170"]?.toIntOrNull() ?: 0
+                        c130 += details["c130"]?.toIntOrNull() ?: 0
+                        c90 += details["c90"]?.toIntOrNull() ?: 0
+                        c57p += details["c57p"]?.toIntOrNull() ?: 0
+                        c57m += details["c57m"]?.toIntOrNull() ?: 0
+                    }
 
-            filtered.forEach { r ->
-                val details = parseDetails(r.detailsJson)
-                val ppr = details["ppr"]?.toFloatOrNull() ?: 0f
-                val dbl = details["dbl"]?.toFloatOrNull() ?: 0f
-                val f9 = details["first9"]?.toFloatOrNull() ?: 0f
-                val c57 = details["c57m"]?.toIntOrNull() ?: 0
-                
-                if (ppr > 0f) {
-                    sumPpr += ppr; sumDbl += dbl; sumFirst9 += f9; totalMatches++
-                    pprs.add(ppr.toDouble()); dbls.add(dbl.toDouble()); f9s.add(f9.toDouble()); c57ms.add(c57.toDouble())
+                    if (totalMatches > 0) {
+                        avgPpr = sumPpr / totalMatches
+                        avgDbl = sumDbl / totalMatches
+                        avgFirst9 = sumFirst9 / totalMatches
+                        currentLevel = DartsNorms.levelByPpr(avgPpr)
+                    }
+                    val divisor = if (totalMatches > 0) totalMatches.toFloat() else 1f
+                    count180 = (c180 / divisor).toInt(); count170 = (c170 / divisor).toInt()
+                    count130 = (c130 / divisor).toInt(); count90 = (c90 / divisor).toInt()
+                    count57p = (c57p / divisor).toInt(); count57m = (c57m / divisor).toInt()
+
+                    pprChartData = pprs; dblChartData = dbls; first9ChartData = f9s; c57mChartData = c57ms
                 }
+                "cricket" -> {
+                    var sumMpr = 0f; var sumPerfect = 0f; var sumStrong = 0f; var sumMisses = 0f; var sumTriples = 0f
+                    var totalBullAttempts = 0; var totalBullHits = 0; var totalMatches = 0
+                    val mprs = mutableListOf<Double>(); val perfects = mutableListOf<Double>()
 
-                c180 += details["c180"]?.toIntOrNull() ?: 0
-                c170 += details["c170"]?.toIntOrNull() ?: 0
-                c130 += details["c130"]?.toIntOrNull() ?: 0
-                c90 += details["c90"]?.toIntOrNull() ?: 0
-                c57p += details["c57p"]?.toIntOrNull() ?: 0
-                c57m += details["c57m"]?.toIntOrNull() ?: 0
-            }
+                    filtered.forEach { r ->
+                        val details = parseDetails(r.detailsJson)
+                        val mpr = details["mpr"]?.toFloatOrNull() ?: 0f
+                        if (mpr > 0f) {
+                            sumMpr += mpr
+                            sumPerfect += (details["c9r"]?.toIntOrNull() ?: 0).toFloat()
+                            sumStrong += (details["c6r"]?.toIntOrNull() ?: 0).toFloat()
+                            sumMisses += (details["miss"]?.toIntOrNull() ?: 0).toFloat()
+                            sumTriples += (details["tripl"]?.toIntOrNull() ?: 0).toFloat()
+                            totalBullAttempts += (details["bulla"]?.toIntOrNull() ?: 0)
+                            totalBullHits += (details["bullh"]?.toIntOrNull() ?: 0)
+                            totalMatches++
+                            mprs.add(mpr.toDouble())
+                            perfects.add((details["c9r"]?.toIntOrNull() ?: 0).toDouble())
+                        }
+                    }
 
-            if (totalMatches > 0) {
-                avgPpr = sumPpr / totalMatches
-                avgDbl = sumDbl / totalMatches
-                avgFirst9 = sumFirst9 / totalMatches
-            }
-            
-            val divisor = if (totalMatches > 0) totalMatches.toFloat() else 1f
-            count180 = (c180 / divisor).toInt()
-            count170 = (c170 / divisor).toInt()
-            count130 = (c130 / divisor).toInt()
-            count90 = (c90 / divisor).toInt()
-            count57p = (c57p / divisor).toInt()
-            count57m = (c57m / divisor).toInt()
+                    if (totalMatches > 0) {
+                        avgMpr = sumMpr / totalMatches
+                        avgPerfectRounds = sumPerfect / totalMatches
+                        avgStrongRounds = sumStrong / totalMatches
+                        avgMisses = sumMisses / totalMatches
+                        avgTriples = sumTriples / totalMatches
+                        currentLevel = DartsNorms.levelByMpr(avgMpr)
+                        if (totalBullAttempts > 0) {
+                            bullAccuracy = totalBullHits.toFloat() / totalBullAttempts * 100f
+                        }
+                    }
+                    mprChartData = mprs
+                    perfectRoundsChartData = perfects
+                }
+                else -> {
+                    // Для остальных дисциплин (Сектор 20, Большой раунд, Набор, Кругосветки)
+                    var sumScore = 0f
+                    var best = 0f
+                    val isLowerBetter = disciplineId.startsWith("aroundclock_")
 
-            pprChartData = pprs
-            dblChartData = dbls
-            first9ChartData = f9s
-            c57mChartData = c57ms
-            
-        } else if (disciplineId == "cricket" && filtered.isNotEmpty()) {
-            var sumMpr = 0f
-            var sumPerfect = 0f
-            var sumStrong = 0f
-            var sumMisses = 0f
-            var sumTriples = 0f
-            var totalBullAttempts = 0
-            var totalBullHits = 0
-            var totalMatches = 0
-            
-            val mprs = mutableListOf<Double>()
-            val perfects = mutableListOf<Double>()
-
-            filtered.forEach { r ->
-                val details = parseDetails(r.detailsJson)
-                val mpr = details["mpr"]?.toFloatOrNull() ?: 0f
-                
-                if (mpr > 0f) {
-                    sumMpr += mpr
-                    sumPerfect += (details["c9r"]?.toIntOrNull() ?: 0).toFloat()
-                    sumStrong += (details["c6r"]?.toIntOrNull() ?: 0).toFloat()
-                    sumMisses += (details["miss"]?.toIntOrNull() ?: 0).toFloat()
-                    sumTriples += (details["tripl"]?.toIntOrNull() ?: 0).toFloat()
-                    totalBullAttempts += (details["bulla"]?.toIntOrNull() ?: 0)
-                    totalBullHits += (details["bullh"]?.toIntOrNull() ?: 0)
-                    totalMatches++
+                    filtered.forEach { r ->
+                        sumScore += r.score.toFloat()
+                        if (isLowerBetter) {
+                            if (best == 0f || r.score < best) best = r.score.toFloat()
+                        } else {
+                            if (r.score > best) best = r.score.toFloat()
+                        }
+                    }
                     
-                    mprs.add(mpr.toDouble())
-                    perfects.add((details["c9r"]?.toIntOrNull() ?: 0).toDouble())
-                }
-            }
+                    avgScore = sumScore / filtered.size
+                    bestScore = best
 
-            if (totalMatches > 0) {
-                avgMpr = sumMpr / totalMatches
-                avgPerfectRounds = sumPerfect / totalMatches
-                avgStrongRounds = sumStrong / totalMatches
-                avgMisses = sumMisses / totalMatches
-                avgTriples = sumTriples / totalMatches
-                if (totalBullAttempts > 0) {
-                    bullAccuracy = totalBullHits.toFloat() / totalBullAttempts * 100f
+                    // Считаем уровень через DartsNorms
+                    currentLevel = when (disciplineId) {
+                        "sector20" -> DartsNorms.levelBySector20(avgScore.toInt())
+                        "biground" -> DartsNorms.levelByBigRound(avgScore.toInt())
+                        "scoreset" -> DartsNorms.levelByScoreSet(avgScore.toInt())
+                        "aroundclock_sectors" -> {
+                            val percent = (21f / avgScore * 100f)
+                            DartsNorms.levelBySectorsPercent(percent)
+                        }
+                        "aroundclock_doubles" -> {
+                            val percent = (21f / avgScore * 100f)
+                            DartsNorms.levelByDoubles(percent)
+                        }
+                        "aroundclock_trebles" -> {
+                            val percent = (21f / avgScore * 100f)
+                            DartsNorms.levelByTrebles(percent)
+                        }
+                        else -> 0
+                    }
                 }
             }
-            
-            mprChartData = mprs
-            perfectRoundsChartData = perfects
         }
         loading = false
     }
@@ -191,6 +214,11 @@ fun DisciplineStatsScreen(
         "game501" -> "501"
         "cricket" -> "Крикет"
         "sector20" -> "Сектор 20"
+        "biground" -> "Большой раунд"
+        "scoreset" -> "Набор очков"
+        "aroundclock_sectors" -> "Кругосветка: Сектора"
+        "aroundclock_doubles" -> "Кругосветка: Удвоения"
+        "aroundclock_trebles" -> "Кругосветка: Утроения"
         else -> "Статистика"
     }
 
@@ -215,12 +243,14 @@ fun DisciplineStatsScreen(
             Text(
                 disciplineTitle,
                 color = GoldAccent,
-                fontSize = 22.sp,
+                fontSize = 20.sp,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.weight(1f)
             )
             // Кнопка графиков
-            val hasCharts = if (disciplineId == "game501") pprChartData.isNotEmpty() else mprChartData.isNotEmpty()
+            val hasCharts = if (disciplineId == "game501") pprChartData.isNotEmpty() 
+                            else if (disciplineId == "cricket") mprChartData.isNotEmpty() 
+                            else false
             if (hasCharts) {
                 Box(
                     modifier = Modifier
@@ -256,66 +286,94 @@ fun DisciplineStatsScreen(
             Box(modifier = Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
                 Text("Загружаем данные...", color = Accent)
             }
-        } else if (disciplineId == "game501" && avgPpr == 0f) {
-            EmptyStats()
-        } else if (disciplineId == "cricket" && avgMpr == 0f) {
-            EmptyStats()
-        } else if (disciplineId == "game501") {
-            // ── 501 ──
-            Column(
-                modifier = Modifier.fillMaxWidth().weight(1f).verticalScroll(rememberScrollState())
-            ) {
-                Text("ОСНОВНЫЕ", color = Accent, fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
-                Spacer(Modifier.height(8.dp))
-                StatRowCard("Средний PPR", String.format(Locale.US, "%.2f", avgPpr))
-                Spacer(Modifier.height(6.dp))
-                StatRowCard("Средняя точность удвоений", String.format(Locale.US, "%.1f%%", avgDbl))
-                Spacer(Modifier.height(6.dp))
-                StatRowCard("Средний набор за 9 дротиков", String.format(Locale.US, "%.2f", avgFirst9))
-
-                Spacer(Modifier.height(20.dp))
-                Text("КАТЕГОРИИ (в среднем за матч)", color = Accent, fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
-                Spacer(Modifier.height(8.dp))
-                StatRowCard("180", "$count180")
-                Spacer(Modifier.height(6.dp))
-                StatRowCard("170+", "$count170")
-                Spacer(Modifier.height(6.dp))
-                StatRowCard("130+", "$count130")
-                Spacer(Modifier.height(6.dp))
-                StatRowCard("90+", "$count90")
-                Spacer(Modifier.height(6.dp))
-                StatRowCard("57+", "$count57p")
-                Spacer(Modifier.height(6.dp))
-                StatRowCard("57-", "$count57m")
-                Spacer(Modifier.height(24.dp))
-            }
-        } else if (disciplineId == "cricket") {
-            // ── КРИКЕТ ──
-            Column(
-                modifier = Modifier.fillMaxWidth().weight(1f).verticalScroll(rememberScrollState())
-            ) {
-                Text("ОСНОВНЫЕ", color = Accent, fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
-                Spacer(Modifier.height(8.dp))
-                StatRowCard("Средний MPR", String.format(Locale.US, "%.2f", avgMpr))
-                Spacer(Modifier.height(6.dp))
-                StatRowCard("Точность Bull", if (bullAccuracy > 0) String.format(Locale.US, "%.1f%%", bullAccuracy) else "—")
-                Spacer(Modifier.height(6.dp))
-                StatRowCard("Промахи (в среднем за матч)", String.format(Locale.US, "%.1f", avgMisses))
-                Spacer(Modifier.height(6.dp))
-                StatRowCard("Утроения (в среднем за матч)", String.format(Locale.US, "%.1f", avgTriples))
-
-                Spacer(Modifier.height(20.dp))
-                Text("КАЧЕСТВЕННЫЕ ПОДХОДЫ (в среднем за матч)", color = Accent, fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
-                Spacer(Modifier.height(8.dp))
-                StatRowCard("Идеальные (9 марок)", String.format(Locale.US, "%.1f", avgPerfectRounds))
-                Spacer(Modifier.height(6.dp))
-                StatRowCard("Сильные (6-7 марок)", String.format(Locale.US, "%.1f", avgStrongRounds))
-                
-                Spacer(Modifier.height(24.dp))
+        } else if (totalAttempts == 0) {
+            Box(modifier = Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
+                Text("Нет данных за выбранный период", color = Color.White.copy(alpha = 0.5f))
             }
         } else {
-            Box(modifier = Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
-                Text("Детальная статистика для этой дисциплины\nв разработке", color = Color.White.copy(alpha = 0.5f), textAlign = TextAlign.Center)
+            Column(
+                modifier = Modifier.fillMaxWidth().weight(1f).verticalScroll(rememberScrollState())
+            ) {
+                // Общие данные по уровням
+                if (currentLevel > 0) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Accent.copy(alpha = 0.15f)).padding(16.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("Твой уровень по нормативам", color = Color.White, fontSize = 14.sp)
+                        Text("$currentLevel (${DartsNorms.getLevelName(currentLevel)})", color = GoldAccent, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                    }
+                    Spacer(Modifier.height(20.dp))
+                }
+
+                if (disciplineId == "game501") {
+                    Text("ОСНОВНЫЕ", color = Accent, fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
+                    Spacer(Modifier.height(8.dp))
+                    StatRowCard("Средний PPR", String.format(Locale.US, "%.2f", avgPpr))
+                    Spacer(Modifier.height(6.dp))
+                    StatRowCard("Средняя точность удвоений", String.format(Locale.US, "%.1f%%", avgDbl))
+                    Spacer(Modifier.height(6.dp))
+                    StatRowCard("Средний набор за 9 дротиков", String.format(Locale.US, "%.2f", avgFirst9))
+                    Spacer(Modifier.height(20.dp))
+                    Text("КАТЕГОРИИ (в среднем за матч)", color = Accent, fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
+                    Spacer(Modifier.height(8.dp))
+                    StatRowCard("180", "$count180")
+                    Spacer(Modifier.height(6.dp))
+                    StatRowCard("170+", "$count170")
+                    Spacer(Modifier.height(6.dp))
+                    StatRowCard("130+", "$count130")
+                    Spacer(Modifier.height(6.dp))
+                    StatRowCard("90+", "$count90")
+                    Spacer(Modifier.height(6.dp))
+                    StatRowCard("57+", "$count57p")
+                    Spacer(Modifier.height(6.dp))
+                    StatRowCard("57-", "$count57m")
+
+                } else if (disciplineId == "cricket") {
+                    Text("ОСНОВНЫЕ", color = Accent, fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
+                    Spacer(Modifier.height(8.dp))
+                    StatRowCard("Средний MPR", String.format(Locale.US, "%.2f", avgMpr))
+                    Spacer(Modifier.height(6.dp))
+                    StatRowCard("Точность Bull", if (bullAccuracy > 0) String.format(Locale.US, "%.1f%%", bullAccuracy) else "—")
+                    Spacer(Modifier.height(6.dp))
+                    StatRowCard("Промахи (за матч)", String.format(Locale.US, "%.1f", avgMisses))
+                    Spacer(Modifier.height(6.dp))
+                    StatRowCard("Утроения (за матч)", String.format(Locale.US, "%.1f", avgTriples))
+                    Spacer(Modifier.height(20.dp))
+                    Text("КАЧЕСТВЕННЫЕ ПОДХОДЫ (за матч)", color = Accent, fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
+                    Spacer(Modifier.height(8.dp))
+                    StatRowCard("Идеальные (9 марок)", String.format(Locale.US, "%.1f", avgPerfectRounds))
+                    Spacer(Modifier.height(6.dp))
+                    StatRowCard("Сильные (6-7 марок)", String.format(Locale.US, "%.1f", avgStrongRounds))
+
+                } else {
+                    // Универсальный экран для остальных 6 упражнений
+                    Text("ОСНОВНЫЕ", color = Accent, fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
+                    Spacer(Modifier.height(8.dp))
+                    
+                    val isLowerBetter = disciplineId.startsWith("aroundclock_")
+                    
+                    if (isLowerBetter) {
+                        // Для кругосветок
+                        StatRowCard("Среднее дротиков", String.format(Locale.US, "%.1f", avgScore))
+                        Spacer(Modifier.height(6.dp))
+                        StatRowCard("Лучший результат (мин. дротиков)", "${bestScore.toInt()}")
+                        Spacer(Modifier.height(6.dp))
+                        val accuracy = if (avgScore > 0) (21f / avgScore * 100f) else 0f
+                        StatRowCard("Средняя точность", String.format(Locale.US, "%.1f%%", accuracy))
+                    } else {
+                        // Для набора очков, сектора 20, большого раунда
+                        StatRowCard("Средний результат", String.format(Locale.US, "%.1f", avgScore))
+                        Spacer(Modifier.height(6.dp))
+                        StatRowCard("Лучший результат (макс. очков)", "${bestScore.toInt()}")
+                    }
+                    
+                    Spacer(Modifier.height(6.dp))
+                    StatRowCard("Всего попыток", "$totalAttempts")
+                }
+                
+                Spacer(Modifier.height(24.dp))
             }
         }
     }
@@ -326,13 +384,6 @@ fun DisciplineStatsScreen(
         } else if (disciplineId == "cricket") {
             AllChartsCricketDialog(mprChartData, perfectRoundsChartData) { showChartsDialog = false }
         }
-    }
-}
-
-@Composable
-private fun EmptyStats() {
-    Box(modifier = Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
-        Text("Нет данных за выбранный период", color = Color.White.copy(alpha = 0.5f))
     }
 }
 
