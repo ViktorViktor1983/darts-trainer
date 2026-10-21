@@ -10,14 +10,15 @@ import com.lodkin.dartstrainer.data.biground.BigRoundRepository
 import com.lodkin.dartstrainer.data.cricket.CricketGame
 import com.lodkin.dartstrainer.data.cricket.CricketLogic
 import com.lodkin.dartstrainer.data.cricket.CricketRepository
-import com.lodkin.dartstrainer.data.cricket.CricketSerializer
 import com.lodkin.dartstrainer.data.freerecords.FreePlayRecordsRepository
 import com.lodkin.dartstrainer.data.game501.Game501
 import com.lodkin.dartstrainer.data.game501.Game501Logic
 import com.lodkin.dartstrainer.data.game501.Game501Repository
-import com.lodkin.dartstrainer.data.game501.Game501Serializer
 import com.lodkin.dartstrainer.data.scoreset.ScoreSetRepository
 import com.lodkin.dartstrainer.data.sector.SectorRepository
+import com.lodkin.dartstrainer.data.training.BlockType
+import com.lodkin.dartstrainer.data.training.ExerciseResult
+import com.lodkin.dartstrainer.data.training.TrainingBotLevelStorage
 import com.lodkin.dartstrainer.data.training.TrainingRepository
 import com.lodkin.dartstrainer.ui.aroundclock.AroundClockGameScreen
 import com.lodkin.dartstrainer.ui.aroundclock.AroundClockSetupScreen
@@ -34,6 +35,7 @@ import com.lodkin.dartstrainer.ui.sector.SectorGameScreen
 import com.lodkin.dartstrainer.ui.sector.SectorSetupScreen
 import com.lodkin.dartstrainer.ui.biground.BigRoundGameScreen
 import kotlinx.coroutines.launch
+import java.util.Locale
 
 /**
  * Маршрутизатор для экранов свободной игры (не тренировки).
@@ -81,7 +83,15 @@ fun GameRoutes(
     onBigRoundCategoryChange: (BigRoundCategory?) -> Unit,
 
     sessionStartTime: Long,
-    sessionForm: Double
+    sessionForm: Double,
+
+    // Флаги тренировки (если игра запущена из тренировки)
+    isTraining501: Boolean = false,
+    isTrainingCricket: Boolean = false,
+    trainingSessionId: Long = 0L,
+    exerciseStartMillis: Long = 0L,
+    isNormativesExercise: Boolean = false,
+    onTrainingGameFinished: (playerWon: Boolean, isGame501: Boolean) -> Unit = { _, _ -> }
 ) {
     when (screen) {
         "game_select" -> GameSelectScreen(
@@ -116,18 +126,61 @@ fun GameRoutes(
                     freePlayRecordsRepository = freePlayRecordsRepository,
                     initialGame = g,
                     existingId = cricketExistingId,
-                    isTrainingMode = false,
+                    isTrainingMode = isTrainingCricket,
                     trainingRepository = trainingRepository,
                     onGameFinish = { f, id ->
-                        scope.launch { cricketRepository.saveGame(f, existingId = id) }
-                        onCricketGameChange(f)
-                        onCricketExistingIdChange(0L)
-                        onScreenChange("cricket_stats")
+                        if (isTrainingCricket) {
+                            val playerWon = f.winnerIndex == 0
+                            val player = f.players.getOrNull(0)
+                            val mpr = player?.let { p ->
+                                if (p.matchDartsThrown > 0) {
+                                    val marks = p.matchHits.values.sum().toFloat()
+                                    marks / (p.matchDartsThrown / 3f)
+                                } else 0f
+                            } ?: 0f
+                            val mprStr = String.format(Locale.US, "%.1f", mpr)
+                            val dur = if (exerciseStartMillis > 0L) ((System.currentTimeMillis() - exerciseStartMillis) / 1000L).toInt() else 0
+                            val botPlayer = f.players.getOrNull(1)
+                            if (botPlayer?.isBot == true) {
+                                TrainingBotLevelStorage.updateLevelCricket(context, botPlayer.botLevel, playerWon)
+                            }
+                            
+                            val c9r = player?.matchPerfectRounds ?: 0
+                            val c6r = player?.matchStrongRounds ?: 0
+                            val miss = player?.matchMissesThrown ?: 0
+                            val tripl = player?.matchTriplesHit ?: 0
+                            val bulla = player?.matchBullAttempts ?: 0
+                            val bullh = player?.matchBullHits ?: 0
+
+                            val details = "won=$playerWon;mpr=$mprStr" +
+                                    ";c9r=$c9r;c6r=$c6r;miss=$miss;tripl=$tripl;bulla=$bulla;bullh=$bullh"
+
+                            scope.launch {
+                                trainingRepository.insertExerciseResult(
+                                    ExerciseResult(
+                                        sessionId = trainingSessionId,
+                                        blockType = BlockType.CRICKET,
+                                        exerciseId = "cricket",
+                                        score = mpr.toInt(),
+                                        dartsThrown = player?.matchDartsThrown ?: 0,
+                                        timestamp = System.currentTimeMillis(),
+                                        durationSeconds = dur,
+                                        detailsJson = details
+                                    )
+                                )
+                            }
+                            onTrainingGameFinished(playerWon, false)
+                        } else {
+                            scope.launch { cricketRepository.saveGame(f, existingId = id) }
+                            onCricketGameChange(f)
+                            onCricketExistingIdChange(0L)
+                            onScreenChange("cricket_stats")
+                        }
                     },
                     onBack = {
                         onCricketGameChange(null)
                         onCricketExistingIdChange(0L)
-                        onScreenChange("game_select")
+                        onScreenChange(if (isTrainingCricket) "training_free_next" else "game_select")
                     }
                 )
             } else {
@@ -173,18 +226,64 @@ fun GameRoutes(
                     freePlayRecordsRepository = freePlayRecordsRepository,
                     initialGame = g,
                     existingId = game501ExistingId,
-                    isTrainingMode = false,
+                    isTrainingMode = isTraining501,
                     trainingRepository = trainingRepository,
                     onGameFinish = { f, id ->
-                        scope.launch { game501Repository.saveGame(f, existingId = id) }
-                        onGame501Change(f)
-                        onGame501ExistingIdChange(0L)
-                        onScreenChange("game501_stats")
+                        if (isTraining501) {
+                            val playerWon = f.winnerIndex == 0
+                            val player = f.players.getOrNull(0)
+                            val ppr = player?.let { p -> Game501Logic.matchPpr(p) } ?: 0.0
+                            val dbl = player?.let { p -> Game501Logic.doublesAccuracy(p) } ?: 0.0
+                            val pprStr = String.format(Locale.US, "%.1f", ppr)
+                            val dblStr = dbl.toInt().toString()
+                            val closeValues = player?.listOfCloseValues ?: emptyList()
+                            val dur = if (exerciseStartMillis > 0L) ((System.currentTimeMillis() - exerciseStartMillis) / 1000L).toInt() else 0
+                            val botPlayer = f.players.getOrNull(1)
+                            if (botPlayer?.isBot == true) {
+                                TrainingBotLevelStorage.updateLevel501(context, botPlayer.botLevel, playerWon)
+                            }
+                            
+                            val c180 = player?.matchCount180 ?: 0
+                            val c170 = player?.matchCount170plus ?: 0
+                            val c130 = player?.matchCount130plus ?: 0
+                            val c90 = player?.matchCount90plus ?: 0
+                            val c57p = player?.matchCount57plus ?: 0
+                            val c57m = player?.matchCount57minus ?: 0
+                            val first9 = player?.listOfFirst9Ppr?.average() ?: 0.0
+
+                            val details = "won=$playerWon;ppr=$pprStr;dbl=$dblStr" +
+                                    ";c180=$c180;c170=$c170;c130=$c130;c90=$c90;c57p=$c57p;c57m=$c57m" +
+                                    ";first9=${String.format(Locale.US, "%.2f", first9)}"
+
+                            scope.launch {
+                                trainingRepository.insertExerciseResult(
+                                    ExerciseResult(
+                                        sessionId = trainingSessionId,
+                                        blockType = BlockType.GAME_501,
+                                        exerciseId = "game501",
+                                        score = ppr.toInt(),
+                                        dartsThrown = player?.matchDarts ?: 0,
+                                        timestamp = System.currentTimeMillis(),
+                                        durationSeconds = dur,
+                                        detailsJson = details
+                                    )
+                                )
+                                closeValues.forEach { value ->
+                                    trainingRepository.recordCheckout(value)
+                                }
+                            }
+                            onTrainingGameFinished(playerWon, true)
+                        } else {
+                            scope.launch { game501Repository.saveGame(f, existingId = id) }
+                            onGame501Change(f)
+                            onGame501ExistingIdChange(0L)
+                            onScreenChange("game501_stats")
+                        }
                     },
                     onBack = {
                         onGame501Change(null)
                         onGame501ExistingIdChange(0L)
-                        onScreenChange("game_select")
+                        onScreenChange(if (isTraining501) "training_free_next" else "game_select")
                     }
                 )
             } else {
