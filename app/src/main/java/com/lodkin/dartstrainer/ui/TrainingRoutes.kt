@@ -1,13 +1,13 @@
 package com.lodkin.dartstrainer.ui
 
 import androidx.compose.runtime.Composable
-import com.lodkin.dartstrainer.data.SettingsStorage
 import com.lodkin.dartstrainer.data.aroundclock.AroundClockRepository
 import com.lodkin.dartstrainer.data.biground.BigRoundRepository
 import com.lodkin.dartstrainer.data.cricket.CricketRepository
 import com.lodkin.dartstrainer.data.game501.Game501Repository
 import com.lodkin.dartstrainer.data.scoreset.ScoreSetRepository
 import com.lodkin.dartstrainer.data.sector.SectorRepository
+import com.lodkin.dartstrainer.data.training.BlockType
 import com.lodkin.dartstrainer.data.training.TrainingRepository
 import com.lodkin.dartstrainer.data.training.WeaknessType
 import com.lodkin.dartstrainer.ui.training.*
@@ -39,7 +39,7 @@ fun TrainingRoutes(
     trainingPaused: Boolean,
     onTogglePause: () -> Unit,
     
-    currentPhase: Int, // Используем Int для enum, но по факту передадим TrainingBlockPhase
+    currentPhase: String, // Передаем название фазы строкой
     mainExercises: List<PlannedExercise>,
     psychologyExercises: List<PlannedExercise>,
     strengthExercises: List<PlannedExercise>,
@@ -71,7 +71,6 @@ fun TrainingRoutes(
     onFreeExercisesCompletedChange: (Int) -> Unit,
     showFreeNewRoundDialog: Boolean,
     onShowFreeNewRoundDialogChange: (Boolean) -> Unit,
-    freeCurrentTitle: String?,
     onFreePlayAction: (String?) -> Unit,
     onFreePlayDirect: (String, Boolean) -> Unit,
     onFreeSkip: (String?) -> Unit,
@@ -94,7 +93,7 @@ fun TrainingRoutes(
     onCancelNormatives: () -> Unit,
     exerciseStartMillis: Long,
     trainingSessionId: Long,
-    onExerciseFinished: (String) -> Unit,
+    onExerciseFinished: (exerciseId: String, blockType: BlockType, score: Int, darts: Int, details: String) -> Unit,
     onBackFromNormativesExercise: () -> Unit,
 
     // --- ВЫЗОВЫ К ЛОГИКЕ ---
@@ -105,7 +104,7 @@ fun TrainingRoutes(
     onOpenProgressClick: () -> Unit,
     onBackFromTrainingClick: () -> Unit,
     onWarmupFinish: () -> Unit,
-    onStartCurrentExercise: (List<PlannedExercise>) -> Unit,
+    onStartCurrentExercise: (PlannedExercise) -> Unit,
     onSkipCurrentExercise: (List<PlannedExercise>) -> Unit,
     onBackFromBlock: () -> Unit,
     onFinishFreeTraining: () -> Unit,
@@ -123,7 +122,7 @@ fun TrainingRoutes(
     onTimeUpContinue: () -> Unit,
     restSeconds: Int
 ) {
-    val trainingPhase = (currentPhase as? Enum<*>)?.name ?: "WARMUP"
+    val trainingPhase = currentPhase
 
     when (screen) {
         "training" -> TrainingMenuScreen(
@@ -165,7 +164,10 @@ fun TrainingRoutes(
             TrainingBlockScreen(
                 exercises = list,
                 currentIndex = currentExerciseIndex,
-                onStartCurrent = { onStartCurrentExercise(list) },
+                onStartCurrent = {
+                    val current = list.getOrNull(currentExerciseIndex)
+                    if (current != null) onStartCurrentExercise(current)
+                },
                 onSkipCurrent = { onSkipCurrentExercise(list) },
                 onBack = onBackFromBlock
             )
@@ -234,8 +236,7 @@ fun TrainingRoutes(
                             targets = currentTargetGoals,
                             dartsPerTarget = 15,
                             onFinish = { hits, totalDarts ->
-                                // Логика сохранения вынесена в MainActivity (передается через колбэк)
-                                onExerciseFinished(current.id) 
+                                onExerciseFinished(current.id, BlockType.SCORE, hits, totalDarts, "")
                             },
                             onBack = { onScreenChange(if (isFreeTraining) "training_free_next" else "training_block") }
                         )
@@ -248,8 +249,8 @@ fun TrainingRoutes(
                             scoreSetRepository = scoreSetRepository,
                             bigRoundRepository = bigRoundRepository,
                             trainingRepository = trainingRepository,
-                            onFinish = { _, _, _, _ ->
-                                onExerciseFinished(current.id)
+                            onFinish = { blockType, score, darts, details ->
+                                onExerciseFinished(current.id, blockType, score, darts, details)
                             },
                             onBack = { onScreenChange(if (isFreeTraining) "training_free_next" else "training_block") }
                         )
@@ -314,7 +315,10 @@ fun TrainingRoutes(
                     sectorRepository = sectorRepository,
                     bigRoundRepository = bigRoundRepository,
                     scoreSetRepository = scoreSetRepository,
-                    onExerciseFinished = onExerciseFinished,
+                    onExerciseFinished = { stepId ->
+                        // Передаем наверх, чтобы MainActivity сохранила
+                        onExerciseFinished(stepId, BlockType.SCORE, 0, 0, "")
+                    },
                     onBack = onBackFromNormativesExercise
                 )
             }
