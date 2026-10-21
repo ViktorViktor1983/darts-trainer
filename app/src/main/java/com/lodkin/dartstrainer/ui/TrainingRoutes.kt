@@ -75,7 +75,7 @@ fun TrainingRoutes(
     onFreeExercisesCompletedChange: (Int) -> Unit,
     showFreeNewRoundDialog: Boolean,
     onShowFreeNewRoundDialogChange: (Boolean) -> Unit,
-    onPickNextFreeExercise: () -> Unit, // ВОТ ОНА - функция выбора упражнения
+    onPickNextFreeExercise: () -> Unit,
     onFreePlayAction: (String?) -> Unit,
     onFreePlayDirect: (String, Boolean) -> Unit,
     onFreeSkip: (String?) -> Unit,
@@ -179,8 +179,6 @@ fun TrainingRoutes(
         }
 
         "training_free_next" -> {
-            // Если упражнение не выбрано и режим "Выбрать самому" выключен,
-            // нужно автоматически запустить рулетку
             if (freeCurrentId == null && !freeChooseMyself) {
                 LaunchedEffect(freeCurrentId, showFreeNewRoundDialog) {
                     if (freeCurrentId == null && !showFreeNewRoundDialog) {
@@ -231,18 +229,23 @@ fun TrainingRoutes(
             }
 
             if (current != null) {
-                if (trainingPhase != "MAIN") {
+                if (trainingPhase == "PSYCHOLOGY") {
+                    // Открываем наш новый экран психологии
+                    PsychologyExerciseScreen(
+                        exerciseId = current.id,
+                        onFinish = { id ->
+                            onExerciseFinished(id, BlockType.WARMUP, 0, 0, "")
+                        },
+                        onBack = { onScreenChange(if (isFreeTraining) "training_free_next" else "training_block") }
+                    )
+                } else if (trainingPhase != "MAIN") {
+                    // Для разминки и силовой пока оставляем заглушку
                     TrainingExercisePlaceholder(
                         title = current.title,
                         description = current.whyImportant,
                         onDone = {
-                            onExerciseStatusesChange(exerciseStatuses.toMutableMap().apply { put(currentExerciseIndex, SummaryStatus.DONE) })
-                            if (currentExerciseIndex + 1 < mainExercises.size) {
-                                onCurrentExerciseIndexChange(currentExerciseIndex + 1)
-                                onScreenChange("training_block")
-                            } else {
-                                onScreenChange("training_summary")
-                            }
+                            val duration = if (exerciseStartMillis > 0L) ((System.currentTimeMillis() - exerciseStartMillis) / 1000L).toInt() else 0
+                            onExerciseFinished(current.id, BlockType.WARMUP, 0, duration, "")
                         },
                         onBack = { onScreenChange(if (isFreeTraining) "training_free_next" else "training_block") }
                     )
