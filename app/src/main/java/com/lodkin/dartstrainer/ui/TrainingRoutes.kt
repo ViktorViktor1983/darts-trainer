@@ -22,15 +22,11 @@ import com.lodkin.dartstrainer.data.training.WeaknessType
 import com.lodkin.dartstrainer.ui.training.*
 import kotlinx.coroutines.CoroutineScope
 
-/**
- * Маршрутизатор для экранов тренировки и нормативов.
- */
 @Composable
 fun TrainingRoutes(
     screen: String,
     onScreenChange: (String) -> Unit,
     
-    // Репозитории
     trainingRepository: TrainingRepository,
     aroundClockRepository: AroundClockRepository,
     sectorRepository: SectorRepository,
@@ -40,7 +36,6 @@ fun TrainingRoutes(
     context: android.content.Context,
     scope: CoroutineScope,
 
-    // --- СОСТОЯНИЕ ТРЕНИРОВКИ ---
     trainingMinutes: Int,
     isTrainingActive: Boolean,
     trainingElapsedSeconds: Int,
@@ -59,7 +54,6 @@ fun TrainingRoutes(
     currentLevel: Int,
     currentTargetGoals: List<String>,
 
-    // --- СВОБОДНАЯ ТРЕНИРОВКА ---
     isFreeTraining: Boolean,
     isSingleExercisePlay: Boolean,
     isSetupForTraining: Boolean,
@@ -85,13 +79,11 @@ fun TrainingRoutes(
     onFreeSkip: (String?) -> Unit,
     onFreeFinish: () -> Unit,
 
-    // --- ТАЙМЕР ОТДЫХА ---
     showRestTimer: Boolean,
     restTimerSeconds: Int,
     restNextTitle: String?,
     onSkipRestTimer: () -> Unit,
 
-    // --- ЭКЗАМЕН (НОРМАТИВЫ) ---
     normativesAvailable: Boolean,
     normativesActive: Boolean,
     normativesStartLevel: Int,
@@ -105,7 +97,6 @@ fun TrainingRoutes(
     onExerciseFinished: (exerciseId: String, blockType: BlockType, score: Int, darts: Int, details: String) -> Unit,
     onBackFromNormativesExercise: () -> Unit,
 
-    // --- ВЫЗОВЫ К ЛОГИКЕ ---
     onStartTrainingClick: () -> Unit,
     onStartFreeTrainingClick: () -> Unit,
     onStartNormativesClick: () -> Unit,
@@ -118,7 +109,6 @@ fun TrainingRoutes(
     onBackFromBlock: () -> Unit,
     onFinishFreeTraining: () -> Unit,
     
-    // --- ДИАЛОГИ ---
     showExitTrainingDialog: Boolean,
     onShowExitTrainingDialogChange: (Boolean) -> Unit,
     onSaveAndPostpone: () -> Unit,
@@ -131,12 +121,14 @@ fun TrainingRoutes(
     onTimeUpContinue: () -> Unit,
     restSeconds: Int,
 
-    // Колбэк для обновления инвентаря
-    onInventoryUpdated: () -> Unit
+    onInventoryUpdated: () -> Unit,
+    
+    // НОВЫЕ ПАРАМЕТРЫ ДЛЯ ПЕРЕХОДА МЕЖДУ БЛОКАМИ
+    isLastPhase: Boolean,
+    onContinueToNextPhase: () -> Unit
 ) {
     val trainingPhase = currentPhase
 
-    // Локальное состояние для диалога инвентаря
     var showInventoryDialog by remember { mutableStateOf(false) }
     var inventoryChecked by remember { mutableStateOf(false) }
 
@@ -260,9 +252,7 @@ fun TrainingRoutes(
                 if (trainingPhase == "PSYCHOLOGY") {
                     PsychologyExerciseScreen(
                         exerciseId = current.id,
-                        onFinish = { id ->
-                            onExerciseFinished(id, BlockType.WARMUP, 0, 0, "")
-                        },
+                        onFinish = { id -> onExerciseFinished(id, BlockType.WARMUP, 0, 0, "") },
                         onBack = { onScreenChange(if (isFreeTraining) "training_free_next" else "training_block") }
                     )
                 } else if (trainingPhase != "MAIN") {
@@ -280,9 +270,7 @@ fun TrainingRoutes(
                         TargetedPracticeScreen(
                             targets = currentTargetGoals,
                             dartsPerTarget = 15,
-                            onFinish = { hits, totalDarts ->
-                                onExerciseFinished(current.id, BlockType.SCORE, hits, totalDarts, "")
-                            },
+                            onFinish = { hits, totalDarts -> onExerciseFinished(current.id, BlockType.SCORE, hits, totalDarts, "") },
                             onBack = { onScreenChange(if (isFreeTraining) "training_free_next" else "training_block") }
                         )
                     } else {
@@ -294,9 +282,7 @@ fun TrainingRoutes(
                             scoreSetRepository = scoreSetRepository,
                             bigRoundRepository = bigRoundRepository,
                             trainingRepository = trainingRepository,
-                            onFinish = { blockType, score, darts, details ->
-                                onExerciseFinished(current.id, blockType, score, darts, details)
-                            },
+                            onFinish = { blockType, score, darts, details -> onExerciseFinished(current.id, blockType, score, darts, details) },
                             onBack = { onScreenChange(if (isFreeTraining) "training_free_next" else "training_block") }
                         )
                     }
@@ -320,16 +306,30 @@ fun TrainingRoutes(
             }
             val recommendedIds = recommendedGameIds(currentWeakness)
             
+            val blockType = when (trainingPhase) {
+                "WARMUP" -> SummaryBlockType.WARMUP
+                "PSYCHOLOGY" -> SummaryBlockType.PSYCHOLOGY
+                "STRENGTH" -> SummaryBlockType.STRENGTH
+                else -> SummaryBlockType.MAIN
+            }
+            val blockExercises = if (trainingPhase == "MAIN") getDefaultMainBlockItems(recommendedIds) else emptyList()
+
             TrainingSummaryScreen(
                 playerName = playerName,
                 planMinutes = trainingMinutes,
                 actualSeconds = trainingElapsedSeconds,
                 exercises = summaries,
-                blockType = SummaryBlockType.MAIN,
-                blockExercises = emptyList(),
-                isLastBlock = true,
+                blockType = blockType,
+                blockExercises = blockExercises,
+                isLastBlock = isLastPhase,
                 recommendedIds = recommendedIds,
-                onContinue = onFinishAndClear,
+                onContinue = {
+                    if (isLastPhase) {
+                        onFinishAndClear()
+                    } else {
+                        onContinueToNextPhase()
+                    }
+                },
                 onPlayExercise = { id -> onFreePlayAction(id) },
                 onPlayGame = { id -> onFreePlayAction(id) },
                 onFinishTraining = onFinishAndClear
@@ -360,9 +360,7 @@ fun TrainingRoutes(
                     sectorRepository = sectorRepository,
                     bigRoundRepository = bigRoundRepository,
                     scoreSetRepository = scoreSetRepository,
-                    onExerciseFinished = { stepId ->
-                        onExerciseFinished(stepId, BlockType.SCORE, 0, 0, "")
-                    },
+                    onExerciseFinished = { stepId -> onExerciseFinished(stepId, BlockType.SCORE, 0, 0, "") },
                     onBack = onBackFromNormativesExercise
                 )
             }
