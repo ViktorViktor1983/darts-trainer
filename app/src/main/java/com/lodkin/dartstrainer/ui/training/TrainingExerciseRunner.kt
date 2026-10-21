@@ -204,7 +204,8 @@ data class BlockExerciseItem(
     val title: String
 )
 
-internal fun defaultMainExercises(): List<PlannedExercise> = listOf(
+// ПЕРЕИМЕНОВАНО В getDefaultMainExercises
+internal fun getDefaultMainExercises(): List<PlannedExercise> = listOf(
     PlannedExercise("aroundclock_doubles", "Кругосветка: Удвоения", 14, "Тренирует точность на удвоениях, чтобы закрывать леги с первого дротика."),
     PlannedExercise("aroundclock_sectors", "Кругосветка: Сектора", 12, "Улучшает общую точность и контроль над сектором."),
     PlannedExercise("aroundclock_trebles", "Кругосветка: Утроения", 12, "Помогает набирать больше очков за подход (особенно в Крикете)."),
@@ -240,7 +241,6 @@ internal fun getNextPsychologyExercises(context: Context): List<PlannedExercise>
         result.add(ALL_PSYCHOLOGY_EXERCISES[index])
     }
     
-    // Сдвигаем индекс на 3
     InventoryStorage.incrementPsychologyIndex(context)
     return result
 }
@@ -274,7 +274,6 @@ internal fun getNextStrengthExercises(context: Context): List<PlannedExercise> {
     val hasDumbbells = InventoryStorage.hasDumbbells(context)
     val hasBand = InventoryStorage.hasResistanceBand(context)
 
-    // Фильтруем список по инвентарю
     val available = ALL_STRENGTH_EXERCISES.filter { ex ->
         (!ex.requiresDumbbells || hasDumbbells) && (!ex.requiresBand || hasBand)
     }
@@ -306,13 +305,13 @@ internal fun getNextStrengthExercises(context: Context): List<PlannedExercise> {
 // РАЗМИНКА И ОСНОВНАЯ ЧАСТЬ (блоки)
 // ─────────────────────────────────────────────
 
-internal fun warmupBlockItems(): List<BlockExerciseItem> = listOf(
+internal fun getWarmupBlockItems(): List<BlockExerciseItem> = listOf(
     BlockExerciseItem("warm_muscles", "Разминка: мышцы"),
     BlockExerciseItem("warm_trajectory", "Разминка: траектория"),
     BlockExerciseItem("warm_accuracy", "Разминка: кучность"),
     BlockExerciseItem("warm_aim", "Прицеливание")
 )
 
-internal fun defaultMainBlockItems(recommendedIds: Set<String>): List<BlockExerciseItem> {
-    return defaultMainExercises().map { BlockExerciseItem(it.id, it.title) }
+internal fun getDefaultMainBlockItems(recommendedIds: Set<String>): List<BlockExerciseItem> {
+    return getDefaultMainExercises().map { BlockExerciseItem(it.id, it.title) }
 }
