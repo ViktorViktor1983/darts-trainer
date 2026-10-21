@@ -614,8 +614,8 @@ fun DartsTrainerApp() {
                                 val dynamicIds = TrainingPlanner.buildDynamicMainExerciseIds(analysis, budgetMain, completedCount)
                                 val baseMap = defaultMainExercises().associateBy { it.id }
                                 mainExercises = dynamicIds.mapNotNull { d -> baseMap[d.id]?.copy(minutes = d.minutes) }.ifEmpty { listOf(defaultMainExercises().first().copy(minutes = budgetMain.coerceIn(5, 20))) }
-                                psychologyExercises = if (TrainingBlocksStorage.isPsychologyEnabled(context)) defaultPsychologyExercises() else emptyList()
-                                strengthExercises = if (TrainingBlocksStorage.isStrengthEnabled(context)) defaultStrengthExercises() else emptyList()
+                                psychologyExercises = if (TrainingBlocksStorage.isPsychologyEnabled(context)) getNextPsychologyExercises(context) else emptyList()
+                                strengthExercises = if (TrainingBlocksStorage.isStrengthEnabled(context)) getNextStrengthExercises(context) else emptyList()
                                 currentPhase = activePhases().firstOrNull() ?: TrainingBlockPhase.MAIN
                                 currentExerciseIndex = 0; exerciseStatuses = emptyMap(); isTrainingActive = true; isFreeTraining = false
                                 TrainingStateStorage.save(context, trainingSessionId, trainingMinutes, 0, currentPhase.name, 0, emptyMap(), mainExercises.map { it.id to it.minutes }, psychologyExercises.isNotEmpty(), strengthExercises.isNotEmpty())
@@ -717,8 +717,8 @@ fun DartsTrainerApp() {
                 currentExerciseIndex = snap.exerciseIndex
                 exerciseStatuses = snap.statuses.mapNotNull { (k, v) -> runCatching { k to SummaryStatus.valueOf(v) }.getOrNull() }.toMap()
                 mainExercises = if (snap.mainExerciseIds.isNotEmpty()) snap.mainExerciseIds.mapNotNull { (id, m) -> defaultMainExercises().associateBy { it.id }[id]?.copy(minutes = m) }.ifEmpty { defaultMainExercises() } else defaultMainExercises()
-                psychologyExercises = if (snap.psychologyEnabled) defaultPsychologyExercises() else emptyList()
-                strengthExercises = if (snap.strengthEnabled) defaultStrengthExercises() else emptyList()
+                psychologyExercises = if (snap.psychologyEnabled) getNextPsychologyExercises(context) else emptyList()
+                strengthExercises = if (snap.strengthEnabled) getNextStrengthExercises(context) else emptyList()
                 trainingPaused = false; isTrainingActive = true; isFreeTraining = false
                 screen = if (currentPhase == TrainingBlockPhase.WARMUP) "training_warmup" else "training_block"
                 pendingResume = null; showResumeDialog = false
