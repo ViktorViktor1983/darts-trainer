@@ -57,6 +57,7 @@ import com.lodkin.dartstrainer.data.training.TrainingStatsAnalyzer
 import com.lodkin.dartstrainer.data.training.WeaknessType
 import com.lodkin.dartstrainer.theme.DarkBg
 import com.lodkin.dartstrainer.ui.*
+import com.lodkin.dartstrainer.ui.about.AboutScreen
 import com.lodkin.dartstrainer.ui.training.*
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -286,7 +287,16 @@ fun DartsTrainerApp() {
             val startLvl = analysis.level.coerceAtLeast(1)
             normativesStartLevel = startLvl
 
-            val session = TrainingSession(System.currentTimeMillis(), 30, 0, startLvl, TrainingMode.FLEXIBLE, null, true, false)
+            val session = TrainingSession(
+                dateMillis = System.currentTimeMillis(),
+                plannedMinutes = 30,
+                actualMinutes = 0,
+                levelAtStart = startLvl,
+                mode = TrainingMode.FLEXIBLE,
+                focus = null,
+                isControl = true,
+                isCompleted = false
+            )
             trainingSessionId = trainingRepository.insertSession(session)
             trainingElapsedSeconds = 0; trainingPaused = false
 
@@ -558,7 +568,18 @@ fun DartsTrainerApp() {
                                 else { isNormativesExercise = false; sectorToPlay = null; bigRoundCategory = null; screen = "normatives" }
                             } else {
                                 scope.launch {
-                                    trainingRepository.insertExerciseResult(ExerciseResult(trainingSessionId, blockType, id, score, darts, System.currentTimeMillis(), duration, details))
+                                    trainingRepository.insertExerciseResult(
+                                        ExerciseResult(
+                                            sessionId = trainingSessionId,
+                                            blockType = blockType,
+                                            exerciseId = id,
+                                            score = score,
+                                            dartsThrown = darts,
+                                            timestamp = System.currentTimeMillis(),
+                                            durationSeconds = duration,
+                                            detailsJson = details
+                                        )
+                                    )
                                     trainingRepository.updateTrainingRecordIfBetter(id, score, darts, id.startsWith("aroundclock_"))
                                 }
                                 if (!isFreeTraining && !isSingleExercisePlay) exerciseStatuses = exerciseStatuses.toMutableMap().apply { put(currentExerciseIndex, SummaryStatus.DONE) }
@@ -573,7 +594,16 @@ fun DartsTrainerApp() {
                                 val analysis = TrainingStatsAnalyzer.analyze(trainingRepository)
                                 val completedCount = trainingRepository.getCompletedSessionCount()
                                 currentWeakness = analysis.weakestType; currentLevel = analysis.level; currentTargetGoals = analysis.targetPracticeGoals
-                                val session = TrainingSession(System.currentTimeMillis(), trainingMinutes, 0, analysis.level, TrainingMode.FLEXIBLE, analysis.weakestType, false, false)
+                                val session = TrainingSession(
+                                    dateMillis = System.currentTimeMillis(),
+                                    plannedMinutes = trainingMinutes,
+                                    actualMinutes = 0,
+                                    levelAtStart = analysis.level,
+                                    mode = TrainingMode.FLEXIBLE,
+                                    focus = analysis.weakestType,
+                                    isControl = false,
+                                    isCompleted = false
+                                )
                                 trainingSessionId = trainingRepository.insertSession(session)
                                 trainingElapsedSeconds = 0; trainingPaused = false; showTimeUpDialog = false
                                 val warmupMin = if (TrainingBlocksStorage.isWarmupEnabled(context)) 6 else 0
@@ -597,7 +627,16 @@ fun DartsTrainerApp() {
                                 val analysis = TrainingStatsAnalyzer.analyze(trainingRepository)
                                 val completedCount = trainingRepository.getCompletedSessionCount()
                                 currentWeakness = analysis.weakestType; currentLevel = analysis.level; currentTargetGoals = analysis.targetPracticeGoals
-                                val session = TrainingSession(System.currentTimeMillis(), 0, 0, analysis.level, TrainingMode.FLEXIBLE, analysis.weakestType, false, false)
+                                val session = TrainingSession(
+                                    dateMillis = System.currentTimeMillis(),
+                                    plannedMinutes = 0,
+                                    actualMinutes = 0,
+                                    levelAtStart = analysis.level,
+                                    mode = TrainingMode.FLEXIBLE,
+                                    focus = analysis.weakestType,
+                                    isControl = false,
+                                    isCompleted = false
+                                )
                                 trainingSessionId = trainingRepository.insertSession(session)
                                 trainingElapsedSeconds = 0; trainingPaused = false; trainingMinutes = 0
                                 val dynamicIds = TrainingPlanner.buildDynamicMainExerciseIds(analysis, 999, completedCount, ignoreHardLimit = true)
