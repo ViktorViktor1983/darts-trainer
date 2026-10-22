@@ -34,7 +34,8 @@ import kotlinx.coroutines.delay
 @Composable
 fun OnlineLobbyScreen(
     onBack: () -> Unit,
-    onPlayFriend: () -> Unit
+    onPlayFriend: () -> Unit,
+    onPlayBot: (is501: Boolean, level: Int, legs: Int, sets: Int, nickname: String, saveToTraining: Boolean) -> Unit
 ) {
     val context = LocalContext.current
     val prefs = remember { context.getSharedPreferences("online_prefs", android.content.Context.MODE_PRIVATE) }
@@ -255,6 +256,7 @@ fun OnlineLobbyScreen(
             onCancel = { showSearchDialog = false },
             onPlayBot = { 
                 showSearchDialog = false
+                onPlayBot(is501, selectedLevel, legs, sets, nickname, saveToTraining)
             }
         )
     }
@@ -309,14 +311,12 @@ private fun OnlineSearchDialog(
                 if (phase < 4) {
                     // АНИМАЦИЯ С ЭМОДЗИ ГЛОБУСОМ
                     Box(modifier = Modifier.size(140.dp), contentAlignment = Alignment.Center) {
-                        // Центральная планета (используем эмодзи, чтобы не тащить тяжелые библиотеки)
                         Text(
                             text = "🌐",
                             fontSize = 64.sp,
                             modifier = Modifier.size(70.dp),
                             textAlign = TextAlign.Center
                         )
-                        // Вращающаяся лупа
                         Box(
                             modifier = Modifier
                                 .fillMaxSize()
