@@ -185,6 +185,7 @@ fun DartsTrainerApp() {
 
     var isTraining501 by remember { mutableStateOf(false) }
     var isTrainingCricket by remember { mutableStateOf(false) }
+    var isOnlineGame by remember { mutableStateOf(false) }
 
     // ── СТЕЙТЫ СВОБОДНОЙ ТРЕНИРОВКИ ──
     var isFreeTraining by remember { mutableStateOf(false) }
@@ -229,6 +230,15 @@ fun DartsTrainerApp() {
     var showResumeNormativesDialog by remember { mutableStateOf(false) }
     var pendingNormativesResume by remember { mutableStateOf<NormativesStateStorage.Snapshot?>(null) }
     var isNormativesExercise by remember { mutableStateOf(false) }
+
+    // Сброс флагов онлайна при возврате в лобби
+    LaunchedEffect(screen) {
+        if (screen == "online_lobby") {
+            isOnlineGame = false
+            isTraining501 = false
+            isTrainingCricket = false
+        }
+    }
 
     // ────────────────────────────────────────────────────────
     // ЛОГИКА (ФУНКЦИИ)
@@ -536,6 +546,47 @@ fun DartsTrainerApp() {
                         onBack = { screen = "main" },
                         onPlayFriend = {
                             // TODO: Здесь будет логика приглашения друга
+                        },
+                        onPlayBot = { is501, level, legs, sets, nickname, saveToTraining ->
+                            isOnlineGame = true
+                            scope.launch {
+                                if (saveToTraining) {
+                                    val session = TrainingSession(
+                                        dateMillis = System.currentTimeMillis(),
+                                        plannedMinutes = 0,
+                                        actualMinutes = 0,
+                                        levelAtStart = level,
+                                        mode = TrainingMode.FLEXIBLE,
+                                        focus = null,
+                                        isControl = false,
+                                        isCompleted = false
+                                    )
+                                    trainingSessionId = trainingRepository.insertSession(session)
+                                    if (is501) isTraining501 = true else isTrainingCricket = true
+                                } else {
+                                    if (is501) isTraining501 = false else isTrainingCricket = false
+                                }
+
+                                if (is501) {
+                                    val botName = botNameFor(level)
+                                    val players = listOf(
+                                        Player501(name = nickname, isBot = false, botLevel = 0, teamIndex = 0),
+                                        Player501(name = botName, isBot = true, botLevel = level, teamIndex = 1)
+                                    )
+                                    game501 = Game501Logic.newGame(GameType.X501, OutMode.DOUBLE_OUT, players, legs, sets, false, 0, TRAINING_AUTO_OK_SECONDS, sessionStartTime, sessionForm)
+                                    game501ExistingId = 0L
+                                    screen = "game501_game"
+                                } else {
+                                    val botName = botNameFor(level)
+                                    val players = listOf(
+                                        CricketPlayer(name = nickname, isBot = false, botLevel = 0, teamIndex = 0),
+                                        CricketPlayer(name = botName, isBot = true, botLevel = level, teamIndex = 1)
+                                    )
+                                    cricketGame = CricketLogic.newGame(CricketType.AMERICAN, players, legs, sets, false, 0, TRAINING_AUTO_OK_SECONDS, sessionStartTime, sessionForm)
+                                    cricketExistingId = 0L
+                                    screen = "cricket_game"
+                                }
+                            }
                         }
                     )
                 }
@@ -570,6 +621,7 @@ fun DartsTrainerApp() {
                         aroundClockOrder = aroundClockOrder, onAroundClockOrderChange = { aroundClockOrder = it }, aroundClockHits = aroundClockHits, onAroundClockHitsChange = { aroundClockHits = it },
                         bigRoundCategory = bigRoundCategory, onBigRoundCategoryChange = { bigRoundCategory = it },
                         sessionStartTime = sessionStartTime, sessionForm = sessionForm, isTraining501 = isTraining501, isTrainingCricket = isTrainingCricket,
+                        isOnlineGame = isOnlineGame,
                         trainingSessionId = trainingSessionId, exerciseStartMillis = exerciseStartMillis, isNormativesExercise = isNormativesExercise,
                         onTrainingGameFinished = { playerWon, isGame501 ->
                             isTraining501 = false; isTrainingCricket = false; game501 = null; game501ExistingId = 0L; cricketGame = null; cricketExistingId = 0L
