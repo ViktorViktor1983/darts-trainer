@@ -534,9 +534,6 @@ fun DartsTrainerApp() {
                 "online_lobby" -> {
                     OnlineLobbyScreen(
                         onBack = { screen = "main" },
-                        onStartSearch = {
-                            // TODO: Здесь будет логика поиска через Firebase
-                        },
                         onPlayFriend = {
                             // TODO: Здесь будет логика приглашения друга
                         }
