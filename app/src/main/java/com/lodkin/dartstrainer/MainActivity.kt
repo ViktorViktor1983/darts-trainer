@@ -75,6 +75,7 @@ import com.lodkin.dartstrainer.theme.GoldAccent
 import com.lodkin.dartstrainer.theme.TileBg
 import com.lodkin.dartstrainer.ui.*
 import com.lodkin.dartstrainer.ui.about.AboutScreen
+import com.lodkin.dartstrainer.ui.online.OnlineLobbyScreen
 import com.lodkin.dartstrainer.ui.training.*
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -99,7 +100,7 @@ private val PARENT_SCREEN: Map<String, String> = mapOf(
     "aroundclock_setup" to "game_select", "aroundclock_game" to "game_select", "aroundclock_stats" to "stats_menu",
     "biground_setup" to "game_select", "biground_game" to "game_select", "biground_stats" to "stats_menu",
     "scoreset_setup" to "game_select", "scoreset_game" to "game_select", "scoreset_stats" to "stats_menu",
-    "online_lobby" to "main" // ДОБАВЛЕНО: родительский экран для онлайна
+    "online_lobby" to "main"
 )
 
 private val TRAINING_SCREENS: Set<String> = setOf(
@@ -526,28 +527,20 @@ fun DartsTrainerApp() {
                     },
                     onFreePlay = { screen = "game_select" }, onStatsClick = { statsMenuKey++; screen = "stats_menu" },
                     onSettingsClick = { screen = "settings" }, onOpenDetailedStats = { screen = "detailed_stats" },
-                    onOnlineClick = { screen = "online_lobby" } // ДОБАВЛЕНО: обработчик нажатия на онлайн
+                    onOnlineClick = { screen = "online_lobby" }
                 )
 
-                // НОВЫЙ ЭКРАН: Заглушка для онлайна
+                // ЭКРАН ОНЛАЙН-ЛОББИ
                 "online_lobby" -> {
-                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text("🌐 Онлайн-лобби", color = GoldAccent, fontSize = 24.sp, fontWeight = FontWeight.Bold)
-                            Spacer(Modifier.height(12.dp))
-                            Text("Здесь будет поиск соперника", color = Color.White)
-                            Spacer(Modifier.height(24.dp))
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(12.dp))
-                                    .background(TileBg)
-                                    .clickable { screen = "main" }
-                                    .padding(horizontal = 24.dp, vertical = 12.dp)
-                            ) {
-                                Text("← Назад в меню", color = Accent, fontWeight = FontWeight.Bold)
-                            }
+                    OnlineLobbyScreen(
+                        onBack = { screen = "main" },
+                        onStartSearch = {
+                            // TODO: Здесь будет логика поиска через Firebase
+                        },
+                        onPlayFriend = {
+                            // TODO: Здесь будет логика приглашения друга
                         }
-                    }
+                    )
                 }
 
                 "detailed_stats" -> DetailedStatsScreen(repository = trainingRepository, onBack = { screen = "main" }, onOpenDiscipline = { selectedDiscipline = it; screen = "discipline_stats" })
@@ -749,7 +742,6 @@ fun DartsTrainerApp() {
         // Оверлеи (таймер и отдых)
         if (isTrainingActive && screen in TRAINING_SCREENS && !showRestTimer && screen != "training_free_summary" && !normativesActive) {
             TrainingTimerOverlay(
-                // Убрали coerceAtLeast(0), чтобы таймер мог уходить в минус
                 secondsLeft = if (isFreeTraining) trainingElapsedSeconds else (trainingMinutes * 60 - trainingElapsedSeconds),
                 isPaused = trainingPaused, onTogglePause = { trainingPaused = !trainingPaused }
             )
