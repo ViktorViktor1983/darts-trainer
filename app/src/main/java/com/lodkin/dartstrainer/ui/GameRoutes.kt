@@ -85,9 +85,10 @@ fun GameRoutes(
     sessionStartTime: Long,
     sessionForm: Double,
 
-    // Флаги тренировки (если игра запущена из тренировки)
+    // Флаги тренировки (если игра запущена из тренировки или онлайна)
     isTraining501: Boolean = false,
     isTrainingCricket: Boolean = false,
+    isOnlineGame: Boolean = false, // НОВЫЙ ФЛАГ ДЛЯ ОНЛАЙНА
     trainingSessionId: Long = 0L,
     exerciseStartMillis: Long = 0L,
     isNormativesExercise: Boolean = false,
@@ -174,17 +175,23 @@ fun GameRoutes(
                             scope.launch { cricketRepository.saveGame(f, existingId = id) }
                             onCricketGameChange(f)
                             onCricketExistingIdChange(0L)
-                            onScreenChange("cricket_stats")
+                            onScreenChange(if (isOnlineGame) "online_lobby" else "cricket_stats")
                         }
                     },
                     onBack = {
                         onCricketGameChange(null)
                         onCricketExistingIdChange(0L)
-                        onScreenChange(if (isTrainingCricket) "training_free_next" else "game_select")
+                        onScreenChange(
+                            when {
+                                isOnlineGame -> "online_lobby"
+                                isTrainingCricket -> "training_free_next"
+                                else -> "game_select"
+                            }
+                        )
                     }
                 )
             } else {
-                onScreenChange("cricket_setup")
+                onScreenChange(if (isOnlineGame) "online_lobby" else "cricket_setup")
             }
         }
 
@@ -277,17 +284,23 @@ fun GameRoutes(
                             scope.launch { game501Repository.saveGame(f, existingId = id) }
                             onGame501Change(f)
                             onGame501ExistingIdChange(0L)
-                            onScreenChange("game501_stats")
+                            onScreenChange(if (isOnlineGame) "online_lobby" else "game501_stats")
                         }
                     },
                     onBack = {
                         onGame501Change(null)
                         onGame501ExistingIdChange(0L)
-                        onScreenChange(if (isTraining501) "training_free_next" else "game_select")
+                        onScreenChange(
+                            when {
+                                isOnlineGame -> "online_lobby"
+                                isTraining501 -> "training_free_next"
+                                else -> "game_select"
+                            }
+                        )
                     }
                 )
             } else {
-                onScreenChange("game501_setup")
+                onScreenChange(if (isOnlineGame) "online_lobby" else "game501_setup")
             }
         }
 
