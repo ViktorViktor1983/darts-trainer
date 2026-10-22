@@ -5,7 +5,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Language
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
@@ -122,7 +122,7 @@ fun MainMenuScreen(
 
         Spacer(Modifier.height(12.dp))
 
-        // КНОПКА ОНЛАЙН С ВЕКТОРНОЙ ИКОНКОЙ
+        // КНОПКА ОНЛАЙН С ИКОНКОЙ ЛУПЫ
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -134,15 +134,15 @@ fun MainMenuScreen(
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(
-                    imageVector = Icons.Default.Language,
-                    contentDescription = "Онлайн",
-                    tint = DarkBg, // Черный (темный) цвет иконки
+                    imageVector = Icons.Default.Search, // Иконка лупы
+                    contentDescription = "Поиск онлайн",
+                    tint = DarkBg, // Черный (темный) цвет
                     modifier = Modifier.size(24.dp)
                 )
                 Spacer(Modifier.width(8.dp))
                 Text(
                     text = "Играть онлайн",
-                    color = DarkBg, // Черный (темный) цвет текста
+                    color = DarkBg, // Черный (темный) цвет
                     fontSize = 18.sp,
                     fontWeight = FontWeight.Bold,
                     letterSpacing = 1.sp
