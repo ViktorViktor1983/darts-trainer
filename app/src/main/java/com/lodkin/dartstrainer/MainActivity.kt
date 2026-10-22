@@ -400,8 +400,8 @@ fun DartsTrainerApp() {
     fun activePhases(): List<TrainingBlockPhase> {
         val list = mutableListOf<TrainingBlockPhase>()
         if (TrainingBlocksStorage.isWarmupEnabled(context)) list.add(TrainingBlockPhase.WARMUP)
-        list.add(TrainingBlockPhase.MAIN)
         if (TrainingBlocksStorage.isPsychologyEnabled(context)) list.add(TrainingBlockPhase.PSYCHOLOGY)
+        list.add(TrainingBlockPhase.MAIN)
         if (TrainingBlocksStorage.isStrengthEnabled(context)) list.add(TrainingBlockPhase.STRENGTH)
         return list
     }
