@@ -184,7 +184,7 @@ fun TrainingSummaryScreen(
                     .clickable { onContinue() },
                 contentAlignment = Alignment.Center
             ) {
-                Text("ПРОДОЛЖИТЬ", color = Color(0xFF121212), fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                Text("ПЕРЕЙТИ К СЛЕДУЮЩЕМУ БЛОКУ", color = Color(0xFF121212), fontSize = 16.sp, fontWeight = FontWeight.Bold)
             }
         }
     }
