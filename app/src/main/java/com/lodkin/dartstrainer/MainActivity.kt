@@ -151,7 +151,7 @@ fun DartsTrainerApp() {
     var isTrainingActive by remember { mutableStateOf(false) }
     var trainingElapsedSeconds by remember { mutableStateOf(0) }
     var trainingPaused by remember { mutableStateOf(false) }
-    var showTimeUpDialog by remember { mutableStateOf(false) }
+    var showTimeUpDialog by remember { mutableStateOf(false) } // Используется как окно за 5 минут
     var autoOpenTimeDialog by remember { mutableStateOf(true) }
 
     var currentPhase by remember { mutableStateOf(TrainingBlockPhase.WARMUP) }
@@ -412,6 +412,20 @@ fun DartsTrainerApp() {
         return if (idx >= 0 && idx < phases.lastIndex) phases[idx + 1] else TrainingBlockPhase.FINISHED
     }
 
+    fun goToNextPhase() {
+        val next = nextPhaseAfter(currentPhase)
+        currentPhase = next
+        currentExerciseIndex = 0
+        exerciseStatuses = emptyMap()
+        if (next == TrainingBlockPhase.FINISHED) {
+            resetTrainingState()
+            TrainingStateStorage.clear(context)
+            screen = "main"
+        } else {
+            screen = "training_block"
+        }
+    }
+
     fun advanceAfterExercise(finishedExerciseId: String) {
         if (isSingleExercisePlay) {
             isSingleExercisePlay = false; isTrainingActive = false; trainingSessionId = 0L; isFreeTraining = false; screen = "main"; return
@@ -445,7 +459,10 @@ fun DartsTrainerApp() {
         while (true) {
             delay(1000L)
             trainingElapsedSeconds += 1
-            if (!isFreeTraining && !normativesActive && trainingElapsedSeconds >= trainingMinutes * 60) { showTimeUpDialog = true; break }
+            // Показываем окно ровно за 5 минут (300 секунд) до конца
+            if (!isFreeTraining && !normativesActive && trainingElapsedSeconds == trainingMinutes * 60 - 300) {
+                showTimeUpDialog = true
+            }
         }
     }
     
@@ -668,27 +685,15 @@ fun DartsTrainerApp() {
                         onFinishAndClear = { resetTrainingState(); TrainingStateStorage.clear(context); screen = "main" },
                         showResumeDialog = showResumeDialog, onShowResumeDialogChange = { showResumeDialog = it },
                         showTimeUpDialog = showTimeUpDialog, onShowTimeUpDialogChange = { showTimeUpDialog = it },
-                        onTimeUpFinish = { showTimeUpDialog = false; resetTrainingState(); TrainingStateStorage.clear(context); screen = "training" },
-                        onTimeUpContinue = { showTimeUpDialog = false; trainingMinutes += 20 }, restSeconds = 0,
+                        onTimeUpFinish = { showTimeUpDialog = false; goToNextPhase() },
+                        onTimeUpContinue = { showTimeUpDialog = false }, restSeconds = 0,
                         onInventoryUpdated = {
                             if (currentPhase == TrainingBlockPhase.STRENGTH) {
                                 strengthExercises = getNextStrengthExercises(context)
                             }
                         },
                         isLastPhase = nextPhaseAfter(currentPhase) == TrainingBlockPhase.FINISHED,
-                        onContinueToNextPhase = {
-                            val next = nextPhaseAfter(currentPhase)
-                            currentPhase = next
-                            currentExerciseIndex = 0
-                            exerciseStatuses = emptyMap()
-                            if (next == TrainingBlockPhase.FINISHED) {
-                                resetTrainingState()
-                                TrainingStateStorage.clear(context)
-                                screen = "main"
-                            } else {
-                                screen = "training_block"
-                            }
-                        }
+                        onContinueToNextPhase = { goToNextPhase() }
                     )
                 }
 
@@ -705,7 +710,8 @@ fun DartsTrainerApp() {
         // Оверлеи (таймер и отдых)
         if (isTrainingActive && screen in TRAINING_SCREENS && !showRestTimer && screen != "training_free_summary" && !normativesActive) {
             TrainingTimerOverlay(
-                secondsLeft = if (isFreeTraining) trainingElapsedSeconds else (trainingMinutes * 60 - trainingElapsedSeconds).coerceAtLeast(0),
+                // Убрали coerceAtLeast(0), чтобы таймер мог уходить в минус
+                secondsLeft = if (isFreeTraining) trainingElapsedSeconds else (trainingMinutes * 60 - trainingElapsedSeconds),
                 isPaused = trainingPaused, onTogglePause = { trainingPaused = !trainingPaused }
             )
         }
@@ -726,8 +732,8 @@ fun DartsTrainerApp() {
         showExitTrainingDialog = showExitTrainingDialog, onExitFinish = { showExitTrainingDialog = false; resetTrainingState(); TrainingStateStorage.clear(context); screen = "main" },
         onExitPostpone = { showExitTrainingDialog = false; saveCurrentTrainingState(); screen = "main" },
         showTimeUpDialog = showTimeUpDialog, trainingMinutes = trainingMinutes,
-        onTimeUpFinish = { showTimeUpDialog = false; resetTrainingState(); TrainingStateStorage.clear(context); screen = "training" },
-        onTimeUpContinue = { showTimeUpDialog = false; trainingMinutes += 20 },
+        onTimeUpFinish = { showTimeUpDialog = false; goToNextPhase() },
+        onTimeUpContinue = { showTimeUpDialog = false },
         showFreeNewRoundDialog = showFreeNewRoundDialog, onNewRound = { showFreeNewRoundDialog = false; freeCompletedIds = emptySet(); freeSkippedIds = emptySet(); pickNextFreeExercise() }, onFinishTraining = { showFreeNewRoundDialog = false; screen = "training_free_summary" },
         showResumeDialog = showResumeDialog, pendingResume = pendingResume,
         onResumeContinue = {
