@@ -112,6 +112,15 @@ private enum class TrainingBlockPhase {
     WARMUP, MAIN, PSYCHOLOGY, STRENGTH, FINISHED
 }
 
+data class OnlineGameParams(
+    val is501: Boolean,
+    val level: Int,
+    val legs: Int,
+    val sets: Int,
+    val nickname: String,
+    val saveToTraining: Boolean
+)
+
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -186,6 +195,9 @@ fun DartsTrainerApp() {
     var isTraining501 by remember { mutableStateOf(false) }
     var isTrainingCricket by remember { mutableStateOf(false) }
     var isOnlineGame by remember { mutableStateOf(false) }
+
+    // ── СТЕЙТЫ ОНЛАЙНА ──
+    var pendingOnlineGameParams by remember { mutableStateOf<OnlineGameParams?>(null) }
 
     // ── СТЕЙТЫ СВОБОДНОЙ ТРЕНИРОВКИ ──
     var isFreeTraining by remember { mutableStateOf(false) }
@@ -279,6 +291,48 @@ fun DartsTrainerApp() {
             )
             cricketGame = CricketLogic.newGame(CricketType.AMERICAN, players, 1, 1, false, startingTeamIndex, TRAINING_AUTO_OK_SECONDS, sessionStartTime, sessionForm)
             cricketExistingId = 0L; isTrainingCricket = true; screen = "cricket_game"
+        }
+    }
+
+    fun startOnlineBotGame(params: OnlineGameParams, startingTeam: Int) {
+        isOnlineGame = true
+        scope.launch {
+            if (params.saveToTraining) {
+                val session = TrainingSession(
+                    dateMillis = System.currentTimeMillis(),
+                    plannedMinutes = 0,
+                    actualMinutes = 0,
+                    levelAtStart = params.level,
+                    mode = TrainingMode.FLEXIBLE,
+                    focus = null,
+                    isControl = false,
+                    isCompleted = false
+                )
+                trainingSessionId = trainingRepository.insertSession(session)
+                if (params.is501) isTraining501 = true else isTrainingCricket = true
+            } else {
+                if (params.is501) isTraining501 = false else isTrainingCricket = false
+            }
+
+            if (params.is501) {
+                val botName = botNameFor(params.level)
+                val players = listOf(
+                    Player501(name = params.nickname, isBot = false, botLevel = 0, teamIndex = 0),
+                    Player501(name = botName, isBot = true, botLevel = params.level, teamIndex = 1)
+                )
+                game501 = Game501Logic.newGame(GameType.X501, OutMode.DOUBLE_OUT, players, params.legs, params.sets, false, startingTeam, TRAINING_AUTO_OK_SECONDS, sessionStartTime, sessionForm)
+                game501ExistingId = 0L
+                screen = "game501_game"
+            } else {
+                val botName = botNameFor(params.level)
+                val players = listOf(
+                    CricketPlayer(name = params.nickname, isBot = false, botLevel = 0, teamIndex = 0),
+                    CricketPlayer(name = botName, isBot = true, botLevel = params.level, teamIndex = 1)
+                )
+                cricketGame = CricketLogic.newGame(CricketType.AMERICAN, players, params.legs, params.sets, false, startingTeam, TRAINING_AUTO_OK_SECONDS, sessionStartTime, sessionForm)
+                cricketExistingId = 0L
+                screen = "cricket_game"
+            }
         }
     }
 
@@ -548,45 +602,9 @@ fun DartsTrainerApp() {
                             // TODO: Здесь будет логика приглашения друга
                         },
                         onPlayBot = { is501, level, legs, sets, nickname, saveToTraining ->
-                            isOnlineGame = true
-                            scope.launch {
-                                if (saveToTraining) {
-                                    val session = TrainingSession(
-                                        dateMillis = System.currentTimeMillis(),
-                                        plannedMinutes = 0,
-                                        actualMinutes = 0,
-                                        levelAtStart = level,
-                                        mode = TrainingMode.FLEXIBLE,
-                                        focus = null,
-                                        isControl = false,
-                                        isCompleted = false
-                                    )
-                                    trainingSessionId = trainingRepository.insertSession(session)
-                                    if (is501) isTraining501 = true else isTrainingCricket = true
-                                } else {
-                                    if (is501) isTraining501 = false else isTrainingCricket = false
-                                }
-
-                                if (is501) {
-                                    val botName = botNameFor(level)
-                                    val players = listOf(
-                                        Player501(name = nickname, isBot = false, botLevel = 0, teamIndex = 0),
-                                        Player501(name = botName, isBot = true, botLevel = level, teamIndex = 1)
-                                    )
-                                    game501 = Game501Logic.newGame(GameType.X501, OutMode.DOUBLE_OUT, players, legs, sets, false, 0, TRAINING_AUTO_OK_SECONDS, sessionStartTime, sessionForm)
-                                    game501ExistingId = 0L
-                                    screen = "game501_game"
-                                } else {
-                                    val botName = botNameFor(level)
-                                    val players = listOf(
-                                        CricketPlayer(name = nickname, isBot = false, botLevel = 0, teamIndex = 0),
-                                        CricketPlayer(name = botName, isBot = true, botLevel = level, teamIndex = 1)
-                                    )
-                                    cricketGame = CricketLogic.newGame(CricketType.AMERICAN, players, legs, sets, false, 0, TRAINING_AUTO_OK_SECONDS, sessionStartTime, sessionForm)
-                                    cricketExistingId = 0L
-                                    screen = "cricket_game"
-                                }
-                            }
+                            pendingOnlineGameParams = OnlineGameParams(is501, level, legs, sets, nickname, saveToTraining)
+                            bullDrawExerciseId = if (is501) "game501" else "cricket"
+                            showBullDraw = true
                         }
                     )
                 }
@@ -803,12 +821,34 @@ fun DartsTrainerApp() {
     // ────────────────────────────────────────────────────────
     // ДИАЛОГИ
     // ────────────────────────────────────────────────────────
+    val onlineParams = pendingOnlineGameParams
     val botLvlForBull = if (bullDrawExerciseId == "game501") TrainingBotLevelStorage.getLevel501(context, currentLevel) else TrainingBotLevelStorage.getLevelCricket(context, currentLevel)
+    val effectiveBotLevel = onlineParams?.level ?: botLvlForBull
+    val effectiveBotName = botNameFor(effectiveBotLevel)
+
     DialogsRoutes(
         context = context, showBullDraw = showBullDraw, bullDrawExerciseId = bullDrawExerciseId, playerName = SettingsStorage.getPlayerName(context).ifBlank { "Игрок" },
-        botName = botNameFor(botLvlForBull), botLevel = botLvlForBull,
-        onBullWinnerChosen = { showBullDraw = false; startTrainingGame(bullDrawExerciseId ?: "", it); bullDrawExerciseId = null },
-        onBullCancel = { showBullDraw = false; startTrainingGame(bullDrawExerciseId ?: "", 0); bullDrawExerciseId = null },
+        botName = effectiveBotName, botLevel = effectiveBotLevel,
+        onBullWinnerChosen = { winner ->
+            showBullDraw = false
+            if (onlineParams != null) {
+                startOnlineBotGame(onlineParams, winner)
+                pendingOnlineGameParams = null
+            } else {
+                startTrainingGame(bullDrawExerciseId ?: "", winner)
+            }
+            bullDrawExerciseId = null
+        },
+        onBullCancel = {
+            showBullDraw = false
+            if (onlineParams != null) {
+                startOnlineBotGame(onlineParams, 0)
+                pendingOnlineGameParams = null
+            } else {
+                startTrainingGame(bullDrawExerciseId ?: "", 0)
+            }
+            bullDrawExerciseId = null
+        },
         showExitTrainingDialog = showExitTrainingDialog, onExitFinish = { showExitTrainingDialog = false; resetTrainingState(); TrainingStateStorage.clear(context); screen = "main" },
         onExitPostpone = { showExitTrainingDialog = false; saveCurrentTrainingState(); screen = "main" },
         showTimeUpDialog = showTimeUpDialog, trainingMinutes = trainingMinutes,
