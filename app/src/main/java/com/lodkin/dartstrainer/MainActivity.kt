@@ -2,16 +2,29 @@ package com.lodkin.dartstrainer
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
-import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.lodkin.dartstrainer.data.SettingsStorage
 import com.lodkin.dartstrainer.data.aroundclock.AroundClockDatabase
 import com.lodkin.dartstrainer.data.aroundclock.AroundClockOrder
@@ -56,7 +69,10 @@ import com.lodkin.dartstrainer.data.training.TrainingSession
 import com.lodkin.dartstrainer.data.training.TrainingStateStorage
 import com.lodkin.dartstrainer.data.training.TrainingStatsAnalyzer
 import com.lodkin.dartstrainer.data.training.WeaknessType
+import com.lodkin.dartstrainer.theme.Accent
 import com.lodkin.dartstrainer.theme.DarkBg
+import com.lodkin.dartstrainer.theme.GoldAccent
+import com.lodkin.dartstrainer.theme.TileBg
 import com.lodkin.dartstrainer.ui.*
 import com.lodkin.dartstrainer.ui.about.AboutScreen
 import com.lodkin.dartstrainer.ui.training.*
@@ -82,7 +98,8 @@ private val PARENT_SCREEN: Map<String, String> = mapOf(
     "sector_setup" to "game_select", "sector_game" to "game_select", "sector_stats" to "stats_menu",
     "aroundclock_setup" to "game_select", "aroundclock_game" to "game_select", "aroundclock_stats" to "stats_menu",
     "biground_setup" to "game_select", "biground_game" to "game_select", "biground_stats" to "stats_menu",
-    "scoreset_setup" to "game_select", "scoreset_game" to "game_select", "scoreset_stats" to "stats_menu"
+    "scoreset_setup" to "game_select", "scoreset_game" to "game_select", "scoreset_stats" to "stats_menu",
+    "online_lobby" to "main" // ДОБАВЛЕНО: родительский экран для онлайна
 )
 
 private val TRAINING_SCREENS: Set<String> = setOf(
@@ -151,7 +168,7 @@ fun DartsTrainerApp() {
     var isTrainingActive by remember { mutableStateOf(false) }
     var trainingElapsedSeconds by remember { mutableStateOf(0) }
     var trainingPaused by remember { mutableStateOf(false) }
-    var showTimeUpDialog by remember { mutableStateOf(false) } // Используется как окно за 5 минут
+    var showTimeUpDialog by remember { mutableStateOf(false) }
     var autoOpenTimeDialog by remember { mutableStateOf(true) }
 
     var currentPhase by remember { mutableStateOf(TrainingBlockPhase.WARMUP) }
@@ -508,8 +525,30 @@ fun DartsTrainerApp() {
                         screen = "training"
                     },
                     onFreePlay = { screen = "game_select" }, onStatsClick = { statsMenuKey++; screen = "stats_menu" },
-                    onSettingsClick = { screen = "settings" }, onOpenDetailedStats = { screen = "detailed_stats" }
+                    onSettingsClick = { screen = "settings" }, onOpenDetailedStats = { screen = "detailed_stats" },
+                    onOnlineClick = { screen = "online_lobby" } // ДОБАВЛЕНО: обработчик нажатия на онлайн
                 )
+
+                // НОВЫЙ ЭКРАН: Заглушка для онлайна
+                "online_lobby" -> {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("🌐 Онлайн-лобби", color = GoldAccent, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+                            Spacer(Modifier.height(12.dp))
+                            Text("Здесь будет поиск соперника", color = Color.White)
+                            Spacer(Modifier.height(24.dp))
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(TileBg)
+                                    .clickable { screen = "main" }
+                                    .padding(horizontal = 24.dp, vertical = 12.dp)
+                            ) {
+                                Text("← Назад в меню", color = Accent, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                }
 
                 "detailed_stats" -> DetailedStatsScreen(repository = trainingRepository, onBack = { screen = "main" }, onOpenDiscipline = { selectedDiscipline = it; screen = "discipline_stats" })
                 
