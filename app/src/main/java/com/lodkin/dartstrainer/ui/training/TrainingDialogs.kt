@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -24,7 +23,6 @@ import com.lodkin.dartstrainer.theme.TileBgDark
 
 /**
  * Диалог «Прервать тренировку?» (обычный режим).
- * Игрок выбирает: Закончить сейчас или Отложить до 3 часов.
  */
 @Composable
 internal fun ExitTrainingDialog(
@@ -163,7 +161,7 @@ internal fun ResumeTrainingDialog(
 }
 
 /**
- * Диалог «Время тренировки вышло» — Закончить или Продолжить +20 мин.
+ * Диалог «Осталось 5 минут» — Перейти к силовым или Доиграть.
  */
 @Composable
 internal fun TimeUpDialog(
@@ -176,7 +174,7 @@ internal fun TimeUpDialog(
         containerColor = TileBgDark,
         title = {
             Text(
-                "⏱ Время тренировки вышло",
+                "⏱ Осталось 5 минут",
                 color = GoldAccent,
                 fontSize = 18.sp,
                 fontWeight = FontWeight.Bold
@@ -185,22 +183,44 @@ internal fun TimeUpDialog(
         text = {
             Column {
                 Text(
-                    "Ты потренировался $trainingMinutes минут — это твоя цель на сегодня. " +
-                            "Что делаем дальше?",
+                    "Тренировка подходит к концу. Этого времени как раз хватит, чтобы пройти силовой блок.",
                     color = Color.White.copy(alpha = 0.85f),
-                    fontSize = 14.sp
+                    fontSize = 14.sp,
+                    lineHeight = 20.sp
+                )
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    "Перейти к силовым или доиграть текущую игру?",
+                    color = Color.White.copy(alpha = 0.75f),
+                    fontSize = 13.sp
                 )
             }
         },
         confirmButton = {
-            TextButton(onClick = onFinish) {
-                Text("Закончить", color = ErrorColor, fontWeight = FontWeight.Bold)
-            }
+            Text(
+                "К силовым",
+                color = Color(0xFF121212),
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(Accent)
+                    .clickable { onFinish() }
+                    .padding(horizontal = 16.dp, vertical = 10.dp)
+            )
         },
         dismissButton = {
-            TextButton(onClick = onContinuePlus20) {
-                Text("Продолжить +20 мин", color = GoldAccent, fontWeight = FontWeight.Bold)
-            }
+            Text(
+                "Доиграть",
+                color = Color.White,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(TileBgDark)
+                    .clickable { onContinuePlus20() }
+                    .padding(horizontal = 16.dp, vertical = 10.dp)
+            )
         }
     )
 }
