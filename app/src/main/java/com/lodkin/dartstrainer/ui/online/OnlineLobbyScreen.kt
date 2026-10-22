@@ -5,11 +5,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -18,7 +16,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -102,7 +99,6 @@ fun OnlineLobbyScreen(
                         Text(if (nickname.isBlank()) "Задать ✏️" else nickname, color = if (nickname.isBlank()) GoldAccent else Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
                     }
                     Spacer(Modifier.height(12.dp))
-                    // ДОБАВЛЕНА СТРЕЛОЧКА ▼ ДЛЯ ИНТУИТИВНОСТИ
                     Row(modifier = Modifier.fillMaxWidth().clickable { showLevelDialog = true }, verticalAlignment = Alignment.CenterVertically) {
                         Text("Уровень:", color = Color.White.copy(alpha = 0.7f), fontSize = 14.sp, modifier = Modifier.weight(1f))
                         Text(DartsNorms.getLevelName(selectedLevel) + " (PPR " + getPprRange(selectedLevel) + ") ▼", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
@@ -259,7 +255,6 @@ fun OnlineLobbyScreen(
             onCancel = { showSearchDialog = false },
             onPlayBot = { 
                 showSearchDialog = false
-                // TODO: Переход к игре с ботом
             }
         )
     }
@@ -274,11 +269,9 @@ private fun OnlineSearchDialog(
     onCancel: () -> Unit,
     onPlayBot: () -> Unit
 ) {
-    // 1: строгий поиск, 2: расширенный, 3: все, 4: провал
     var phase by remember { mutableStateOf(1) }
-    var secondsLeft by remember { mutableStateOf(5) } // Для теста 5 секунд
+    var secondsLeft by remember { mutableStateOf(5) } 
 
-    // Анимация вращения
     val infiniteTransition = rememberInfiniteTransition(label = "searchAnimation")
     val angle by infiniteTransition.animateFloat(
         initialValue = 0f,
@@ -292,7 +285,7 @@ private fun OnlineSearchDialog(
 
     LaunchedEffect(phase) {
         if (phase < 4) {
-            secondsLeft = 5 // В реальной игре здесь будет 60
+            secondsLeft = 5 
             while (secondsLeft > 0) {
                 delay(1000L)
                 secondsLeft -= 1
@@ -314,14 +307,14 @@ private fun OnlineSearchDialog(
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 if (phase < 4) {
-                    // АНИМАЦИЯ
+                    // АНИМАЦИЯ С ЭМОДЗИ ГЛОБУСОМ
                     Box(modifier = Modifier.size(140.dp), contentAlignment = Alignment.Center) {
-                        // Центральная планета
-                        Icon(
-                            imageVector = Icons.Default.Public,
-                            contentDescription = null,
-                            tint = Accent,
-                            modifier = Modifier.size(70.dp)
+                        // Центральная планета (используем эмодзи, чтобы не тащить тяжелые библиотеки)
+                        Text(
+                            text = "🌐",
+                            fontSize = 64.sp,
+                            modifier = Modifier.size(70.dp),
+                            textAlign = TextAlign.Center
                         )
                         // Вращающаяся лупа
                         Box(
