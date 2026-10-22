@@ -19,6 +19,7 @@ import com.lodkin.dartstrainer.data.training.TrainingDatabase
 import com.lodkin.dartstrainer.data.training.TrainingRepository
 import com.lodkin.dartstrainer.data.training.TrainingStatsAnalyzer
 import com.lodkin.dartstrainer.theme.Accent
+import com.lodkin.dartstrainer.theme.DarkBg
 import com.lodkin.dartstrainer.theme.GoldAccent
 import com.lodkin.dartstrainer.theme.TileBg
 import com.lodkin.dartstrainer.theme.TileBgDark
@@ -35,7 +36,8 @@ fun MainMenuScreen(
     onFreePlay: () -> Unit,
     onStatsClick: () -> Unit,
     onSettingsClick: () -> Unit,
-    onOpenDetailedStats: () -> Unit
+    onOpenDetailedStats: () -> Unit,
+    onOnlineClick: () -> Unit // НОВЫЙ ПАРАМЕТР ДЛЯ ОНЛАЙНА
 ) {
     val context = LocalContext.current
     val repository = remember {
@@ -105,7 +107,7 @@ fun MainMenuScreen(
         TrainingCard(
             modifier = Modifier
                 .fillMaxWidth()
-                .weight(50f),
+                .weight(1f), // Изменено с 50f на 1f для гибкости
             avg501Ppr = avgPpr,
             avg501DoublesPercent = avgDbl,
             count501Matches = count501,
@@ -117,11 +119,32 @@ fun MainMenuScreen(
 
         Spacer(Modifier.height(12.dp))
 
+        // НОВАЯ КНОПКА ОНЛАЙН
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(60.dp) // Узкая кнопка
+                .clip(RoundedCornerShape(16.dp))
+                .background(Accent) // Яркий голубой цвет
+                .clickable { onOnlineClick() },
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = "🌐 Играть онлайн",
+                color = DarkBg, // Тёмный текст для контраста
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 1.sp
+            )
+        }
+
+        Spacer(Modifier.height(12.dp))
+
         // Просто поиграть с кнопкой статистики в правом нижнем углу
         FreePlayCard(
             modifier = Modifier
                 .fillMaxWidth()
-                .weight(50f),
+                .weight(1f), // Изменено с 50f на 1f для гибкости
             onFreePlay = onFreePlay,
             onStatsClick = onStatsClick
         )
