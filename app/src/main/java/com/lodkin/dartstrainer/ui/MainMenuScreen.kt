@@ -4,6 +4,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Language
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -37,7 +40,7 @@ fun MainMenuScreen(
     onStatsClick: () -> Unit,
     onSettingsClick: () -> Unit,
     onOpenDetailedStats: () -> Unit,
-    onOnlineClick: () -> Unit // НОВЫЙ ПАРАМЕТР ДЛЯ ОНЛАЙНА
+    onOnlineClick: () -> Unit
 ) {
     val context = LocalContext.current
     val repository = remember {
@@ -107,7 +110,7 @@ fun MainMenuScreen(
         TrainingCard(
             modifier = Modifier
                 .fillMaxWidth()
-                .weight(1f), // Изменено с 50f на 1f для гибкости
+                .weight(1f),
             avg501Ppr = avgPpr,
             avg501DoublesPercent = avgDbl,
             count501Matches = count501,
@@ -119,23 +122,32 @@ fun MainMenuScreen(
 
         Spacer(Modifier.height(12.dp))
 
-        // НОВАЯ КНОПКА ОНЛАЙН
+        // КНОПКА ОНЛАЙН С ВЕКТОРНОЙ ИКОНКОЙ
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(60.dp) // Узкая кнопка
+                .height(60.dp)
                 .clip(RoundedCornerShape(16.dp))
                 .background(Accent) // Яркий голубой цвет
                 .clickable { onOnlineClick() },
             contentAlignment = Alignment.Center
         ) {
-            Text(
-                text = "🌐 Играть онлайн",
-                color = DarkBg, // Тёмный текст для контраста
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 1.sp
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Default.Language,
+                    contentDescription = "Онлайн",
+                    tint = DarkBg, // Черный (темный) цвет иконки
+                    modifier = Modifier.size(24.dp)
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    text = "Играть онлайн",
+                    color = DarkBg, // Черный (темный) цвет текста
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 1.sp
+                )
+            }
         }
 
         Spacer(Modifier.height(12.dp))
@@ -144,7 +156,7 @@ fun MainMenuScreen(
         FreePlayCard(
             modifier = Modifier
                 .fillMaxWidth()
-                .weight(1f), // Изменено с 50f на 1f для гибкости
+                .weight(1f),
             onFreePlay = onFreePlay,
             onStatsClick = onStatsClick
         )
