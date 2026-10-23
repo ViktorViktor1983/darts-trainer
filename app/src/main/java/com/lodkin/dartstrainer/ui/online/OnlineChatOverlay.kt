@@ -184,11 +184,11 @@ fun OnlineChatOverlay(
         Column(
             modifier = modifier
                 .fillMaxWidth()
-                .height(100.dp) // Фиксированная высота
+                .height(110.dp) // Увеличили высоту
                 .clip(RoundedCornerShape(12.dp))
                 .background(TileBg)
                 .clickable { onExpand() }
-                .padding(horizontal = 8.dp, vertical = 4.dp),
+                .padding(horizontal = 8.dp, vertical = 6.dp),
             verticalArrangement = Arrangement.Bottom // Прижимаем текст к низу
         ) {
             if (lastMessages.isEmpty()) {
