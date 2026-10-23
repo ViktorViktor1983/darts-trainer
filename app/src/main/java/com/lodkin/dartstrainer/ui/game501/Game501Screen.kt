@@ -401,6 +401,7 @@ fun Game501Screen(
     }
 
     val activeTeam = game.currentPlayer?.teamIndex ?: 0
+    val showGameControls = !(isOnlineGame && isChatExpanded)
 
     Box(modifier = Modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize().background(Color(0xFF0D1117))) {
@@ -428,39 +429,37 @@ fun Game501Screen(
                 PrevScoreBlock("Пред.", lastScoreB, activeTeam == 1, Alignment.End)
             }
 
-            QuickButtonsWithLeg(
-                sums = quickSums,
-                enabled = !game.isFinished && game.currentPlayer?.isBot != true,
-                onQuick = { pressQuickButton(it) },
-                onLeg = { pressLeg() }
-            )
+            // Если чат открыт, прячем игровую клавиатуру и кнопки
+            if (showGameControls) {
+                QuickButtonsWithLeg(
+                    sums = quickSums,
+                    enabled = !game.isFinished && game.currentPlayer?.isBot != true,
+                    onQuick = { pressQuickButton(it) },
+                    onLeg = { pressLeg() }
+                )
 
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                BigActionButton("Остаток", !game.isFinished && game.currentPlayer?.isBot != true, TileBg, Accent, Modifier.weight(2f)) { submitRemaining() }
-                BigActionButton("OK", !game.isFinished && game.currentPlayer?.isBot != true, Accent, Color(0xFF121212), Modifier.weight(4f)) { submitSum() }
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    BigActionButton("Остаток", !game.isFinished && game.currentPlayer?.isBot != true, TileBg, Accent, Modifier.weight(2f)) { submitRemaining() }
+                    BigActionButton("OK", !game.isFinished && game.currentPlayer?.isBot != true, Accent, Color(0xFF121212), Modifier.weight(4f)) { submitSum() }
+                }
+
+                Keyboard501(
+                    enabled = !game.isFinished && game.currentPlayer?.isBot != true,
+                    canUndo = canUndo,
+                    isOnlineGame = isOnlineGame,
+                    onDigit = { inputText = if (inputText.length < 3) inputText + it else inputText },
+                    onBackspace = { inputText = if (inputText.isNotEmpty()) inputText.dropLast(1) else "" },
+                    onClear = { inputText = "" },
+                    onUndo = { undo() }
+                )
             }
 
-            Keyboard501(
-                enabled = !game.isFinished && game.currentPlayer?.isBot != true,
-                canUndo = canUndo,
-                isOnlineGame = isOnlineGame,
-                onDigit = { inputText = if (inputText.length < 3) inputText + it else inputText },
-                onBackspace = { inputText = if (inputText.isNotEmpty()) inputText.dropLast(1) else "" },
-                onClear = { inputText = "" },
-                onUndo = { undo() }
-            )
-            
+            // Чат занимает всё свободное место
             if (isOnlineGame && isChatExpanded) {
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxWidth()
-                        .heightIn(min = 200.dp, max = 350.dp)
-                        .padding(horizontal = 8.dp, vertical = 4.dp)
-                ) {
+                Box(modifier = Modifier.weight(1f).fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp)) {
                     OnlineChatOverlay(
                         modifier = Modifier.fillMaxSize(),
                         isExpanded = isChatExpanded,
