@@ -178,13 +178,17 @@ fun OnlineChatOverlay(
             }
         }
     } else {
-        // СВЕРНУТЫЙ ЧАТ (Увеличенная полоска с историей)
-        val lastMessages = messages.takeLast(3).reversed() // Берем последние 3 сообщения
+        // СВЕРНУТЫЙ ЧАТ (Порядок сообщений как в развернутом виде)
+        // Берем только личные сообщения (не системные)
+        val personalMessages = messages.filter { !it.isSystem }
+        val messagesToShow = if (personalMessages.isNotEmpty()) personalMessages else messages
+        // Берем последние 3 сообщения (без reversed, чтобы они шли сверху вниз)
+        val lastMessages = messagesToShow.takeLast(3)
 
         Column(
             modifier = modifier
                 .fillMaxWidth()
-                .height(100.dp) // Увеличили высоту для отображения нескольких сообщений
+                .height(100.dp)
                 .clip(RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp))
                 .background(TileBg)
                 .clickable { onExpand() }
@@ -194,6 +198,7 @@ fun OnlineChatOverlay(
             if (lastMessages.isEmpty()) {
                 Text("Чат пуст...", color = Color.White.copy(alpha = 0.5f), fontSize = 12.sp)
             } else {
+                // Идем по списку в прямом порядке: старые сверху, новые снизу
                 lastMessages.forEach { msg ->
                     val textToShow = if (msg.isSystem) msg.text else "${msg.senderName}: ${msg.text}"
                     val textColor = if (msg.isMyMessage) Accent else Color.White.copy(alpha = 0.9f)
@@ -210,7 +215,6 @@ fun OnlineChatOverlay(
                 }
             }
             
-            // Счетчик непрочитанных (в правом верхнем углу плашки)
             if (unreadCount > 0) {
                 Box(
                     modifier = Modifier
