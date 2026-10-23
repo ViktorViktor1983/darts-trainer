@@ -1,7 +1,6 @@
 package com.lodkin.dartstrainer.ui
 
 import androidx.compose.runtime.Composable
-import com.lodkin.dartstrainer.data.SettingsStorage
 import com.lodkin.dartstrainer.data.aroundclock.AroundClockOrder
 import com.lodkin.dartstrainer.data.aroundclock.AroundClockRepository
 import com.lodkin.dartstrainer.data.aroundclock.AroundClockTarget
@@ -234,7 +233,7 @@ fun GameRoutes(
                     initialGame = g,
                     existingId = game501ExistingId,
                     isTrainingMode = isTraining501,
-                    isOnlineGame = isOnlineGame, // ПЕРЕДАЕМ ФЛАГ В САМ ЭКРАН
+                    isOnlineGame = isOnlineGame,
                     trainingRepository = trainingRepository,
                     onGameFinish = { f, id ->
                         if (isTraining501) {
