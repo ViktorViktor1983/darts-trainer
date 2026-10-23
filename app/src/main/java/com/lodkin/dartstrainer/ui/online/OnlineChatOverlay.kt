@@ -1,7 +1,6 @@
 package com.lodkin.dartstrainer.ui.online
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -50,17 +49,24 @@ fun OnlineChatOverlay(
     val keyboardController = LocalSoftwareKeyboardController.current
     val focusManager = LocalFocusManager.current
 
+    // Автоскролл вниз при добавлении нового сообщения
+    LaunchedEffect(messages.size) {
+        if (isExpanded && messages.isNotEmpty()) {
+            listState.animateScrollToItem(0)
+        }
+    }
+
     if (isExpanded) {
         Column(
             modifier = modifier
                 .fillMaxSize()
-                .clip(RoundedCornerShape(16.dp))
-                .background(Color(0xFFF5F5F5))
-                .padding(6.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(Color(0xFFF5F5F5)) // Светлый фон
+                .padding(8.dp)
         ) {
             // Шапка с крестиком
             Row(
-                modifier = Modifier.fillMaxWidth().padding(bottom = 2.dp),
+                modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.End
             ) {
                 Box(
@@ -75,26 +81,26 @@ fun OnlineChatOverlay(
                 }
             }
 
-            // Лента сообщений (перевернутая, чтобы прижиматься к низу)
+            // Лента сообщений
             LazyColumn(
                 state = listState,
-                modifier = Modifier.weight(1f).fillMaxWidth(),
-                reverseLayout = true, // ВАЖНО: новые сообщения снизу
+                modifier = Modifier.weight(1f).fillMaxWidth().padding(vertical = 4.dp),
+                reverseLayout = true, // Новые сообщения снизу
                 verticalArrangement = Arrangement.spacedBy(4.dp, Alignment.Bottom)
             ) {
-                // Переворачиваем список для отображения
+                // Используем messages.reversed(), так как reverseLayout переворачивает список
                 items(messages.reversed()) { msg ->
                     if (msg.isSystem) {
                         Text(
                             text = msg.text,
                             color = Color.DarkGray,
-                            fontSize = 12.sp,
+                            fontSize = 11.sp,
                             fontWeight = FontWeight.Medium,
-                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
                             textAlign = androidx.compose.ui.text.style.TextAlign.Center
                         )
                     } else {
-                        val bgColor = if (msg.isMyMessage) Accent.copy(alpha = 0.3f) else Color.White
+                        val bgColor = if (msg.isMyMessage) Accent.copy(alpha = 0.2f) else Color.White
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = if (msg.isMyMessage) Arrangement.End else Arrangement.Start
@@ -103,36 +109,36 @@ fun OnlineChatOverlay(
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(8.dp))
                                     .background(bgColor)
-                                    .padding(horizontal = 8.dp, vertical = 6.dp)
+                                    .padding(horizontal = 8.dp, vertical = 4.dp)
                             ) {
                                 if (!msg.isMyMessage) {
-                                    Text(msg.senderName, color = Color(0xFFE65100), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                    Text(msg.senderName, color = Color(0xFFE65100), fontSize = 10.sp, fontWeight = FontWeight.Bold)
                                 }
-                                Text(text = msg.text, color = Color.Black, fontSize = 14.sp)
+                                Text(text = msg.text, color = Color.Black, fontSize = 13.sp)
                             }
                         }
                     }
                 }
             }
 
-            // Поле ввода (без рамок и лишних отступов)
+            // Поле ввода (фиксированная высота, без лишних рамок)
             Row(
-                modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
+                modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Box(
                     modifier = Modifier
                         .weight(1f)
-                        .height(44.dp)
+                        .height(44.dp) // Четкая высота поля
                         .clip(RoundedCornerShape(22.dp))
                         .background(Color.White)
-                        .padding(horizontal = 12.dp),
+                        .padding(horizontal = 16.dp),
                     contentAlignment = Alignment.CenterStart
                 ) {
                     BasicTextField(
                         value = inputText,
                         onValueChange = { if (it.length <= 200) inputText = it },
-                        textStyle = TextStyle(fontSize = 15.sp, color = Color.Black),
+                        textStyle = TextStyle(fontSize = 14.sp, color = Color.Black),
                         cursorBrush = SolidColor(Accent),
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
@@ -146,14 +152,14 @@ fun OnlineChatOverlay(
                         }),
                         decorationBox = { innerTextField ->
                             if (inputText.isEmpty()) {
-                                Text("Сообщение...", fontSize = 15.sp, color = Color.Gray)
+                                Text("Сообщение...", fontSize = 14.sp, color = Color.Gray)
                             }
                             innerTextField()
                         }
                     )
                 }
                 
-                Spacer(Modifier.width(6.dp))
+                Spacer(Modifier.width(8.dp))
                 
                 Box(
                     modifier = Modifier
