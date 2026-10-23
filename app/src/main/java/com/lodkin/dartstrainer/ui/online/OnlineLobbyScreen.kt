@@ -31,6 +31,9 @@ import com.lodkin.dartstrainer.theme.TileBg
 import com.lodkin.dartstrainer.theme.TileBgDark
 import kotlinx.coroutines.delay
 
+// Состояния окна поиска
+private enum class SearchPhase { NONE, SETUP, SEARCHING, RESULT }
+
 @Composable
 fun OnlineLobbyScreen(
     onBack: () -> Unit,
@@ -40,7 +43,7 @@ fun OnlineLobbyScreen(
     val context = LocalContext.current
     val prefs = remember { context.getSharedPreferences("online_prefs", android.content.Context.MODE_PRIVATE) }
 
-    // Состояния
+    // Основные настройки профиля
     var nickname by remember { mutableStateOf(prefs.getString("nickname", "") ?: "") }
     var selectedLevel by remember { mutableStateOf(prefs.getInt("level", 1)) }
     var is501 by remember { mutableStateOf(prefs.getBoolean("is501", true)) }
@@ -48,14 +51,18 @@ fun OnlineLobbyScreen(
     var sets by remember { mutableStateOf(prefs.getInt("sets", 1)) }
     var saveToTraining by remember { mutableStateOf(prefs.getBoolean("save_to_training", false)) }
 
-    // Диалоги
+    // Состояния диалогов
     var showNicknameDialog by remember { mutableStateOf(nickname.isBlank()) }
     var showLevelDialog by remember { mutableStateOf(false) }
     var showFriendDialog by remember { mutableStateOf(false) }
-    var showSearchDialog by remember { mutableStateOf(false) }
+    
+    // Состояния поиска
+    var searchPhase by remember { mutableStateOf(SearchPhase.NONE) }
+    var searchLevels by remember { mutableStateOf<Set<Int>>(emptySet()) }
+    var searchTimeSeconds by remember { mutableStateOf(60) }
 
-    // Сохранение настроек при изменении
-    fun saveSettings() {
+    // Сохранение настроек
+    LaunchedEffect(nickname, selectedLevel, is501, legs, sets, saveToTraining) {
         prefs.edit()
             .putString("nickname", nickname)
             .putInt("level", selectedLevel)
@@ -64,10 +71,6 @@ fun OnlineLobbyScreen(
             .putInt("sets", sets)
             .putBoolean("save_to_training", saveToTraining)
             .apply()
-    }
-
-    LaunchedEffect(nickname, selectedLevel, is501, legs, sets, saveToTraining) {
-        saveSettings()
     }
 
     Column(
@@ -89,7 +92,6 @@ fun OnlineLobbyScreen(
         Spacer(Modifier.height(20.dp))
 
         Column(modifier = Modifier.weight(1f).verticalScroll(rememberScrollState())) {
-            
             // БЛОК ПРОФИЛЯ
             Text("ВАШ ПРОФИЛЬ", color = Accent, fontSize = 13.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
             Spacer(Modifier.height(8.dp))
@@ -114,7 +116,6 @@ fun OnlineLobbyScreen(
             Spacer(Modifier.height(8.dp))
             Box(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(TileBgDark).padding(16.dp)) {
                 Column {
-                    // Выбор игры
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Box(modifier = Modifier.weight(1f).clip(RoundedCornerShape(8.dp)).background(if (is501) Accent else TileBg).clickable { is501 = true }.padding(vertical = 12.dp), contentAlignment = Alignment.Center) {
                             Text("501", color = if (is501) DarkBg else Color.White, fontWeight = FontWeight.Bold)
@@ -125,7 +126,6 @@ fun OnlineLobbyScreen(
                     }
                     Spacer(Modifier.height(16.dp))
                     
-                    // Сеты и Леги
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         NumberPicker("СЕТЫ", sets, { sets = it }, Modifier.weight(1f))
                         NumberPicker("ЛЕГИ", legs, { legs = it }, Modifier.weight(1f))
@@ -133,7 +133,6 @@ fun OnlineLobbyScreen(
 
                     Spacer(Modifier.height(16.dp))
 
-                    // Статистика
                     Row(modifier = Modifier.fillMaxWidth().clickable { saveToTraining = !saveToTraining }.padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text("Сохранять в тренировку", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
@@ -143,7 +142,6 @@ fun OnlineLobbyScreen(
                     }
                 }
             }
-
             Spacer(Modifier.height(24.dp))
         }
 
@@ -151,7 +149,10 @@ fun OnlineLobbyScreen(
         Box(
             modifier = Modifier.fillMaxWidth().height(60.dp).clip(RoundedCornerShape(16.dp))
                 .background(if (nickname.isNotBlank()) GoldAccent else TileBg)
-                .clickable(enabled = nickname.isNotBlank()) { showSearchDialog = true },
+                .clickable(enabled = nickname.isNotBlank()) { 
+                    searchLevels = setOf(selectedLevel)
+                    searchPhase = SearchPhase.SETUP 
+                },
             contentAlignment = Alignment.Center
         ) {
             Text("🔍 НАЙТИ СОПЕРНИКА", color = if (nickname.isNotBlank()) DarkBg else Color.White.copy(alpha = 0.5f), fontSize = 16.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
@@ -250,29 +251,164 @@ fun OnlineLobbyScreen(
         )
     }
 
-    if (showSearchDialog) {
-        OnlineSearchDialog(
-            level = selectedLevel,
-            onCancel = { showSearchDialog = false },
-            onPlayBot = { 
-                showSearchDialog = false
-                onPlayBot(is501, selectedLevel, legs, sets, nickname, saveToTraining)
+    // ── ОКНО 1: НАСТРОЙКА ПОИСКА ──
+    if (searchPhase == SearchPhase.SETUP) {
+        Dialog(onDismissRequest = { searchPhase = SearchPhase.NONE }) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(24.dp))
+                    .background(TileBgDark)
+                    .padding(20.dp)
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text("Настройка поиска", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.height(16.dp))
+                    
+                    Text("Выберите уровни для поиска (можно несколько):", color = Color.White.copy(alpha = 0.7f), fontSize = 13.sp, modifier = Modifier.fillMaxWidth())
+                    Spacer(Modifier.height(8.dp))
+                    
+                    // Сетка уровней 4x4
+                    val levels = 1..16
+                    levels.chunked(4).forEach { row ->
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            row.forEach { lvl ->
+                                val isSelected = searchLevels.contains(lvl)
+                                Box(
+                                    modifier = Modifier.weight(1f)
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(if (isSelected) Accent else TileBg)
+                                        .clickable {
+                                            searchLevels = if (isSelected) searchLevels - lvl else searchLevels + lvl
+                                        }
+                                        .padding(vertical = 8.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                        Text(DartsNorms.getLevelName(lvl).take(8), color = if (isSelected) DarkBg else Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                        Text(getPprRange(lvl), color = if (isSelected) DarkBg.copy(alpha = 0.7f) else Color.White.copy(alpha = 0.5f), fontSize = 9.sp)
+                                    }
+                                }
+                            }
+                        }
+                        Spacer(Modifier.height(6.dp))
+                    }
+
+                    Spacer(Modifier.height(16.dp))
+
+                    // Выбор времени
+                    var showTimeMenu by remember { mutableStateOf(false) }
+                    Box(modifier = Modifier.fillMaxWidth()) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(TileBg)
+                                .clickable { showTimeMenu = true }.padding(horizontal = 12.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("Время поиска:", color = Color.White, fontSize = 14.sp, modifier = Modifier.weight(1f))
+                            Text("$searchTimeSeconds сек ▼", color = Accent, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                        }
+                        DropdownMenu(expanded = showTimeMenu, onDismissRequest = { showTimeMenu = false }, modifier = Modifier.background(DarkBg)) {
+                            listOf(30, 60, 90, 120).forEach { t ->
+                                DropdownMenuItem(
+                                    text = { Text("$t сек", color = if (t == searchTimeSeconds) Accent else Color.White) },
+                                    onClick = { searchTimeSeconds = t; showTimeMenu = false }
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(Modifier.height(24.dp))
+
+                    // Кнопки действий
+                    Box(
+                        modifier = Modifier.fillMaxWidth().height(50.dp).clip(RoundedCornerShape(12.dp))
+                            .background(if (searchLevels.isNotEmpty()) Accent else TileBg)
+                            .clickable(enabled = searchLevels.isNotEmpty()) { searchPhase = SearchPhase.SEARCHING },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("НАЧАТЬ ПОИСК", color = if (searchLevels.isNotEmpty()) DarkBg else Color.White.copy(alpha = 0.5f), fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                    }
+                    
+                    Spacer(Modifier.height(8.dp))
+                    
+                    TextButton(onClick = { 
+                        searchPhase = SearchPhase.NONE
+                        onPlayBot(is501, selectedLevel, legs, sets, nickname, saveToTraining)
+                    }, modifier = Modifier.fillMaxWidth()) {
+                        Text("Играть с ботом", color = Color.White.copy(alpha = 0.6f), fontSize = 14.sp)
+                    }
+                }
+            }
+        }
+    }
+
+    // ── ОКНО 2: ПРОЦЕСС ПОИСКА ──
+    if (searchPhase == SearchPhase.SEARCHING) {
+        SearchingDialog(
+            timeSeconds = searchTimeSeconds,
+            onTimeUp = { searchPhase = SearchPhase.RESULT },
+            onCancel = { searchPhase = SearchPhase.NONE }
+        )
+    }
+
+    // ── ОКНО 3: РЕЗУЛЬТАТ ПОИСКА ──
+    if (searchPhase == SearchPhase.RESULT) {
+        AlertDialog(
+            onDismissRequest = { searchPhase = SearchPhase.NONE },
+            confirmButton = {},
+            title = { Text("Соперник не найден", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold) },
+            text = {
+                Column {
+                    Text("За отведенное время никто не откликнулся. Что будем делать?", color = Color.White.copy(alpha = 0.7f), fontSize = 14.sp)
+                    Spacer(Modifier.height(20.dp))
+                    
+                    // Расширить поиск
+                    Box(
+                        modifier = Modifier.fillMaxWidth().height(48.dp).clip(RoundedCornerShape(10.dp))
+                            .background(Accent).clickable { searchPhase = SearchPhase.SETUP },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("Расширить параметры", color = DarkBg, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    
+                    // Повторить
+                    Box(
+                        modifier = Modifier.fillMaxWidth().height(48.dp).clip(RoundedCornerShape(10.dp))
+                            .background(TileBg).clickable { searchPhase = SearchPhase.SEARCHING },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("Искать еще раз", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                    }
+                    Spacer(Modifier.height(8.dp))
+
+                    // Бот
+                    Box(
+                        modifier = Modifier.fillMaxWidth().height(48.dp).clip(RoundedCornerShape(10.dp))
+                            .background(GoldAccent.copy(alpha = 0.2f)).clickable { 
+                                searchPhase = SearchPhase.NONE
+                                onPlayBot(is501, selectedLevel, legs, sets, nickname, saveToTraining)
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("Играть с ботом", color = GoldAccent, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
             }
         )
     }
 }
 
 // ─────────────────────────────────────────────
-// ОКНО ПОИСКА С АНИМАЦИЕЙ
+// АНИМИРОВАННОЕ ОКНО ПОИСКА
 // ─────────────────────────────────────────────
 @Composable
-private fun OnlineSearchDialog(
-    level: Int,
-    onCancel: () -> Unit,
-    onPlayBot: () -> Unit
+private fun SearchingDialog(
+    timeSeconds: Int,
+    onTimeUp: () -> Unit,
+    onCancel: () -> Unit
 ) {
-    var phase by remember { mutableStateOf(1) }
-    var secondsLeft by remember { mutableStateOf(5) } 
+    var secondsLeft by remember { mutableStateOf(timeSeconds) }
 
     val infiniteTransition = rememberInfiniteTransition(label = "searchAnimation")
     val angle by infiniteTransition.animateFloat(
@@ -285,15 +421,12 @@ private fun OnlineSearchDialog(
         label = "angle"
     )
 
-    LaunchedEffect(phase) {
-        if (phase < 4) {
-            secondsLeft = 5 
-            while (secondsLeft > 0) {
-                delay(1000L)
-                secondsLeft -= 1
-            }
-            if (phase < 3) phase += 1 else phase = 4
+    LaunchedEffect(Unit) {
+        while (secondsLeft > 0) {
+            delay(1000L)
+            secondsLeft -= 1
         }
+        onTimeUp()
     }
 
     Dialog(
@@ -308,90 +441,26 @@ private fun OnlineSearchDialog(
                 .padding(24.dp)
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                if (phase < 4) {
-                    // АНИМАЦИЯ С ЭМОДЗИ ГЛОБУСОМ
-                    Box(modifier = Modifier.size(140.dp), contentAlignment = Alignment.Center) {
-                        Text(
-                            text = "🌐",
-                            fontSize = 64.sp,
-                            modifier = Modifier.size(70.dp),
-                            textAlign = TextAlign.Center
+                Box(modifier = Modifier.size(140.dp), contentAlignment = Alignment.Center) {
+                    Text(text = "🌐", fontSize = 64.sp, modifier = Modifier.size(70.dp), textAlign = TextAlign.Center)
+                    Box(modifier = Modifier.fillMaxSize().rotate(angle)) {
+                        Icon(
+                            imageVector = Icons.Default.Search,
+                            contentDescription = null,
+                            tint = GoldAccent,
+                            modifier = Modifier.align(Alignment.TopCenter).size(36.dp)
                         )
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .rotate(angle)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Search,
-                                contentDescription = null,
-                                tint = GoldAccent,
-                                modifier = Modifier
-                                    .align(Alignment.TopCenter)
-                                    .size(36.dp)
-                            )
-                        }
                     }
+                }
 
-                    Spacer(Modifier.height(20.dp))
+                Spacer(Modifier.height(20.dp))
+                Text("Ищем соперника...", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(8.dp))
+                Text("Осталось: $secondsLeft сек", color = GoldAccent, fontSize = 16.sp, fontWeight = FontWeight.Medium)
 
-                    val statusText = when (phase) {
-                        1 -> "Поиск соперника вашего уровня\n(${DartsNorms.getLevelName(level)})"
-                        2 -> "Соперник не найден.\nРасширяем поиск (+-2 уровня)..."
-                        else -> "Ищем всех доступных игроков..."
-                    }
-                    Text(
-                        text = statusText,
-                        color = Color.White,
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Medium,
-                        textAlign = TextAlign.Center,
-                        lineHeight = 22.sp
-                    )
-
-                    Spacer(Modifier.height(12.dp))
-                    Text(
-                        text = "Осталось: $secondsLeft сек",
-                        color = GoldAccent,
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-
-                    Spacer(Modifier.height(24.dp))
-                    TextButton(onClick = onCancel) {
-                        Text("Отменить поиск", color = Color.White.copy(alpha = 0.6f), fontSize = 14.sp)
-                    }
-                } else {
-                    // ЭТАП 4: НИКОГО НЕ НАШЛИ
-                    Text(
-                        text = "Соперников в сети не найдено.",
-                        color = Color.White,
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold,
-                        textAlign = TextAlign.Center
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        text = "Сыграть с ботом?",
-                        color = Color.White.copy(alpha = 0.7f),
-                        fontSize = 14.sp,
-                        textAlign = TextAlign.Center
-                    )
-                    Spacer(Modifier.height(24.dp))
-                    
-                    Box(
-                        modifier = Modifier.fillMaxWidth().height(50.dp).clip(RoundedCornerShape(12.dp))
-                            .background(Accent).clickable { onPlayBot() },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text("Играть с ботом", color = DarkBg, fontSize = 16.sp, fontWeight = FontWeight.Bold)
-                    }
-                    
-                    Spacer(Modifier.height(8.dp))
-                    
-                    TextButton(onClick = onCancel, modifier = Modifier.fillMaxWidth()) {
-                        Text("Отмена", color = Color.White.copy(alpha = 0.6f), fontSize = 14.sp)
-                    }
+                Spacer(Modifier.height(24.dp))
+                TextButton(onClick = onCancel) {
+                    Text("Отменить поиск", color = Color.White.copy(alpha = 0.6f), fontSize = 14.sp)
                 }
             }
         }
