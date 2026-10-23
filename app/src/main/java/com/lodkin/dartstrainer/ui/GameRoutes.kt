@@ -128,7 +128,7 @@ fun GameRoutes(
                     existingId = cricketExistingId,
                     isTrainingMode = isTrainingCricket,
                     trainingRepository = trainingRepository,
-                    onGameFinish = { f, id ->
+                    onGameFinish = { f: CricketGame, id: Long ->
                         if (isTrainingCricket) {
                             val playerWon = f.winnerIndex == 0
                             val player = f.players.getOrNull(0)
@@ -235,7 +235,7 @@ fun GameRoutes(
                     isTrainingMode = isTraining501,
                     isOnlineGame = isOnlineGame,
                     trainingRepository = trainingRepository,
-                    onGameFinish = { f, id ->
+                    onGameFinish = { f: Game501, id: Long ->
                         if (isTraining501) {
                             val playerWon = f.winnerIndex == 0
                             val player = f.players.getOrNull(0)
