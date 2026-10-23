@@ -36,9 +36,6 @@ import com.lodkin.dartstrainer.ui.biground.BigRoundGameScreen
 import kotlinx.coroutines.launch
 import java.util.Locale
 
-/**
- * Маршрутизатор для экранов свободной игры (не тренировки).
- */
 @Composable
 fun GameRoutes(
     screen: String,
@@ -47,7 +44,6 @@ fun GameRoutes(
     context: android.content.Context,
     scope: kotlinx.coroutines.CoroutineScope,
     
-    // Репозитории
     cricketRepository: CricketRepository,
     game501Repository: Game501Repository,
     sectorRepository: SectorRepository,
@@ -57,7 +53,6 @@ fun GameRoutes(
     freePlayRecordsRepository: FreePlayRecordsRepository,
     trainingRepository: TrainingRepository,
 
-    // Состояния игр
     cricketGame: CricketGame?,
     onCricketGameChange: (CricketGame?) -> Unit,
     cricketExistingId: Long,
@@ -84,7 +79,6 @@ fun GameRoutes(
     sessionStartTime: Long,
     sessionForm: Double,
 
-    // Флаги тренировки (если игра запущена из тренировки или онлайна)
     isTraining501: Boolean = false,
     isTrainingCricket: Boolean = false,
     isOnlineGame: Boolean = false,
@@ -127,6 +121,7 @@ fun GameRoutes(
                     initialGame = g,
                     existingId = cricketExistingId,
                     isTrainingMode = isTrainingCricket,
+                    isOnlineGame = isOnlineGame, // ПЕРЕДАЕМ ФЛАГ
                     trainingRepository = trainingRepository,
                     onGameFinish = { f: CricketGame, id: Long ->
                         if (isTrainingCricket) {
