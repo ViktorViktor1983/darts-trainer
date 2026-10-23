@@ -241,11 +241,21 @@ fun CricketGameScreen(
         delay(700L)
         if (game.isFinished || showLegWonDialog || showSetWonDialog || showWinDialog) return@LaunchedEffect
         if (game.players.getOrNull(game.currentPlayerIndex)?.isBot != true) return@LaunchedEffect
+        
+        // Запоминаем броски до хода бота, чтобы передать в чат
+        val botThrowsBefore = game.players[game.currentPlayerIndex].currentTurnThrows.toList()
+        
         saveHistory()
         game = CricketBotAI.performTurn(game, game.currentPlayerIndex)
         
         if (isOnlineGame) {
-            addChatSystemMessage("Соперник сделал ход.")
+            val newThrows = game.players[game.currentPlayerIndex].currentTurnThrows.drop(botThrowsBefore.size)
+            val throwNames = newThrows.mapNotNull { it.toStringOrNull() }.joinToString(", ")
+            if (throwNames.isNotEmpty()) {
+                addChatSystemMessage("Соперник сделал ход ($throwNames)")
+            } else {
+                addChatSystemMessage("Соперник сделал ход.")
+            }
         }
     }
 
@@ -300,22 +310,18 @@ fun CricketGameScreen(
 
     Box(modifier = Modifier.fillMaxSize().background(Color(0xFF0D1117))) {
         Column(modifier = Modifier.fillMaxSize()) {
-            TopBar(game = game, onBack = { showBackConfirm = true })
-            
-            // Свернутая плашка чата (если онлайн и чат свернут) - размещаем под шапкой
-            if (isOnlineGame && !isChatExpanded) {
-                OnlineChatOverlay(
-                    modifier = Modifier.fillMaxWidth(),
-                    isExpanded = false,
-                    messages = chatMessages,
-                    unreadCount = unreadChatCount,
-                    onSendMessage = {},
-                    onClose = {},
-                    onExpand = { isChatExpanded = true; unreadChatCount = 0 }
-                )
-            }
+            // НОВАЯ ШАПКА (по рисунку)
+            TopHeaderCricket(
+                game = game,
+                isOnlineGame = isOnlineGame,
+                isChatExpanded = isChatExpanded,
+                unreadCount = unreadChatCount,
+                onBack = { showBackConfirm = true },
+                onToggleChat = { isChatExpanded = !isChatExpanded; if (isChatExpanded) unreadChatCount = 0 },
+                chatMessages = chatMessages,
+                onExpand = { isChatExpanded = true; unreadChatCount = 0 }
+            )
 
-            ParamsRow(game = game)
             TeamsHeaderRow(game = game)
             ScoreControlRow(
                 game = game,
@@ -362,23 +368,18 @@ fun CricketGameScreen(
 
         // Развернутый чат на весь экран поверх всего
         if (isOnlineGame && isChatExpanded) {
-            Box(modifier = Modifier.fillMaxSize().background(Color(0xFF0D1117))) {
-                // Оставляем шапку с крестиком видимой
-                Box(modifier = Modifier.fillMaxWidth().height(50.dp)) {}
-                
-                Box(modifier = Modifier.fillMaxSize().padding(top = 8.dp, start = 8.dp, end = 8.dp, bottom = 8.dp)) {
-                    OnlineChatOverlay(
-                        modifier = Modifier.fillMaxSize(),
-                        isExpanded = isChatExpanded,
-                        messages = chatMessages,
-                        unreadCount = unreadChatCount,
-                        onSendMessage = { text ->
-                            chatMessages.add(ChatMessage(System.currentTimeMillis().toString(), "Вы", text, isMyMessage = true))
-                        },
-                        onClose = { isChatExpanded = false },
-                        onExpand = { isChatExpanded = true; unreadChatCount = 0 }
-                    )
-                }
+            Box(modifier = Modifier.fillMaxSize().padding(top = 60.dp)) {
+                OnlineChatOverlay(
+                    modifier = Modifier.fillMaxSize().padding(8.dp),
+                    isExpanded = isChatExpanded,
+                    messages = chatMessages,
+                    unreadCount = unreadChatCount,
+                    onSendMessage = { text ->
+                        chatMessages.add(ChatMessage(System.currentTimeMillis().toString(), "Вы", text, isMyMessage = true))
+                    },
+                    onClose = { isChatExpanded = false },
+                    onExpand = { isChatExpanded = true; unreadChatCount = 0 }
+                )
             }
         }
     }
@@ -532,77 +533,75 @@ fun CricketGameScreen(
 }
 
 @Composable
-private fun LegStatsDisplay(snapshot: LegSnapshot) {
-    Column {
-        snapshot.players.forEachIndexed { idx, p ->
-            if (idx > 0) Spacer(Modifier.height(8.dp))
-            val mpr = if (p.darts < 3) 0.0 else p.legMarks.toDouble() / (p.darts / 3.0)
-            val missPct = if (p.darts <= 0) 0.0 else p.misses.toDouble() / p.darts * 100.0
-            val triplesPct = if (p.darts <= 0) 0.0 else p.triples.toDouble() / p.darts * 100.0
-            Column(
-                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(TileBg).padding(10.dp)
-            ) {
-                Text(p.name, color = Accent, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                Spacer(Modifier.height(4.dp))
-                StatLine("Средний набор", String.format(Locale.US, "%.2f", mpr))
-                StatLine("Промахи", String.format(Locale.US, "%.1f%%", missPct))
-                StatLine("Утроения", String.format(Locale.US, "%.1f%%", triplesPct))
-                StatLine("Очки", p.score.toString())
-                StatLine("Дротиков", p.darts.toString())
+private fun TopHeaderCricket(
+    game: CricketGame,
+    isOnlineGame: Boolean,
+    isChatExpanded: Boolean,
+    unreadCount: Int,
+    onBack: () -> Unit,
+    onToggleChat: () -> Unit,
+    chatMessages: List<ChatMessage>,
+    onExpand: () -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth().background(Color(0xFF1A2332)).padding(8.dp),
+        verticalAlignment = Alignment.Top,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        // ЧАТ (занимает левую часть)
+        if (isOnlineGame) {
+            Box(modifier = Modifier.weight(1f).height(85.dp)) {
+                if (!isChatExpanded) {
+                    OnlineChatOverlay(
+                        modifier = Modifier.fillMaxSize(),
+                        isExpanded = false,
+                        messages = chatMessages,
+                        unreadCount = unreadCount,
+                        onSendMessage = {},
+                        onClose = {},
+                        onExpand = onExpand
+                    )
+                }
+            }
+        } else {
+            // Если не онлайн, просто заголовок (заглушка)
+            Text("Крикет", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f).padding(top = 8.dp))
+        }
+
+        // ПРАВАЯ ЧАСТЬ (Кнопка назад, иконка чата, СЕТ/ЛЕГ)
+        Column(horizontalAlignment = Alignment.End) {
+            // Кнопка Назад и иконка чата на одном уровне
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                if (isOnlineGame && !isChatExpanded) {
+                    Box(
+                        modifier = Modifier.size(32.dp).clip(CircleShape).background(TileBgDark).clickable { onToggleChat() },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("💬", fontSize = 16.sp)
+                        if (unreadCount > 0) {
+                            Box(modifier = Modifier.align(Alignment.TopEnd).size(12.dp).clip(CircleShape).background(Color.Red), contentAlignment = Alignment.Center) {
+                                Text("$unreadCount", color = Color.White, fontSize = 8.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                }
+                
+                // Короткая кнопка Назад
+                Box(
+                    modifier = Modifier.clip(RoundedCornerShape(8.dp)).background(TileBg)
+                        .clickable { onBack() }.padding(horizontal = 12.dp, vertical = 6.dp),
+                    contentAlignment = Alignment.Center
+                ) { Text("←", color = Accent, fontSize = 20.sp, fontWeight = FontWeight.Black) }
+            }
+
+            Spacer(Modifier.height(4.dp))
+
+            // Параметры игры
+            Column(horizontalAlignment = Alignment.End) {
+                Text("СЕТ: ${game.setsPerMatch}", color = Color(0xFFCCDDEE), fontSize = 11.sp)
+                Text("ЛЕГ: ${game.legsPerSet}", color = Color(0xFFCCDDEE), fontSize = 11.sp)
             }
         }
-    }
-}
-
-@Composable
-private fun StatLine(label: String, value: String) {
-    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-        Text(label, color = Color.White.copy(alpha = 0.8f), fontSize = 12.sp)
-        Text(value, color = GoldAccent, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-    }
-}
-
-private fun teamName(game: CricketGame, teamIdx: Int): String =
-    game.playersOfTeam(teamIdx).joinToString("/") { it.name }
-
-@Composable
-private fun TeamScoresList(game: CricketGame, showLegs: Boolean) {
-    game.players.forEach { p ->
-        val value = if (showLegs) p.legsInCurrentSet else p.setsWon
-        Text("${p.name}: $value", color = Color.White, fontSize = 13.sp)
-    }
-}
-
-@Composable
-private fun TopBar(game: CricketGame, onBack: () -> Unit) {
-    val modeLabel = if (game.type == CricketType.AMERICAN) "Американский" else "Без набора"
-    Row(
-        modifier = Modifier.fillMaxWidth().background(Color(0xFF1A2332))
-            .padding(horizontal = 12.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text("Крикет ($modeLabel)", color = Color.White, fontSize = 20.sp,
-            fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-        Spacer(Modifier.width(12.dp))
-        Box(
-            modifier = Modifier.clip(RoundedCornerShape(10.dp)).background(TileBg)
-                .clickable { onBack() }.padding(horizontal = 24.dp, vertical = 10.dp),
-            contentAlignment = Alignment.Center
-        ) { Text("← Назад", color = Accent, fontSize = 16.sp, fontWeight = FontWeight.Bold) }
-    }
-}
-
-@Composable
-private fun ParamsRow(game: CricketGame) {
-    Row(
-        modifier = Modifier.fillMaxWidth().background(Color(0xFF1A2332))
-            .padding(horizontal = 12.dp, vertical = 6.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(
-            "Параметры игры (Сеты до ${game.setsPerMatch}, Леги до ${game.legsPerSet})",
-            color = Color(0xFFCCDDEE), fontSize = 14.sp
-        )
     }
 }
 
@@ -623,25 +622,25 @@ private fun TeamsHeaderRow(game: CricketGame) {
     val avgB = avgPerLeg(game, 1)
 
     Column(modifier = Modifier.fillMaxWidth().background(Color(0xFF16202C))
-        .padding(horizontal = 10.dp, vertical = 16.dp)) {
+        .padding(horizontal = 10.dp, vertical = 8.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             SetBadge(setsA)
             Spacer(Modifier.width(8.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(teamAName, color = if (activeTeam == 0) Accent else Color.White,
-                    fontSize = 22.sp, fontWeight = FontWeight.Bold, maxLines = 1,
+                    fontSize = 20.sp, fontWeight = FontWeight.Bold, maxLines = 1,
                     overflow = TextOverflow.Ellipsis)
-                Text("ср. %.2f".format(Locale.US, avgA), color = Color(0xFF99AABB), fontSize = 18.sp)
+                Text("ср. %.2f".format(Locale.US, avgA), color = Color(0xFF99AABB), fontSize = 16.sp)
             }
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("ЛЕГ", color = Color(0xFF99AABB), fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                Text("$legsA : $legsB", color = Color.White, fontSize = 34.sp, fontWeight = FontWeight.Bold)
+                Text("ЛЕГ", color = Color(0xFF99AABB), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                Text("$legsA : $legsB", color = Color.White, fontSize = 30.sp, fontWeight = FontWeight.Bold)
             }
             Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.End) {
                 Text(teamBName, color = if (activeTeam == 1) Accent else Color.White,
-                    fontSize = 22.sp, fontWeight = FontWeight.Bold, maxLines = 1,
+                    fontSize = 20.sp, fontWeight = FontWeight.Bold, maxLines = 1,
                     overflow = TextOverflow.Ellipsis, textAlign = TextAlign.End)
-                Text("ср. %.2f".format(Locale.US, avgB), color = Color(0xFF99AABB), fontSize = 18.sp)
+                Text("ср. %.2f".format(Locale.US, avgB), color = Color(0xFF99AABB), fontSize = 16.sp)
             }
             Spacer(Modifier.width(8.dp))
             SetBadge(setsB)
