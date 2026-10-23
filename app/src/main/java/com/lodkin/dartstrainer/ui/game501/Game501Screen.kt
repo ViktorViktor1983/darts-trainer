@@ -453,9 +453,15 @@ fun Game501Screen(
                 onUndo = { undo() }
             )
             
-            // Окно чата теперь внизу и занимает свободное место
+            // Чат теперь имеет минимальную высоту 200dp, а если места больше — занимает 1/3
             if (isOnlineGame && isChatExpanded) {
-                Box(modifier = Modifier.weight(1f).fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp)) {
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                        .heightIn(min = 200.dp, max = 350.dp)
+                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                ) {
                     OnlineChatOverlay(
                         modifier = Modifier.fillMaxSize(),
                         isExpanded = isChatExpanded,
@@ -468,7 +474,7 @@ fun Game501Screen(
                     )
                 }
             } else {
-                Spacer(Modifier.weight(1f)) // Если чата нет, оставляем пустое место, чтобы клавиатура не растягивалась
+                Spacer(Modifier.weight(1f))
             }
         }
 
@@ -481,7 +487,6 @@ fun Game501Screen(
         }
     }
 
-    // ... Остальные диалоги без изменений ...
     if (showLegQuestionDialog && !allBots) {
         AlertDialog(
             onDismissRequest = { },
@@ -739,7 +744,6 @@ private fun TopBar501(
     ) {
         Text(game.modeLabel, color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
         
-        // Иконка чата рядом с кнопкой Назад
         if (isOnlineGame && !isChatExpanded) {
             Box(
                 modifier = Modifier
