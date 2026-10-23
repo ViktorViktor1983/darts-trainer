@@ -131,8 +131,8 @@ fun Game501Screen(
 
     fun addChatSystemMessage(text: String) {
         if (isOnlineGame) {
+            // Системные сообщения НЕ увеличивают счетчик непрочитанных
             chatMessages.add(ChatMessage(System.currentTimeMillis().toString(), "Система", text, isSystem = true))
-            if (!isChatExpanded) unreadChatCount++
         }
     }
 
@@ -429,7 +429,6 @@ fun Game501Screen(
                 PrevScoreBlock("Пред.", lastScoreB, activeTeam == 1, Alignment.End)
             }
 
-            // Если чат открыт, прячем игровую клавиатуру и кнопки
             if (showGameControls) {
                 QuickButtonsWithLeg(
                     sums = quickSums,
@@ -457,18 +456,32 @@ fun Game501Screen(
                 )
             }
 
-            // Чат занимает всё свободное место
-            if (isOnlineGame && isChatExpanded) {
-                Box(modifier = Modifier.weight(1f).fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp)) {
+            // Чат: либо на весь экран, либо полоска предпросмотра внизу
+            if (isOnlineGame) {
+                if (isChatExpanded) {
+                    Box(modifier = Modifier.weight(1f).fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp)) {
+                        OnlineChatOverlay(
+                            modifier = Modifier.fillMaxSize(),
+                            isExpanded = isChatExpanded,
+                            messages = chatMessages,
+                            unreadCount = unreadChatCount,
+                            onSendMessage = { text ->
+                                chatMessages.add(ChatMessage(System.currentTimeMillis().toString(), "Вы", text, isMyMessage = true))
+                            },
+                            onClose = { isChatExpanded = false },
+                            onExpand = { isChatExpanded = true; unreadChatCount = 0 }
+                        )
+                    }
+                } else {
+                    Spacer(Modifier.weight(1f)) // Занимаем место
                     OnlineChatOverlay(
-                        modifier = Modifier.fillMaxSize(),
-                        isExpanded = isChatExpanded,
+                        modifier = Modifier.fillMaxWidth(),
+                        isExpanded = false,
                         messages = chatMessages,
                         unreadCount = unreadChatCount,
-                        onSendMessage = { text ->
-                            chatMessages.add(ChatMessage(System.currentTimeMillis().toString(), "Вы", text, isMyMessage = true))
-                        },
-                        onClose = { isChatExpanded = false }
+                        onSendMessage = {},
+                        onClose = {},
+                        onExpand = { isChatExpanded = true; unreadChatCount = 0 }
                     )
                 }
             } else {
