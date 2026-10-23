@@ -88,7 +88,7 @@ fun GameRoutes(
     // Флаги тренировки (если игра запущена из тренировки или онлайна)
     isTraining501: Boolean = false,
     isTrainingCricket: Boolean = false,
-    isOnlineGame: Boolean = false, // НОВЫЙ ФЛАГ ДЛЯ ОНЛАЙНА
+    isOnlineGame: Boolean = false,
     trainingSessionId: Long = 0L,
     exerciseStartMillis: Long = 0L,
     isNormativesExercise: Boolean = false,
@@ -234,6 +234,7 @@ fun GameRoutes(
                     initialGame = g,
                     existingId = game501ExistingId,
                     isTrainingMode = isTraining501,
+                    isOnlineGame = isOnlineGame, // ПЕРЕДАЕМ ФЛАГ В САМ ЭКРАН
                     trainingRepository = trainingRepository,
                     onGameFinish = { f, id ->
                         if (isTraining501) {
