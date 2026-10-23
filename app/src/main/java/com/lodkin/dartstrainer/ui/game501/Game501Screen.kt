@@ -453,7 +453,6 @@ fun Game501Screen(
                 onUndo = { undo() }
             )
             
-            // Чат теперь имеет минимальную высоту 200dp, а если места больше — занимает 1/3
             if (isOnlineGame && isChatExpanded) {
                 Box(
                     modifier = Modifier
