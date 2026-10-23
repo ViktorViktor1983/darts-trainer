@@ -14,15 +14,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.lodkin.dartstrainer.theme.Accent
-import com.lodkin.dartstrainer.theme.DarkBg
-import com.lodkin.dartstrainer.theme.TileBg
-import kotlinx.coroutines.launch
 
-// Модель сообщения в чате
 data class ChatMessage(
     val id: String,
     val senderName: String,
@@ -42,9 +40,9 @@ fun OnlineChatOverlay(
 ) {
     var inputText by remember { mutableStateOf("") }
     val listState = rememberLazyListState()
-    val scope = rememberCoroutineScope()
+    val keyboardController = LocalSoftwareKeyboardController.current
+    val focusManager = LocalFocusManager.current
 
-    // Автоскролл вниз при новом сообщении
     LaunchedEffect(messages.size) {
         if (isExpanded && messages.isNotEmpty()) {
             listState.animateScrollToItem(messages.size - 1)
@@ -52,27 +50,18 @@ fun OnlineChatOverlay(
     }
 
     if (isExpanded) {
-        // РАЗВЕРНУТЫЙ ЧАТ
         Column(
             modifier = modifier
                 .fillMaxSize()
                 .clip(RoundedCornerShape(16.dp))
-                .background(Color(0xFFF5F5F5)) // Светлый фон
+                .background(Color(0xFFF5F5F5))
                 .padding(8.dp)
         ) {
-            // Шапка чата
+            // Шапка с крестиком (без надписи "Чат")
             Row(
                 modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp),
-                verticalAlignment = Alignment.CenterVertically
+                horizontalArrangement = Arrangement.End
             ) {
-                Text(
-                    text = "Чат",
-                    color = Color.Black,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 14.sp,
-                    modifier = Modifier.weight(1f)
-                )
-                // Кнопка закрытия (свернуть)
                 Box(
                     modifier = Modifier
                         .size(24.dp)
@@ -85,12 +74,10 @@ fun OnlineChatOverlay(
                 }
             }
 
-            // Лента сообщений
+            // Лента сообщений (шрифт уменьшен)
             LazyColumn(
                 state = listState,
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth(),
+                modifier = Modifier.weight(1f).fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 items(messages) { msg ->
@@ -115,30 +102,26 @@ fun OnlineChatOverlay(
                                     .padding(horizontal = 8.dp, vertical = 4.dp)
                             ) {
                                 if (!msg.isMyMessage) {
-                                    Text(
-                                        text = msg.senderName,
-                                        color = Color(0xFFE65100), // Темно-оранжевый для контраста
-                                        fontSize = 10.sp,
-                                        fontWeight = FontWeight.Bold
-                                    )
+                                    Text(msg.senderName, color = Color(0xFFE65100), fontSize = 10.sp, fontWeight = FontWeight.Bold)
                                 }
-                                Text(text = msg.text, color = Color.Black, fontSize = 13.sp)
+                                Text(text = msg.text, color = Color.Black, fontSize = 12.sp)
                             }
                         }
                     }
                 }
             }
 
-            // Поле ввода
+            // Поле ввода (увеличено, шрифт крупнее)
             Row(
-                modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 OutlinedTextField(
                     value = inputText,
                     onValueChange = { if (it.length <= 200) inputText = it },
-                    modifier = Modifier.weight(1f).height(48.dp),
-                    placeholder = { Text("Сообщение...", fontSize = 12.sp, color = Color.Gray) },
+                    modifier = Modifier.weight(1f).height(64.dp),
+                    placeholder = { Text("Сообщение...", fontSize = 14.sp, color = Color.Gray) },
+                    textStyle = LocalTextStyle.current.copy(fontSize = 14.sp),
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedTextColor = Color.Black,
                         unfocusedTextColor = Color.Black,
@@ -154,16 +137,18 @@ fun OnlineChatOverlay(
                 Spacer(Modifier.width(8.dp))
                 Box(
                     modifier = Modifier
-                        .size(40.dp)
+                        .size(48.dp)
                         .clip(CircleShape)
                         .background(if (inputText.isNotBlank()) Accent else Color.LightGray)
                         .clickable(enabled = inputText.isNotBlank()) {
                             onSendMessage(inputText.trim())
                             inputText = ""
+                            keyboardController?.hide() // Скрываем клавиатуру
+                            focusManager.clearFocus()  // Сбрасываем фокус
                         },
                     contentAlignment = Alignment.Center
                 ) {
-                    Text("➤", color = if (inputText.isNotBlank()) Color.White else Color.Gray, fontSize = 18.sp)
+                    Text("➤", color = if (inputText.isNotBlank()) Color.White else Color.Gray, fontSize = 20.sp)
                 }
             }
         }
