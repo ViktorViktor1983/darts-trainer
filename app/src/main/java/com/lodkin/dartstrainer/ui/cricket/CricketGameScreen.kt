@@ -242,20 +242,11 @@ fun CricketGameScreen(
         if (game.isFinished || showLegWonDialog || showSetWonDialog || showWinDialog) return@LaunchedEffect
         if (game.players.getOrNull(game.currentPlayerIndex)?.isBot != true) return@LaunchedEffect
         
-        // Запоминаем броски до хода бота, чтобы передать в чат
-        val botThrowsBefore = game.players[game.currentPlayerIndex].currentTurnThrows.toList()
-        
         saveHistory()
         game = CricketBotAI.performTurn(game, game.currentPlayerIndex)
         
         if (isOnlineGame) {
-            val newThrows = game.players[game.currentPlayerIndex].currentTurnThrows.drop(botThrowsBefore.size)
-            val throwNames = newThrows.mapNotNull { it.toStringOrNull() }.joinToString(", ")
-            if (throwNames.isNotEmpty()) {
-                addChatSystemMessage("Соперник сделал ход ($throwNames)")
-            } else {
-                addChatSystemMessage("Соперник сделал ход.")
-            }
+            addChatSystemMessage("Соперник сделал ход.")
         }
     }
 
