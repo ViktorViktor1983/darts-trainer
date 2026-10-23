@@ -178,35 +178,35 @@ fun OnlineChatOverlay(
             }
         }
     } else {
-        // СВЕРНУТЫЙ ЧАТ (Показываем последние 3 ЛЮБЫХ сообщения: и системные, и личные)
+        // СВЕРНУТЫЙ ЧАТ
         val lastMessages = messages.takeLast(3)
 
         Column(
             modifier = modifier
                 .fillMaxWidth()
-                .height(100.dp)
-                .clip(RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp))
+                .height(100.dp) // Фиксированная высота
+                .clip(RoundedCornerShape(12.dp))
                 .background(TileBg)
                 .clickable { onExpand() }
-                .padding(horizontal = 12.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.Bottom
+                .padding(horizontal = 8.dp, vertical = 4.dp),
+            verticalArrangement = Arrangement.Bottom // Прижимаем текст к низу
         ) {
             if (lastMessages.isEmpty()) {
-                Text("Чат пуст...", color = Color.White.copy(alpha = 0.5f), fontSize = 12.sp)
+                Text("Чат пуст...", color = Color.White.copy(alpha = 0.5f), fontSize = 11.sp)
             } else {
+                // Идем по списку в прямом порядке: старые сверху, новые снизу
                 lastMessages.forEach { msg ->
                     val textToShow = if (msg.isSystem) msg.text else "${msg.senderName}: ${msg.text}"
                     val textColor = if (msg.isMyMessage) Accent else Color.White.copy(alpha = 0.9f)
                     
-                    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
-                        Text(
-                            text = textToShow,
-                            color = textColor,
-                            fontSize = 12.sp,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
+                    Text(
+                        text = textToShow,
+                        color = textColor,
+                        fontSize = 11.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 1.dp)
+                    )
                 }
             }
             
@@ -214,8 +214,8 @@ fun OnlineChatOverlay(
                 Box(
                     modifier = Modifier
                         .align(Alignment.End)
-                        .padding(bottom = 4.dp)
-                        .size(20.dp)
+                        .padding(top = 2.dp)
+                        .size(16.dp)
                         .clip(CircleShape)
                         .background(Color.Red),
                     contentAlignment = Alignment.Center
@@ -223,7 +223,7 @@ fun OnlineChatOverlay(
                     Text(
                         text = if (unreadCount > 9) "9+" else unreadCount.toString(),
                         color = Color.White,
-                        fontSize = 10.sp,
+                        fontSize = 9.sp,
                         fontWeight = FontWeight.Bold
                     )
                 }
