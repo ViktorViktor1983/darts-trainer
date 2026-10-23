@@ -184,29 +184,29 @@ fun OnlineChatOverlay(
         Column(
             modifier = modifier
                 .fillMaxWidth()
-                .height(110.dp) // Увеличили высоту
+                .wrapContentHeight() // Автоматическая высота под текст
                 .clip(RoundedCornerShape(12.dp))
                 .background(TileBg)
                 .clickable { onExpand() }
-                .padding(horizontal = 8.dp, vertical = 6.dp),
-            verticalArrangement = Arrangement.Bottom // Прижимаем текст к низу
+                .padding(horizontal = 8.dp, vertical = 4.dp)
         ) {
             if (lastMessages.isEmpty()) {
                 Text("Чат пуст...", color = Color.White.copy(alpha = 0.5f), fontSize = 11.sp)
             } else {
-                // Идем по списку в прямом порядке: старые сверху, новые снизу
-                lastMessages.forEach { msg ->
-                    val textToShow = if (msg.isSystem) msg.text else "${msg.senderName}: ${msg.text}"
-                    val textColor = if (msg.isMyMessage) Accent else Color.White.copy(alpha = 0.9f)
-                    
-                    Text(
-                        text = textToShow,
-                        color = textColor,
-                        fontSize = 11.sp,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.fillMaxWidth().padding(vertical = 1.dp)
-                    )
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    lastMessages.forEach { msg ->
+                        val textToShow = if (msg.isSystem) msg.text else "${msg.senderName}: ${msg.text}"
+                        val textColor = if (msg.isMyMessage) Accent else Color.White.copy(alpha = 0.9f)
+                        
+                        Text(
+                            text = textToShow,
+                            color = textColor,
+                            fontSize = 11.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
                 }
             }
             
