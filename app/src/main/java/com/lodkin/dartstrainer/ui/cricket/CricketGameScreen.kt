@@ -918,106 +918,48 @@ private fun WinDialog(game: CricketGame, onUndo: () -> Unit, onContinue: () -> U
     )
 }
 
+// ============================================================
+// ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ (возвращены обратно)
+// ============================================================
+
+private fun teamName(game: CricketGame, teamIdx: Int): String =
+    game.playersOfTeam(teamIdx).joinToString("/") { it.name }
+
 @Composable
-private fun CelebrationRecordBlockCricket(
-    title: String,
-    value: String,
-    prevValue: String,
-    scale: Float
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
-            .background(GoldAccent.copy(alpha = 0.15f))
-            .padding(14.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Text("🎉  ✨  🎊", fontSize = 22.sp, textAlign = TextAlign.Center)
-        Spacer(Modifier.height(6.dp))
-        Text(
-            title,
-            color = GoldAccent,
-            fontSize = 22.sp,
-            fontWeight = FontWeight.Bold,
-            letterSpacing = 1.sp,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.scale(scale)
-        )
-        Spacer(Modifier.height(8.dp))
-        Text(
-            value,
-            color = GoldAccent,
-            fontSize = 32.sp,
-            fontWeight = FontWeight.Bold,
-            textAlign = TextAlign.Center
-        )
-        Spacer(Modifier.height(4.dp))
-        Text(
-            "прошлый: $prevValue",
-            color = Color.White.copy(alpha = 0.55f),
-            fontSize = 12.sp,
-            textAlign = TextAlign.Center
-        )
+private fun LegStatsDisplay(snapshot: LegSnapshot) {
+    Column {
+        snapshot.players.forEachIndexed { idx, p ->
+            if (idx > 0) Spacer(Modifier.height(8.dp))
+            val mpr = if (p.darts < 3) 0.0 else p.legMarks.toDouble() / (p.darts / 3.0)
+            val missPct = if (p.darts <= 0) 0.0 else p.misses.toDouble() / p.darts * 100.0
+            val triplesPct = if (p.darts <= 0) 0.0 else p.triples.toDouble() / p.darts * 100.0
+            Column(
+                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(TileBg).padding(10.dp)
+            ) {
+                Text(p.name, color = Accent, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(4.dp))
+                StatLine("Средний набор", String.format(Locale.US, "%.2f", mpr))
+                StatLine("Промахи", String.format(Locale.US, "%.1f%%", missPct))
+                StatLine("Утроения", String.format(Locale.US, "%.1f%%", triplesPct))
+                StatLine("Очки", p.score.toString())
+                StatLine("Дротиков", p.darts.toString())
+            }
+        }
     }
 }
 
 @Composable
-private fun AlmostRecordBlockCricket(text: String, bestValue: String) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
-            .background(Accent.copy(alpha = 0.10f))
-            .padding(14.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Text(
-            "💪 Почти рекорд",
-            color = Accent,
-            fontSize = 16.sp,
-            fontWeight = FontWeight.Bold,
-            textAlign = TextAlign.Center
-        )
-        Spacer(Modifier.height(4.dp))
-        Text(
-            text,
-            color = Color.White.copy(alpha = 0.85f),
-            fontSize = 13.sp,
-            textAlign = TextAlign.Center
-        )
-        Spacer(Modifier.height(4.dp))
-        Text(
-            "рекорд: $bestValue",
-            color = Color.White.copy(alpha = 0.5f),
-            fontSize = 11.sp,
-            textAlign = TextAlign.Center
-        )
+private fun StatLine(label: String, value: String) {
+    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+        Text(label, color = Color.White.copy(alpha = 0.8f), fontSize = 12.sp)
+        Text(value, color = GoldAccent, fontSize = 13.sp, fontWeight = FontWeight.Bold)
     }
 }
 
 @Composable
-private fun FirstResultBlockCricket() {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
-            .background(TileBg.copy(alpha = 0.7f))
-            .padding(12.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Text(
-            "Твой результат сохранён",
-            color = Color.White.copy(alpha = 0.85f),
-            fontSize = 13.sp,
-            textAlign = TextAlign.Center
-        )
-        Spacer(Modifier.height(2.dp))
-        Text(
-            "Рекорд появится со следующей игры",
-            color = Color.White.copy(alpha = 0.5f),
-            fontSize = 11.sp,
-            textAlign = TextAlign.Center
-        )
+private fun TeamScoresList(game: CricketGame, showLegs: Boolean) {
+    game.players.forEach { p ->
+        val value = if (showLegs) p.legsInCurrentSet else p.setsWon
+        Text("${p.name}: $value", color = Color.White, fontSize = 13.sp)
     }
 }
