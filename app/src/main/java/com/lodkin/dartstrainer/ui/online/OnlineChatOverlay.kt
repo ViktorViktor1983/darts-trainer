@@ -52,7 +52,6 @@ fun OnlineChatOverlay(
     val keyboardController = LocalSoftwareKeyboardController.current
     val focusManager = LocalFocusManager.current
 
-    // Автоскролл вниз при добавлении нового сообщения
     LaunchedEffect(messages.size) {
         if (isExpanded && messages.isNotEmpty()) {
             listState.animateScrollToItem(0)
@@ -179,36 +178,44 @@ fun OnlineChatOverlay(
             }
         }
     } else {
-        // СВЕРНУТЫЙ ЧАТ (Полоска с предпросмотром)
-        val lastMessage = messages.lastOrNull()
-        val previewText = if (lastMessage == null) "Чат пуст..." else {
-            if (lastMessage.isSystem) lastMessage.text else "${lastMessage.senderName}: ${lastMessage.text}"
-        }
+        // СВЕРНУТЫЙ ЧАТ (Увеличенная полоска с историей)
+        val lastMessages = messages.takeLast(3).reversed() // Берем последние 3 сообщения
 
-        Row(
+        Column(
             modifier = modifier
                 .fillMaxWidth()
-                .height(40.dp)
-                .clip(RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp))
+                .height(100.dp) // Увеличили высоту для отображения нескольких сообщений
+                .clip(RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp))
                 .background(TileBg)
                 .clickable { onExpand() }
-                .padding(horizontal = 12.dp),
-            verticalAlignment = Alignment.CenterVertically
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.Bottom
         ) {
-            Text("💬", fontSize = 16.sp)
-            Spacer(Modifier.width(8.dp))
-            Text(
-                text = previewText,
-                color = Color.White.copy(alpha = 0.8f),
-                fontSize = 12.sp,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f)
-            )
+            if (lastMessages.isEmpty()) {
+                Text("Чат пуст...", color = Color.White.copy(alpha = 0.5f), fontSize = 12.sp)
+            } else {
+                lastMessages.forEach { msg ->
+                    val textToShow = if (msg.isSystem) msg.text else "${msg.senderName}: ${msg.text}"
+                    val textColor = if (msg.isMyMessage) Accent else Color.White.copy(alpha = 0.9f)
+                    
+                    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
+                        Text(
+                            text = textToShow,
+                            color = textColor,
+                            fontSize = 12.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+            }
+            
+            // Счетчик непрочитанных (в правом верхнем углу плашки)
             if (unreadCount > 0) {
-                Spacer(Modifier.width(8.dp))
                 Box(
                     modifier = Modifier
+                        .align(Alignment.End)
+                        .padding(bottom = 4.dp)
                         .size(20.dp)
                         .clip(CircleShape)
                         .background(Color.Red),
