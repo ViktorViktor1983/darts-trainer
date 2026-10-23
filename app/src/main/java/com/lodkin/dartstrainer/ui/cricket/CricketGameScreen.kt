@@ -963,3 +963,107 @@ private fun TeamScoresList(game: CricketGame, showLegs: Boolean) {
         Text("${p.name}: $value", color = Color.White, fontSize = 13.sp)
     }
 }
+
+@Composable
+private fun FirstResultBlockCricket() {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(TileBg.copy(alpha = 0.7f))
+            .padding(12.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(
+            "Твой результат сохранён",
+            color = Color.White.copy(alpha = 0.85f),
+            fontSize = 13.sp,
+            textAlign = TextAlign.Center
+        )
+        Spacer(Modifier.height(2.dp))
+        Text(
+            "Рекорд появится со следующей игры",
+            color = Color.White.copy(alpha = 0.5f),
+            fontSize = 11.sp,
+            textAlign = TextAlign.Center
+        )
+    }
+}
+
+@Composable
+private fun CelebrationRecordBlockCricket(
+    title: String,
+    value: String,
+    prevValue: String,
+    scale: Float
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(GoldAccent.copy(alpha = 0.15f))
+            .padding(14.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text("🎉  ✨  🎊", fontSize = 22.sp, textAlign = TextAlign.Center)
+        Spacer(Modifier.height(6.dp))
+        Text(
+            title,
+            color = GoldAccent,
+            fontSize = 22.sp,
+            fontWeight = FontWeight.Bold,
+            letterSpacing = 1.sp,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.scale(scale)
+        )
+        Spacer(Modifier.height(8.dp))
+        Text(
+            value,
+            color = GoldAccent,
+            fontSize = 32.sp,
+            fontWeight = FontWeight.Bold,
+            textAlign = TextAlign.Center
+        )
+        Spacer(Modifier.height(4.dp))
+        Text(
+            "прошлый: $prevValue",
+            color = Color.White.copy(alpha = 0.55f),
+            fontSize = 12.sp,
+            textAlign = TextAlign.Center
+        )
+    }
+}
+
+@Composable
+private fun AlmostRecordBlockCricket(text: String, bestValue: String) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(Accent.copy(alpha = 0.10f))
+            .padding(14.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(
+            "💪 Почти рекорд",
+            color = Accent,
+            fontSize = 16.sp,
+            fontWeight = FontWeight.Bold,
+            textAlign = TextAlign.Center
+        )
+        Spacer(Modifier.height(4.dp))
+        Text(
+            text,
+            color = Color.White.copy(alpha = 0.85f),
+            fontSize = 13.sp,
+            textAlign = TextAlign.Center
+        )
+        Spacer(Modifier.height(4.dp))
+        Text(
+            "рекорд: $bestValue",
+            color = Color.White.copy(alpha = 0.5f),
+            fontSize = 11.sp,
+            textAlign = TextAlign.Center
+        )
+    }
+}
