@@ -23,9 +23,11 @@ import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.lodkin.dartstrainer.theme.Accent
+import com.lodkin.dartstrainer.theme.TileBg
 
 data class ChatMessage(
     val id: String,
@@ -42,7 +44,8 @@ fun OnlineChatOverlay(
     messages: List<ChatMessage>,
     unreadCount: Int,
     onSendMessage: (String) -> Unit,
-    onClose: () -> Unit
+    onClose: () -> Unit,
+    onExpand: () -> Unit
 ) {
     var inputText by remember { mutableStateOf("") }
     val listState = rememberLazyListState()
@@ -57,14 +60,14 @@ fun OnlineChatOverlay(
     }
 
     if (isExpanded) {
+        // РАЗВЕРНУТЫЙ ЧАТ
         Column(
             modifier = modifier
                 .fillMaxSize()
                 .clip(RoundedCornerShape(12.dp))
-                .background(Color(0xFFF5F5F5)) // Светлый фон
+                .background(Color(0xFFF5F5F5))
                 .padding(8.dp)
         ) {
-            // Шапка с крестиком
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.End
@@ -81,14 +84,12 @@ fun OnlineChatOverlay(
                 }
             }
 
-            // Лента сообщений
             LazyColumn(
                 state = listState,
                 modifier = Modifier.weight(1f).fillMaxWidth().padding(vertical = 4.dp),
-                reverseLayout = true, // Новые сообщения снизу
+                reverseLayout = true,
                 verticalArrangement = Arrangement.spacedBy(4.dp, Alignment.Bottom)
             ) {
-                // Используем messages.reversed(), так как reverseLayout переворачивает список
                 items(messages.reversed()) { msg ->
                     if (msg.isSystem) {
                         Text(
@@ -121,7 +122,6 @@ fun OnlineChatOverlay(
                 }
             }
 
-            // Поле ввода (фиксированная высота, без лишних рамок)
             Row(
                 modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
                 verticalAlignment = Alignment.CenterVertically
@@ -129,7 +129,7 @@ fun OnlineChatOverlay(
                 Box(
                     modifier = Modifier
                         .weight(1f)
-                        .height(44.dp) // Четкая высота поля
+                        .height(44.dp)
                         .clip(RoundedCornerShape(22.dp))
                         .background(Color.White)
                         .padding(horizontal = 16.dp),
@@ -175,6 +175,51 @@ fun OnlineChatOverlay(
                     contentAlignment = Alignment.Center
                 ) {
                     Text("➤", color = if (inputText.isNotBlank()) Color.White else Color.Gray, fontSize = 18.sp)
+                }
+            }
+        }
+    } else {
+        // СВЕРНУТЫЙ ЧАТ (Полоска с предпросмотром)
+        val lastMessage = messages.lastOrNull()
+        val previewText = if (lastMessage == null) "Чат пуст..." else {
+            if (lastMessage.isSystem) lastMessage.text else "${lastMessage.senderName}: ${lastMessage.text}"
+        }
+
+        Row(
+            modifier = modifier
+                .fillMaxWidth()
+                .height(40.dp)
+                .clip(RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp))
+                .background(TileBg)
+                .clickable { onExpand() }
+                .padding(horizontal = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("💬", fontSize = 16.sp)
+            Spacer(Modifier.width(8.dp))
+            Text(
+                text = previewText,
+                color = Color.White.copy(alpha = 0.8f),
+                fontSize = 12.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f)
+            )
+            if (unreadCount > 0) {
+                Spacer(Modifier.width(8.dp))
+                Box(
+                    modifier = Modifier
+                        .size(20.dp)
+                        .clip(CircleShape)
+                        .background(Color.Red),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = if (unreadCount > 9) "9+" else unreadCount.toString(),
+                        color = Color.White,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold
+                    )
                 }
             }
         }
