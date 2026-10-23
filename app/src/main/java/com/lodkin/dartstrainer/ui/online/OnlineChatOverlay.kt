@@ -1,6 +1,7 @@
 package com.lodkin.dartstrainer.ui.online
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -8,15 +9,21 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.*
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.lodkin.dartstrainer.theme.Accent
@@ -55,29 +62,29 @@ fun OnlineChatOverlay(
                 .fillMaxSize()
                 .clip(RoundedCornerShape(16.dp))
                 .background(Color(0xFFF5F5F5))
-                .padding(8.dp)
+                .padding(6.dp) // Уменьшили внешние отступы
         ) {
-            // Шапка с крестиком (без надписи "Чат")
+            // Кнопка закрытия (крестик) в правом верхнем углу
             Row(
-                modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp),
+                modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.End
             ) {
                 Box(
                     modifier = Modifier
-                        .size(24.dp)
+                        .size(28.dp)
                         .clip(CircleShape)
                         .background(Color(0xFFE0E0E0))
                         .clickable { onClose() },
                     contentAlignment = Alignment.Center
                 ) {
-                    Text("✕", color = Color.DarkGray, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    Text("✕", color = Color.DarkGray, fontSize = 14.sp, fontWeight = FontWeight.Bold)
                 }
             }
 
-            // Лента сообщений (шрифт уменьшен)
+            // Лента сообщений
             LazyColumn(
                 state = listState,
-                modifier = Modifier.weight(1f).fillMaxWidth(),
+                modifier = Modifier.weight(1f).fillMaxWidth().padding(vertical = 4.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 items(messages) { msg ->
@@ -104,37 +111,55 @@ fun OnlineChatOverlay(
                                 if (!msg.isMyMessage) {
                                     Text(msg.senderName, color = Color(0xFFE65100), fontSize = 10.sp, fontWeight = FontWeight.Bold)
                                 }
-                                Text(text = msg.text, color = Color.Black, fontSize = 12.sp)
+                                Text(text = msg.text, color = Color.Black, fontSize = 13.sp)
                             }
                         }
                     }
                 }
             }
 
-            // Поле ввода (увеличено, шрифт крупнее)
+            // Поле ввода и кнопка отправки
             Row(
-                modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
+                modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                OutlinedTextField(
-                    value = inputText,
-                    onValueChange = { if (it.length <= 200) inputText = it },
-                    modifier = Modifier.weight(1f).height(64.dp),
-                    placeholder = { Text("Сообщение...", fontSize = 14.sp, color = Color.Gray) },
-                    textStyle = LocalTextStyle.current.copy(fontSize = 14.sp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedTextColor = Color.Black,
-                        unfocusedTextColor = Color.Black,
-                        focusedBorderColor = Accent,
-                        unfocusedBorderColor = Color.LightGray,
-                        cursorColor = Accent,
-                        focusedContainerColor = Color.White,
-                        unfocusedContainerColor = Color.White
-                    ),
-                    singleLine = true,
-                    shape = RoundedCornerShape(24.dp)
-                )
+                // Используем BasicTextField для идеального контроля высоты
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(48.dp)
+                        .clip(RoundedCornerShape(24.dp))
+                        .background(Color.White)
+                        .border(1.dp, Color.LightGray, RoundedCornerShape(24.dp))
+                        .padding(horizontal = 16.dp),
+                    contentAlignment = Alignment.CenterStart
+                ) {
+                    BasicTextField(
+                        value = inputText,
+                        onValueChange = { if (it.length <= 200) inputText = it },
+                        textStyle = TextStyle(fontSize = 14.sp, color = Color.Black),
+                        cursorBrush = SolidColor(Accent),
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+                        keyboardActions = KeyboardActions(onSend = {
+                            if (inputText.isNotBlank()) {
+                                onSendMessage(inputText.trim())
+                                inputText = ""
+                                keyboardController?.hide()
+                                focusManager.clearFocus()
+                            }
+                        }),
+                        decorationBox = { innerTextField ->
+                            if (inputText.isEmpty()) {
+                                Text("Сообщение...", fontSize = 14.sp, color = Color.Gray)
+                            }
+                            innerTextField()
+                        }
+                    )
+                }
+                
                 Spacer(Modifier.width(8.dp))
+                
                 Box(
                     modifier = Modifier
                         .size(48.dp)
@@ -143,8 +168,8 @@ fun OnlineChatOverlay(
                         .clickable(enabled = inputText.isNotBlank()) {
                             onSendMessage(inputText.trim())
                             inputText = ""
-                            keyboardController?.hide() // Скрываем клавиатуру
-                            focusManager.clearFocus()  // Сбрасываем фокус
+                            keyboardController?.hide()
+                            focusManager.clearFocus()
                         },
                     contentAlignment = Alignment.Center
                 ) {
