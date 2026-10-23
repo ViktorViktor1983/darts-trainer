@@ -39,7 +39,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.Locale
-import kotlin.math.abs
 import kotlin.random.Random
 
 private val PaleYellow = Color(0xFFFFE082)
@@ -48,7 +47,6 @@ private val PaleYellowText = Color(0xFF3E2723)
 private const val RECORD_KEY_LEG = "game501_leg"
 private const val RECORD_KEY_MATCH = "game501_match"
 
-// Данные ожидающего салюта за рекорд лега.
 private data class PendingLegRecord(
     val isFirst: Boolean,
     val isBetter: Boolean,
@@ -57,7 +55,6 @@ private data class PendingLegRecord(
     val prevDarts: Int?
 )
 
-// Данные ожидающего салюта за рекорд матча.
 private data class PendingMatchRecord(
     val isFirst: Boolean,
     val isBetter: Boolean,
@@ -73,7 +70,7 @@ fun Game501Screen(
     initialGame: Game501,
     existingId: Long = 0L,
     isTrainingMode: Boolean = false,
-    isOnlineGame: Boolean = false, // НОВЫЙ ФЛАГ ДЛЯ ОНЛАЙНА
+    isOnlineGame: Boolean = false,
     trainingRepository: TrainingRepository? = null,
     onGameFinish: (Game501, Long) -> Unit,
     onBack: () -> Unit
@@ -104,12 +101,11 @@ fun Game501Screen(
     var lastSeenLegHistorySize by remember { mutableStateOf(game.legHistory.size) }
     var lastSeenSetNumber by remember { mutableStateOf(game.currentSetNumber) }
 
-    // ── Стейты для чата ──
+    // Стейты для чата
     var isChatExpanded by remember { mutableStateOf(true) }
     var unreadChatCount by remember { mutableStateOf(0) }
     val chatMessages = remember { mutableStateListOf<ChatMessage>() }
 
-    // ── Рекорды ──
     var pendingLegRecord by remember { mutableStateOf<PendingLegRecord?>(null) }
     var pendingMatchRecord by remember { mutableStateOf<PendingMatchRecord?>(null) }
     var showLegRecordCelebration by remember { mutableStateOf(false) }
@@ -126,7 +122,6 @@ fun Game501Screen(
         showLegQuestionDialog || showDoublesQuestionDialog || showDoublesOnlyDialog
     val canUndo = history.isNotEmpty() && !dialogOpen
 
-    // Инициализация чата при старте онлайновой игры
     LaunchedEffect(isOnlineGame) {
         if (isOnlineGame) {
             chatMessages.add(ChatMessage("1", "Система", "Игра началась! Удачной игры.", isSystem = true))
@@ -141,7 +136,6 @@ fun Game501Screen(
         }
     }
 
-    // ── Проверка рекорда лега ──
     suspend fun checkLegRecord(): PendingLegRecord? {
         if (game.isPairGame) return null
         val myName = SettingsStorage.getPlayerName(context)
@@ -156,15 +150,11 @@ fun Game501Screen(
         val prevDarts: Int?
         val isFirst: Boolean
         if (isTrainingMode && trainingRepository != null) {
-            val prev = withContext(Dispatchers.IO) {
-                trainingRepository.getTrainingRecord(RECORD_KEY_LEG)
-            }
+            val prev = withContext(Dispatchers.IO) { trainingRepository.getTrainingRecord(RECORD_KEY_LEG) }
             prevDarts = prev?.bestDarts?.takeIf { it > 0 }
             isFirst = prev == null
         } else if (freePlayRecordsRepository != null) {
-            val prev = withContext(Dispatchers.IO) {
-                freePlayRecordsRepository.get(FreePlayRecordsRepository.KEY_501_LEG)
-            }
+            val prev = withContext(Dispatchers.IO) { freePlayRecordsRepository.get(FreePlayRecordsRepository.KEY_501_LEG) }
             prevDarts = prev?.bestInt?.takeIf { it > 0 }
             isFirst = prev == null
         } else {
@@ -178,26 +168,15 @@ fun Game501Screen(
 
         if (isBetter) {
             if (isTrainingMode && trainingRepository != null) {
-                withContext(Dispatchers.IO) {
-                    trainingRepository.update501LegRecord(darts, ppr.toFloat())
-                }
+                withContext(Dispatchers.IO) { trainingRepository.update501LegRecord(darts, ppr.toFloat()) }
             } else if (freePlayRecordsRepository != null) {
-                withContext(Dispatchers.IO) {
-                    freePlayRecordsRepository.tryUpdate501Leg(darts, ppr.toFloat())
-                }
+                withContext(Dispatchers.IO) { freePlayRecordsRepository.tryUpdate501Leg(darts, ppr.toFloat()) }
             }
         }
 
-        return PendingLegRecord(
-            isFirst = isFirst,
-            isBetter = isBetter,
-            darts = darts,
-            ppr = ppr,
-            prevDarts = prevDarts
-        )
+        return PendingLegRecord(isFirst, isBetter, darts, ppr, prevDarts)
     }
 
-    // ── Проверка рекорда матча ──
     suspend fun checkAndUpdateMatchRecord(): PendingMatchRecord? {
         if (game.isPairGame) return null
         val myName = SettingsStorage.getPlayerName(context)
@@ -213,15 +192,11 @@ fun Game501Screen(
         val prevPpr: Float?
         val isFirst: Boolean
         if (isTrainingMode && trainingRepository != null) {
-            val prev = withContext(Dispatchers.IO) {
-                trainingRepository.getTrainingRecord(RECORD_KEY_MATCH)
-            }
+            val prev = withContext(Dispatchers.IO) { trainingRepository.getTrainingRecord(RECORD_KEY_MATCH) }
             prevPpr = prev?.bestFloat?.takeIf { it > 0f }
             isFirst = prev == null
         } else if (freePlayRecordsRepository != null) {
-            val prev = withContext(Dispatchers.IO) {
-                freePlayRecordsRepository.get(FreePlayRecordsRepository.KEY_501_MATCH)
-            }
+            val prev = withContext(Dispatchers.IO) { freePlayRecordsRepository.get(FreePlayRecordsRepository.KEY_501_MATCH) }
             prevPpr = prev?.bestFloat?.takeIf { it > 0f }
             isFirst = prev == null
         } else {
@@ -235,32 +210,19 @@ fun Game501Screen(
 
         if (isBetter) {
             if (isTrainingMode && trainingRepository != null) {
-                withContext(Dispatchers.IO) {
-                    trainingRepository.update501MatchRecord(ppr.toFloat(), doublesPct.toInt())
-                }
+                withContext(Dispatchers.IO) { trainingRepository.update501MatchRecord(ppr.toFloat(), doublesPct.toInt()) }
             } else if (freePlayRecordsRepository != null) {
-                withContext(Dispatchers.IO) {
-                    freePlayRecordsRepository.tryUpdate501Match(ppr.toFloat(), doublesPct.toInt())
-                }
+                withContext(Dispatchers.IO) { freePlayRecordsRepository.tryUpdate501Match(ppr.toFloat(), doublesPct.toInt()) }
             }
         }
 
-        return PendingMatchRecord(
-            isFirst = isFirst,
-            isBetter = isBetter,
-            ppr = ppr,
-            doublesPercent = doublesPct.toInt(),
-            prevPpr = prevPpr
-        )
+        return PendingMatchRecord(isFirst, isBetter, ppr, doublesPct.toInt(), prevPpr)
     }
 
     LaunchedEffect(Unit) {
         if (game.sessionStartTime == 0L) {
             val form = 0.85 + Random.nextDouble() * 0.30
-            game = game.copy(
-                sessionForm = form,
-                sessionStartTime = System.currentTimeMillis()
-            )
+            game = game.copy(sessionForm = form, sessionStartTime = System.currentTimeMillis())
         }
         quickSums = Game501SettingsStorage.getQuickSums(context)
     }
@@ -272,9 +234,7 @@ fun Game501Screen(
     }
 
     LaunchedEffect(game) {
-        if (!game.isFinished) {
-            currentId = repository.saveUnfinishedGame(game, currentId)
-        }
+        if (!game.isFinished) currentId = repository.saveUnfinishedGame(game, currentId)
     }
 
     fun setLastScore(value: Int) {
@@ -302,7 +262,6 @@ fun Game501Screen(
             game = updated
             if (scoreBefore <= 50) showDoublesOnlyDialog = true
             else game = Game501Logic.finishTurn(game)
-            
             if (isOnlineGame) addChatSystemMessage("${currentPlayer.name}: Перебор!")
             return
         }
@@ -315,7 +274,6 @@ fun Game501Screen(
         game = updated
 
         if (isOnlineGame) addChatSystemMessage("${currentPlayer.name} набрал $value. Остаток: ${updated.players[game.currentPlayerIndex].score}")
-
         if (scoreBefore <= 50) showDoublesOnlyDialog = true
         else game = Game501Logic.finishTurn(game)
     }
@@ -366,7 +324,6 @@ fun Game501Screen(
         game = updated
 
         if (isOnlineGame) addChatSystemMessage("${currentPlayer.name} набрал $gained. Остаток: $value")
-
         if (scoreBefore <= 50) showDoublesOnlyDialog = true
         else game = Game501Logic.finishTurn(game)
     }
@@ -379,12 +336,8 @@ fun Game501Screen(
     }
 
     LaunchedEffect(
-        game.currentPlayerIndex,
-        game.currentLegNumber,
-        game.currentSetNumber,
-        game.isFinished,
-        showLegQuestionDialog, showDoublesQuestionDialog, showDoublesOnlyDialog,
-        showWinDialog,
+        game.currentPlayerIndex, game.currentLegNumber, game.currentSetNumber, game.isFinished,
+        showLegQuestionDialog, showDoublesQuestionDialog, showDoublesOnlyDialog, showWinDialog,
         showLegWonDialog, showSetWonDialog
     ) {
         if (game.isFinished) return@LaunchedEffect
@@ -393,7 +346,6 @@ fun Game501Screen(
 
         val currentPlayer = game.players.getOrNull(game.currentPlayerIndex) ?: return@LaunchedEffect
         if (!currentPlayer.isBot) return@LaunchedEffect
-
         if (!allBots && (showLegWonDialog || showSetWonDialog)) return@LaunchedEffect
 
         delay(if (allBots) 400L else 900L)
@@ -414,21 +366,15 @@ fun Game501Screen(
         val gained = scoreAfter - scoreBefore
         if (teamIdx == 0) lastScoreA = gained else lastScoreB = gained
         
-        // Системное сообщение для бота в онлайне
         if (isOnlineGame && game.players[idx].isBot) {
             addChatSystemMessage("Соперник набрал $gained. Остаток: ${game.players[idx].score}")
         }
     }
 
-    LaunchedEffect(showBustMessage) {
-        if (showBustMessage) { delay(1500L); showBustMessage = false }
-    }
+    LaunchedEffect(showBustMessage) { if (showBustMessage) { delay(1500L); showBustMessage = false } }
 
     LaunchedEffect(game.legHistory.size, allBots) {
-        if (allBots) {
-            lastSeenLegHistorySize = game.legHistory.size
-            return@LaunchedEffect
-        }
+        if (allBots) { lastSeenLegHistorySize = game.legHistory.size; return@LaunchedEffect }
         if (game.legHistory.size > lastSeenLegHistorySize) {
             lastSeenLegHistorySize = game.legHistory.size
             pendingLegRecord = checkLegRecord()
@@ -437,10 +383,7 @@ fun Game501Screen(
     }
 
     LaunchedEffect(game.currentSetNumber, allBots, showLegWonDialog) {
-        if (allBots) {
-            lastSeenSetNumber = game.currentSetNumber
-            return@LaunchedEffect
-        }
+        if (allBots) { lastSeenSetNumber = game.currentSetNumber; return@LaunchedEffect }
         if (game.currentSetNumber > lastSeenSetNumber && !showLegWonDialog && !showWinDialog) {
             lastSeenSetNumber = game.currentSetNumber
             showSetWonDialog = true
@@ -467,16 +410,12 @@ fun Game501Screen(
                 isOnlineGame = isOnlineGame,
                 isChatExpanded = isChatExpanded,
                 unreadCount = unreadChatCount,
-                onToggleChat = { 
-                    isChatExpanded = !isChatExpanded
-                    if (isChatExpanded) unreadChatCount = 0 
-                }
+                onToggleChat = { isChatExpanded = !isChatExpanded; if (isChatExpanded) unreadChatCount = 0 }
             )
             PlayersHeader501(game = game)
 
             Row(
-                modifier = Modifier.fillMaxWidth().background(Color(0xFF16202C))
-                    .padding(horizontal = 12.dp, vertical = 6.dp),
+                modifier = Modifier.fillMaxWidth().background(Color(0xFF16202C)).padding(horizontal = 12.dp, vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 PrevScoreBlock("Пред.", lastScoreA, activeTeam == 0, Alignment.Start)
@@ -500,16 +439,8 @@ fun Game501Screen(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 4.dp),
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                BigActionButton(
-                    "Остаток",
-                    !game.isFinished && game.currentPlayer?.isBot != true,
-                    TileBg, Accent, Modifier.weight(2f)
-                ) { submitRemaining() }
-                BigActionButton(
-                    "OK",
-                    !game.isFinished && game.currentPlayer?.isBot != true,
-                    Accent, Color(0xFF121212), Modifier.weight(4f)
-                ) { submitSum() }
+                BigActionButton("Остаток", !game.isFinished && game.currentPlayer?.isBot != true, TileBg, Accent, Modifier.weight(2f)) { submitRemaining() }
+                BigActionButton("OK", !game.isFinished && game.currentPlayer?.isBot != true, Accent, Color(0xFF121212), Modifier.weight(4f)) { submitSum() }
             }
 
             Keyboard501(
@@ -521,30 +452,36 @@ fun Game501Screen(
                 onClear = { inputText = "" },
                 onUndo = { undo() }
             )
-        }
-
-        // Всплывающий чат в онлайн-режиме
-        if (isOnlineGame && isChatExpanded) {
-            OnlineChatOverlay(
-                modifier = Modifier.align(Alignment.TopCenter).padding(top = 60.dp, start = 16.dp, end = 16.dp),
-                messages = chatMessages,
-                unreadCount = unreadChatCount,
-                onSendMessage = { text ->
-                    chatMessages.add(ChatMessage(System.currentTimeMillis().toString(), "Вы", text, isMyMessage = true))
+            
+            // Окно чата теперь внизу и занимает свободное место
+            if (isOnlineGame && isChatExpanded) {
+                Box(modifier = Modifier.weight(1f).fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp)) {
+                    OnlineChatOverlay(
+                        modifier = Modifier.fillMaxSize(),
+                        isExpanded = isChatExpanded,
+                        messages = chatMessages,
+                        unreadCount = unreadChatCount,
+                        onSendMessage = { text ->
+                            chatMessages.add(ChatMessage(System.currentTimeMillis().toString(), "Вы", text, isMyMessage = true))
+                        },
+                        onClose = { isChatExpanded = false }
+                    )
                 }
-            )
+            } else {
+                Spacer(Modifier.weight(1f)) // Если чата нет, оставляем пустое место, чтобы клавиатура не растягивалась
+            }
         }
 
         if (showBustMessage) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Box(modifier = Modifier.clip(RoundedCornerShape(12.dp)).background(ErrorColor)
-                    .padding(horizontal = 32.dp, vertical = 20.dp)) {
+                Box(modifier = Modifier.clip(RoundedCornerShape(12.dp)).background(ErrorColor).padding(horizontal = 32.dp, vertical = 20.dp)) {
                     Text("ПЕРЕБОР", color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Bold)
                 }
             }
         }
     }
 
+    // ... Остальные диалоги без изменений ...
     if (showLegQuestionDialog && !allBots) {
         AlertDialog(
             onDismissRequest = { },
@@ -580,39 +517,20 @@ fun Game501Screen(
                         listOf(0, 1, 2, 3).forEach { n ->
                             val btnEnabled = !(n == 0 && !allowZero)
                             Box(
-                                modifier = Modifier.weight(1f)
-                                    .clip(RoundedCornerShape(10.dp))
-                                    .background(
-                                        if (btnEnabled) Accent
-                                        else Accent.copy(alpha = 0.25f)
-                                    )
+                                modifier = Modifier.weight(1f).clip(RoundedCornerShape(10.dp))
+                                    .background(if (btnEnabled) Accent else Accent.copy(alpha = 0.25f))
                                     .clickable(enabled = btnEnabled) {
                                         saveHistory()
                                         game = Game501Logic.closeLegManually(game, chosenDarts, n)
                                         showDoublesQuestionDialog = false
                                         chosenDarts = 0
-                                    }
-                                    .padding(vertical = 14.dp),
+                                    }.padding(vertical = 14.dp),
                                 contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    "$n",
-                                    color = if (btnEnabled) Color(0xFF121212)
-                                    else Color(0xFF121212).copy(alpha = 0.4f),
-                                    fontSize = 20.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
+                            ) { Text("$n", color = if (btnEnabled) Color(0xFF121212) else Color(0xFF121212).copy(alpha = 0.4f), fontSize = 20.sp, fontWeight = FontWeight.Bold) }
                         }
                     }
                     Spacer(Modifier.height(10.dp))
-                    Text(
-                        if (allowZero)
-                            "0 — если в этом подходе ты вообще не целился в удвоение"
-                        else
-                            "В этом режиме закрыть лег без попытки в дабл невозможно",
-                        color = Color.White.copy(alpha = 0.6f), fontSize = 12.sp
-                    )
+                    Text(if (allowZero) "0 — если в этом подходе ты вообще не целился в удвоение" else "В этом режиме закрыть лег без попытки в дабл невозможно", color = Color.White.copy(alpha = 0.6f), fontSize = 12.sp)
                 }
             }
         )
@@ -640,8 +558,7 @@ fun Game501Screen(
                         }
                     }
                     Spacer(Modifier.height(10.dp))
-                    Text("0 — если в этом подходе ты вообще не целился в удвоение",
-                        color = Color.White.copy(alpha = 0.6f), fontSize = 12.sp)
+                    Text("0 — если в этом подходе ты вообще не целился в удвоение", color = Color.White.copy(alpha = 0.6f), fontSize = 12.sp)
                 }
             }
         )
@@ -660,8 +577,7 @@ fun Game501Screen(
                 Column {
                     Text("ЛЕГ ЗАВЕРШЁН", color = Accent, fontSize = 22.sp, fontWeight = FontWeight.Bold)
                     Spacer(Modifier.height(4.dp))
-                    Text("Сет ${game.currentSetNumber}/${game.setsPerMatch}  •  Лег ${game.currentLegNumber}/${game.legsPerSet}",
-                        color = Color.White.copy(alpha = 0.7f), fontSize = 12.sp)
+                    Text("Сет ${game.currentSetNumber}/${game.setsPerMatch}  •  Лег ${game.currentLegNumber}/${game.legsPerSet}", color = Color.White.copy(alpha = 0.7f), fontSize = 12.sp)
                 }
             },
             text = {
@@ -689,16 +605,13 @@ fun Game501Screen(
     if (showSetWonDialog && !allBots) {
         AlertDialog(
             onDismissRequest = { },
-            confirmButton = {
-                TextButton(onClick = { showSetWonDialog = false }) { Text("Продолжить", color = Accent) }
-            },
+            confirmButton = { TextButton(onClick = { showSetWonDialog = false }) { Text("Продолжить", color = Accent) } },
             title = { Text("СЕТ ЗАВЕРШЁН", color = GoldAccent, fontSize = 22.sp, fontWeight = FontWeight.Bold) },
             text = {
                 Column {
                     Text("Победитель:", color = Color.White, fontSize = 14.sp)
                     val winnerTeam = game.legHistory.lastOrNull()?.winningTeam ?: 0
-                    Text(game.playersOfTeam(winnerTeam).joinToString("/") { it.name },
-                        color = GoldAccent, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                    Text(game.playersOfTeam(winnerTeam).joinToString("/") { it.name }, color = GoldAccent, fontSize = 20.sp, fontWeight = FontWeight.Bold)
                 }
             }
         )
@@ -724,202 +637,49 @@ fun Game501Screen(
         )
     }
 
-    // ── Салют за рекорд лега ──
     if (showLegRecordCelebration && pendingLegRecord != null) {
         val rec = pendingLegRecord!!
-        val recordScale by animateFloatAsState(
-            targetValue = if (rec.isBetter) 1f else 0.85f,
-            animationSpec = tween(durationMillis = 500),
-            label = "leg_record_scale"
-        )
-
-        CelebrationOverlay(
-            visible = true,
-            isNewRecord = rec.isBetter,
-            onConfirm = {
-                showLegRecordCelebration = false
-                pendingLegRecord = null
-            },
-            onUndo = {
-                showLegRecordCelebration = false
-                pendingLegRecord = null
-            }
-        ) {
-            Text(
-                "ЛЕГ",
-                color = Accent,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 3.sp
-            )
+        val recordScale by animateFloatAsState(targetValue = if (rec.isBetter) 1f else 0.85f, animationSpec = tween(durationMillis = 500), label = "leg_record_scale")
+        CelebrationOverlay(visible = true, isNewRecord = rec.isBetter, onConfirm = { showLegRecordCelebration = false; pendingLegRecord = null }, onUndo = { showLegRecordCelebration = false; pendingLegRecord = null }) {
+            Text("ЛЕГ", color = Accent, fontSize = 14.sp, fontWeight = FontWeight.Bold, letterSpacing = 3.sp)
             Spacer(Modifier.height(12.dp))
-
-            if (rec.isFirst) {
-                FirstResultBlock501()
-                Spacer(Modifier.height(14.dp))
-            } else if (rec.isBetter) {
-                CelebrationRecordBlock501(
-                    title = "🏆 НОВЫЙ РЕКОРД!",
-                    value = "${rec.darts} ${pluralDarts501(rec.darts)}",
-                    prevValue = "${rec.prevDarts ?: 0} ${pluralDarts501(rec.prevDarts ?: 0)}",
-                    scale = recordScale
-                )
-                Spacer(Modifier.height(14.dp))
-            } else {
-                val missing = rec.darts - (rec.prevDarts ?: 0)
-                AlmostRecordBlock501(
-                    text = "До нового рекорда не хватило $missing ${pluralDarts501(missing)}",
-                    bestValue = "${rec.prevDarts ?: 0} ${pluralDarts501(rec.prevDarts ?: 0)}"
-                )
-                Spacer(Modifier.height(14.dp))
-            }
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text("Дротиков:", color = Color.White, fontSize = 15.sp)
-                Text(
-                    "${rec.darts}",
-                    color = GoldAccent,
-                    fontSize = 24.sp,
-                    fontWeight = FontWeight.Bold
-                )
-            }
+            if (rec.isFirst) { FirstResultBlock501(); Spacer(Modifier.height(14.dp)) } 
+            else if (rec.isBetter) { CelebrationRecordBlock501(title = "🏆 НОВЫЙ РЕКОРД!", value = "${rec.darts} ${pluralDarts501(rec.darts)}", prevValue = "${rec.prevDarts ?: 0} ${pluralDarts501(rec.prevDarts ?: 0)}", scale = recordScale); Spacer(Modifier.height(14.dp)) } 
+            else { val missing = rec.darts - (rec.prevDarts ?: 0); AlmostRecordBlock501(text = "До нового рекорда не хватило $missing ${pluralDarts501(missing)}", bestValue = "${rec.prevDarts ?: 0} ${pluralDarts501(rec.prevDarts ?: 0)}"); Spacer(Modifier.height(14.dp)) }
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { Text("Дротиков:", color = Color.White, fontSize = 15.sp); Text("${rec.darts}", color = GoldAccent, fontSize = 24.sp, fontWeight = FontWeight.Bold) }
             Spacer(Modifier.height(4.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text("PPR лега:", color = Color.White.copy(alpha = 0.7f), fontSize = 14.sp)
-                Text(
-                    String.format(Locale.US, "%.1f", rec.ppr),
-                    color = Color.White,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Bold
-                )
-            }
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { Text("PPR лега:", color = Color.White.copy(alpha = 0.7f), fontSize = 14.sp); Text(String.format(Locale.US, "%.1f", rec.ppr), color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold) }
         }
     }
 
-    // ── Салют за рекорд матча ──
     if (showMatchRecordCelebration && pendingMatchRecord != null) {
         val rec = pendingMatchRecord!!
-        val recordScale by animateFloatAsState(
-            targetValue = if (rec.isBetter) 1f else 0.85f,
-            animationSpec = tween(durationMillis = 500),
-            label = "match_record_scale"
-        )
-
-        CelebrationOverlay(
-            visible = true,
-            isNewRecord = rec.isBetter,
-            onConfirm = {
-                showMatchRecordCelebration = false
-                pendingMatchRecord = null
-                Game501SettingsStorage.updateQuickSumsIfNeeded(context)
-                onGameFinish(game, currentId)
-            },
-            onUndo = {
-                showMatchRecordCelebration = false
-                pendingMatchRecord = null
-                Game501SettingsStorage.updateQuickSumsIfNeeded(context)
-                onGameFinish(game, currentId)
-            }
-        ) {
-            Text(
-                "МАТЧ",
-                color = Accent,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 3.sp
-            )
+        val recordScale by animateFloatAsState(targetValue = if (rec.isBetter) 1f else 0.85f, animationSpec = tween(durationMillis = 500), label = "match_record_scale")
+        CelebrationOverlay(visible = true, isNewRecord = rec.isBetter, onConfirm = { showMatchRecordCelebration = false; pendingMatchRecord = null; Game501SettingsStorage.updateQuickSumsIfNeeded(context); onGameFinish(game, currentId) }, onUndo = { showMatchRecordCelebration = false; pendingMatchRecord = null; Game501SettingsStorage.updateQuickSumsIfNeeded(context); onGameFinish(game, currentId) }) {
+            Text("МАТЧ", color = Accent, fontSize = 14.sp, fontWeight = FontWeight.Bold, letterSpacing = 3.sp)
             Spacer(Modifier.height(12.dp))
-
-            if (rec.isFirst) {
-                FirstResultBlock501()
-                Spacer(Modifier.height(14.dp))
-            } else if (rec.isBetter) {
-                CelebrationRecordBlock501(
-                    title = "🏆 НОВЫЙ РЕКОРД!",
-                    value = "PPR ${String.format(Locale.US, "%.1f", rec.ppr)}",
-                    prevValue = "PPR ${String.format(Locale.US, "%.1f", rec.prevPpr ?: 0f)}",
-                    scale = recordScale
-                )
-                Spacer(Modifier.height(14.dp))
-            } else {
-                val missing = ((rec.prevPpr ?: 0f) - rec.ppr).toFloat()
-                AlmostRecordBlock501(
-                    text = "До нового рекорда не хватило ${String.format(Locale.US, "%.1f", missing)} PPR",
-                    bestValue = "PPR ${String.format(Locale.US, "%.1f", rec.prevPpr ?: 0f)}"
-                )
-                Spacer(Modifier.height(14.dp))
-            }
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text("PPR матча:", color = Color.White, fontSize = 15.sp)
-                Text(
-                    String.format(Locale.US, "%.1f", rec.ppr),
-                    color = GoldAccent,
-                    fontSize = 24.sp,
-                    fontWeight = FontWeight.Bold
-                )
-            }
+            if (rec.isFirst) { FirstResultBlock501(); Spacer(Modifier.height(14.dp)) } 
+            else if (rec.isBetter) { CelebrationRecordBlock501(title = "🏆 НОВЫЙ РЕКОРД!", value = "PPR ${String.format(Locale.US, "%.1f", rec.ppr)}", prevValue = "PPR ${String.format(Locale.US, "%.1f", rec.prevPpr ?: 0f)}", scale = recordScale); Spacer(Modifier.height(14.dp)) } 
+            else { val missing = ((rec.prevPpr ?: 0f) - rec.ppr).toFloat(); AlmostRecordBlock501(text = "До нового рекорда не хватило ${String.format(Locale.US, "%.1f", missing)} PPR", bestValue = "PPR ${String.format(Locale.US, "%.1f", rec.prevPpr ?: 0f)}"); Spacer(Modifier.height(14.dp)) }
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { Text("PPR матча:", color = Color.White, fontSize = 15.sp); Text(String.format(Locale.US, "%.1f", rec.ppr), color = GoldAccent, fontSize = 24.sp, fontWeight = FontWeight.Bold) }
             Spacer(Modifier.height(4.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text("Удвоения:", color = Color.White.copy(alpha = 0.7f), fontSize = 14.sp)
-                Text(
-                    "${rec.doublesPercent}%",
-                    color = Color.White,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Bold
-                )
-            }
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { Text("Удвоения:", color = Color.White.copy(alpha = 0.7f), fontSize = 14.sp); Text("${rec.doublesPercent}%", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold) }
         }
     }
 
     if (showBackConfirm) {
         AlertDialog(
             onDismissRequest = { showBackConfirm = false },
-            confirmButton = {
-                TextButton(onClick = {
-                    showBackConfirm = false
-                    onBack()
-                }) { Text("Продолжить позже", color = Accent) }
-            },
-            dismissButton = {
-                TextButton(onClick = {
-                    showBackConfirm = false
-                    scope.launch {
-                        if (currentId > 0L) repository.deleteGame(currentId)
-                        onBack()
-                    }
-                }) { Text("Удалить партию", color = ErrorColor) }
-            },
+            confirmButton = { TextButton(onClick = { showBackConfirm = false; onBack() }) { Text("Продолжить позже", color = Accent) } },
+            dismissButton = { TextButton(onClick = { showBackConfirm = false; scope.launch { if (currentId > 0L) repository.deleteGame(currentId); onBack() } }) { Text("Удалить партию", color = ErrorColor) } },
             title = { Text("Прервать игру?", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold) },
-            text = {
-                Text(
-                    "Партия автоматически сохраняется. Ты можешь вернуться к ней позже " +
-                    "из статистики — она будет отмечена красным.\n\n" +
-                    "Либо удалить её навсегда.",
-                    color = Color.White,
-                    fontSize = 14.sp
-                )
-            }
+            text = { Text("Партия автоматически сохраняется. Ты можешь вернуться к ней позже из статистики — она будет отмечена красным.\n\nЛибо удалить её навсегда.", color = Color.White, fontSize = 14.sp) }
         )
     }
 }
 
 @Composable
-private fun PrevScoreBlock(
-    label: String, value: Int?, isActive: Boolean, alignment: Alignment.Horizontal
-) {
+private fun PrevScoreBlock(label: String, value: Int?, isActive: Boolean, alignment: Alignment.Horizontal) {
     val nameColor = if (isActive) Accent else Color.White.copy(alpha = 0.45f)
     val valueColor = if (isActive) Color.White else Color.White.copy(alpha = 0.55f)
     Column(modifier = Modifier.width(80.dp), horizontalAlignment = alignment) {
@@ -933,7 +693,6 @@ private fun PlayersHeader501(game: Game501) {
     val activeTeam = game.currentPlayer?.teamIndex ?: -1
     val teamA = game.playersOfTeam(0)
     val teamB = game.playersOfTeam(1)
-
     val legsA = teamA.firstOrNull()?.legsInCurrentSet ?: 0
     val legsB = teamB.firstOrNull()?.legsInCurrentSet ?: 0
     val setsA = teamA.firstOrNull()?.setsWon ?: 0
@@ -941,47 +700,25 @@ private fun PlayersHeader501(game: Game501) {
 
     Column(modifier = Modifier.fillMaxWidth().background(Color(0xFF16202C)).padding(vertical = 8.dp)) {
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            PlayerScoreCol(
-                name = teamA.joinToString("/") { it.name },
-                score = if (game.isPairGame) teamA.minOfOrNull { it.score } ?: 0 else teamA.firstOrNull()?.score ?: 0,
-                ppr = teamA.firstOrNull()?.let { Game501Logic.matchPpr(it) } ?: 0.0,
-                legDarts = if (game.isPairGame) teamA.sumOf { it.legDarts } else teamA.firstOrNull()?.legDarts ?: 0,
-                isActive = activeTeam == 0,
-                modifier = Modifier.weight(1f)
-            )
+            PlayerScoreCol(teamA.joinToString("/") { it.name }, if (game.isPairGame) teamA.minOfOrNull { it.score } ?: 0 else teamA.firstOrNull()?.score ?: 0, teamA.firstOrNull()?.let { Game501Logic.matchPpr(it) } ?: 0.0, if (game.isPairGame) teamA.sumOf { it.legDarts } else teamA.firstOrNull()?.legDarts ?: 0, activeTeam == 0, Modifier.weight(1f))
             Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(horizontal = 4.dp)) {
                 Text("СЕТ", color = Color(0xFF99AABB), fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                Text("$setsA : $setsB", color = Color.White.copy(alpha = 0.85f),
-                    fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                Text("$setsA : $setsB", color = Color.White.copy(alpha = 0.85f), fontSize = 18.sp, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.height(2.dp))
                 Text("ЛЕГ", color = Color(0xFF99AABB), fontSize = 14.sp, fontWeight = FontWeight.Bold)
                 Text("$legsA : $legsB", color = Color.White, fontSize = 36.sp, fontWeight = FontWeight.Bold)
             }
-            PlayerScoreCol(
-                name = teamB.joinToString("/") { it.name },
-                score = if (game.isPairGame) teamB.minOfOrNull { it.score } ?: 0 else teamB.firstOrNull()?.score ?: 0,
-                ppr = teamB.firstOrNull()?.let { Game501Logic.matchPpr(it) } ?: 0.0,
-                legDarts = if (game.isPairGame) teamB.sumOf { it.legDarts } else teamB.firstOrNull()?.legDarts ?: 0,
-                isActive = activeTeam == 1,
-                modifier = Modifier.weight(1f)
-            )
+            PlayerScoreCol(teamB.joinToString("/") { it.name }, if (game.isPairGame) teamB.minOfOrNull { it.score } ?: 0 else teamB.firstOrNull()?.score ?: 0, teamB.firstOrNull()?.let { Game501Logic.matchPpr(it) } ?: 0.0, if (game.isPairGame) teamB.sumOf { it.legDarts } else teamB.firstOrNull()?.legDarts ?: 0, activeTeam == 1, Modifier.weight(1f))
         }
     }
 }
 
 @Composable
-private fun PlayerScoreCol(
-    name: String, score: Int, ppr: Double, legDarts: Int,
-    isActive: Boolean, modifier: Modifier
-) {
+private fun PlayerScoreCol(name: String, score: Int, ppr: Double, legDarts: Int, isActive: Boolean, modifier: Modifier) {
     Column(modifier = modifier, horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(name, color = if (isActive) Accent else Color.White, fontSize = 20.sp,
-            fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        Text("$score", color = if (isActive) GoldAccent else Color.White,
-            fontSize = 78.sp, fontWeight = FontWeight.Bold,
-            maxLines = 1)
-        Text("ср. ${String.format(Locale.US, "%.1f", ppr)}",
-            color = Color.White.copy(alpha = 0.6f), fontSize = 16.sp)
+        Text(name, color = if (isActive) Accent else Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text("$score", color = if (isActive) GoldAccent else Color.White, fontSize = 78.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+        Text("ср. ${String.format(Locale.US, "%.1f", ppr)}", color = Color.White.copy(alpha = 0.6f), fontSize = 16.sp)
         Spacer(Modifier.height(1.dp))
         Text("🎯 $legDarts", color = Color.White.copy(alpha = 0.75f), fontSize = 15.sp, fontWeight = FontWeight.Medium)
     }
@@ -1000,14 +737,13 @@ private fun TopBar501(
         modifier = Modifier.fillMaxWidth().background(Color(0xFF1A2332)).padding(horizontal = 12.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(game.modeLabel, color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold,
-            modifier = Modifier.weight(1f))
+        Text(game.modeLabel, color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
         
-        // Иконка чата (только для онлайна и если он свернут)
+        // Иконка чата рядом с кнопкой Назад
         if (isOnlineGame && !isChatExpanded) {
             Box(
                 modifier = Modifier
-                    .padding(end = 12.dp)
+                    .padding(end = 8.dp)
                     .size(40.dp)
                     .clip(CircleShape)
                     .background(TileBgDark)
@@ -1017,12 +753,7 @@ private fun TopBar501(
                 Text("💬", fontSize = 20.sp)
                 if (unreadCount > 0) {
                     Box(
-                        modifier = Modifier
-                            .align(Alignment.TopEnd)
-                            .padding(2.dp)
-                            .size(16.dp)
-                            .clip(CircleShape)
-                            .background(Color.Red),
+                        modifier = Modifier.align(Alignment.TopEnd).padding(2.dp).size(16.dp).clip(CircleShape).background(Color.Red),
                         contentAlignment = Alignment.Center
                     ) {
                         Text(if (unreadCount > 9) "9+" else unreadCount.toString(), color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.Bold)
@@ -1032,38 +763,25 @@ private fun TopBar501(
         }
 
         Box(
-            modifier = Modifier.clip(RoundedCornerShape(10.dp)).background(TileBg).clickable { onBack() }
-                .padding(horizontal = 16.dp, vertical = 10.dp),
+            modifier = Modifier.clip(RoundedCornerShape(10.dp)).background(TileBg).clickable { onBack() }.padding(horizontal = 16.dp, vertical = 10.dp),
             contentAlignment = Alignment.Center
         ) { Text("← Назад", color = Accent, fontSize = 16.sp, fontWeight = FontWeight.Bold) }
     }
 }
 
 @Composable
-private fun QuickButtonsWithLeg(
-    sums: List<Int>, enabled: Boolean, onQuick: (Int) -> Unit, onLeg: () -> Unit
-) {
+private fun QuickButtonsWithLeg(sums: List<Int>, enabled: Boolean, onQuick: (Int) -> Unit, onLeg: () -> Unit) {
     val rows = sums.chunked(6)
     Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 3.dp)) {
         rows.forEachIndexed { rowIdx, row ->
-            Row(modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
-                horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 row.forEach { sum ->
-                    Box(
-                        modifier = Modifier.weight(1f).height(44.dp).clip(RoundedCornerShape(8.dp))
-                            .background(TileBg).clickable(enabled = enabled) { onQuick(sum) },
-                        contentAlignment = Alignment.Center
-                    ) { Text("$sum", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Medium) }
+                    Box(modifier = Modifier.weight(1f).height(44.dp).clip(RoundedCornerShape(8.dp)).background(TileBg).clickable(enabled = enabled) { onQuick(sum) }, contentAlignment = Alignment.Center) { Text("$sum", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Medium) }
                 }
                 if (rowIdx == rows.lastIndex) {
                     val freeSlots = 6 - row.size
                     if (freeSlots > 1) repeat(freeSlots - 1) { Spacer(Modifier.weight(1f)) }
-                    Box(
-                        modifier = Modifier.weight(1f).height(44.dp).clip(RoundedCornerShape(8.dp))
-                            .background(if (enabled) ErrorColor else ErrorColor.copy(alpha = 0.4f))
-                            .clickable(enabled = enabled) { onLeg() },
-                        contentAlignment = Alignment.Center
-                    ) { Text("ЛЕГ", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold) }
+                    Box(modifier = Modifier.weight(1f).height(44.dp).clip(RoundedCornerShape(8.dp)).background(if (enabled) ErrorColor else ErrorColor.copy(alpha = 0.4f)).clickable(enabled = enabled) { onLeg() }, contentAlignment = Alignment.Center) { Text("ЛЕГ", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold) }
                 }
             }
         }
@@ -1071,102 +789,46 @@ private fun QuickButtonsWithLeg(
 }
 
 @Composable
-private fun BigActionButton(
-    label: String, enabled: Boolean, color: Color, textColor: Color,
-    modifier: Modifier, onClick: () -> Unit
-) {
-    Box(
-        modifier = modifier.height(60.dp).clip(RoundedCornerShape(10.dp))
-            .background(if (enabled) color else color.copy(alpha = 0.4f))
-            .clickable(enabled = enabled) { onClick() },
-        contentAlignment = Alignment.Center
-    ) { Text(label, color = textColor, fontSize = 20.sp, fontWeight = FontWeight.Bold) }
+private fun BigActionButton(label: String, enabled: Boolean, color: Color, textColor: Color, modifier: Modifier, onClick: () -> Unit) {
+    Box(modifier = modifier.height(60.dp).clip(RoundedCornerShape(10.dp)).background(if (enabled) color else color.copy(alpha = 0.4f)).clickable(enabled = enabled) { onClick() }, contentAlignment = Alignment.Center) { Text(label, color = textColor, fontSize = 20.sp, fontWeight = FontWeight.Bold) }
 }
 
 @Composable
 private fun Keyboard501(
-    enabled: Boolean, 
-    canUndo: Boolean,
-    isOnlineGame: Boolean,
-    onDigit: (String) -> Unit, 
-    onBackspace: () -> Unit,
-    onClear: () -> Unit, 
-    onUndo: () -> Unit
+    enabled: Boolean, canUndo: Boolean, isOnlineGame: Boolean,
+    onDigit: (String) -> Unit, onBackspace: () -> Unit, onClear: () -> Unit, onUndo: () -> Unit
 ) {
     Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 2.dp)) {
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            DigitKey("1", enabled, onDigit, Modifier.weight(1f))
-            DigitKey("2", enabled, onDigit, Modifier.weight(1f))
-            DigitKey("3", enabled, onDigit, Modifier.weight(1f))
-        }
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) { DigitKey("1", enabled, onDigit, Modifier.weight(1f)); DigitKey("2", enabled, onDigit, Modifier.weight(1f)); DigitKey("3", enabled, onDigit, Modifier.weight(1f)) }
+        Spacer(Modifier.height(5.dp))
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) { DigitKey("4", enabled, onDigit, Modifier.weight(1f)); DigitKey("5", enabled, onDigit, Modifier.weight(1f)); DigitKey("6", enabled, onDigit, Modifier.weight(1f)) }
+        Spacer(Modifier.height(5.dp))
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) { DigitKey("7", enabled, onDigit, Modifier.weight(1f)); DigitKey("8", enabled, onDigit, Modifier.weight(1f)); DigitKey("9", enabled, onDigit, Modifier.weight(1f)) }
         Spacer(Modifier.height(5.dp))
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            DigitKey("4", enabled, onDigit, Modifier.weight(1f))
-            DigitKey("5", enabled, onDigit, Modifier.weight(1f))
-            DigitKey("6", enabled, onDigit, Modifier.weight(1f))
-        }
-        Spacer(Modifier.height(5.dp))
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            DigitKey("7", enabled, onDigit, Modifier.weight(1f))
-            DigitKey("8", enabled, onDigit, Modifier.weight(1f))
-            DigitKey("9", enabled, onDigit, Modifier.weight(1f))
-        }
-        Spacer(Modifier.height(5.dp))
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            // Если онлайн - вместо кнопки "C" ставим "Отмену хода", чтобы сэкономить место
             if (isOnlineGame) {
-                Box(
-                    modifier = Modifier.weight(1f).height(54.dp).clip(RoundedCornerShape(10.dp))
-                        .background(if (canUndo) PaleYellow else PaleYellow.copy(alpha = 0.35f))
-                        .clickable(enabled = canUndo) { onUndo() },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text("↶", color = PaleYellowText, fontSize = 34.sp, fontWeight = FontWeight.Black)
-                }
+                Box(modifier = Modifier.weight(1f).height(54.dp).clip(RoundedCornerShape(10.dp)).background(if (canUndo) PaleYellow else PaleYellow.copy(alpha = 0.35f)).clickable(enabled = canUndo) { onUndo() }, contentAlignment = Alignment.Center) { Text("↶", color = PaleYellowText, fontSize = 34.sp, fontWeight = FontWeight.Black) }
             } else {
-                Box(
-                    modifier = Modifier.weight(1f).height(54.dp).clip(RoundedCornerShape(10.dp))
-                        .background(TileBgDark).clickable(enabled = enabled) { onClear() },
-                    contentAlignment = Alignment.Center
-                ) { Text("C", color = ErrorColor, fontSize = 22.sp, fontWeight = FontWeight.Bold) }
+                Box(modifier = Modifier.weight(1f).height(54.dp).clip(RoundedCornerShape(10.dp)).background(TileBgDark).clickable(enabled = enabled) { onClear() }, contentAlignment = Alignment.Center) { Text("C", color = ErrorColor, fontSize = 22.sp, fontWeight = FontWeight.Bold) }
             }
-            
             DigitKey("0", enabled, onDigit, Modifier.weight(1f))
-            Box(
-                modifier = Modifier.weight(1f).height(54.dp).clip(RoundedCornerShape(10.dp))
-                    .background(TileBgDark).clickable(enabled = enabled) { onBackspace() },
-                contentAlignment = Alignment.Center
-            ) { Text("⌫", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold) }
+            Box(modifier = Modifier.weight(1f).height(54.dp).clip(RoundedCornerShape(10.dp)).background(TileBgDark).clickable(enabled = enabled) { onBackspace() }, contentAlignment = Alignment.Center) { Text("⌫", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold) }
         }
-        
-        // Если это НЕ онлайн, показываем нижний ряд с отменой хода, как было раньше
         if (!isOnlineGame) {
             Spacer(Modifier.height(5.dp))
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 Spacer(Modifier.weight(1f))
-                Box(
-                    modifier = Modifier.weight(1f).height(54.dp).clip(RoundedCornerShape(10.dp))
-                        .background(if (canUndo) PaleYellow else PaleYellow.copy(alpha = 0.35f))
-                        .clickable(enabled = canUndo) { onUndo() },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text("↶", color = PaleYellowText, fontSize = 34.sp, fontWeight = FontWeight.Black)
-                }
+                Box(modifier = Modifier.weight(1f).height(54.dp).clip(RoundedCornerShape(10.dp)).background(if (canUndo) PaleYellow else PaleYellow.copy(alpha = 0.35f)).clickable(enabled = canUndo) { onUndo() }, contentAlignment = Alignment.Center) { Text("↶", color = PaleYellowText, fontSize = 34.sp, fontWeight = FontWeight.Black) }
                 Spacer(Modifier.weight(1f))
             }
         }
-        
         Spacer(Modifier.height(6.dp))
     }
 }
 
 @Composable
 private fun DigitKey(digit: String, enabled: Boolean, onDigit: (String) -> Unit, modifier: Modifier) {
-    Box(
-        modifier = modifier.height(54.dp).clip(RoundedCornerShape(10.dp))
-            .background(TileBg).clickable(enabled = enabled) { onDigit(digit) },
-        contentAlignment = Alignment.Center
-    ) { Text(digit, color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold) }
+    Box(modifier = modifier.height(54.dp).clip(RoundedCornerShape(10.dp)).background(TileBg).clickable(enabled = enabled) { onDigit(digit) }, contentAlignment = Alignment.Center) { Text(digit, color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold) }
 }
 
 @Composable
@@ -1184,7 +846,6 @@ private fun WinDialog501(game: Game501, onUndo: () -> Unit, onContinue: () -> Un
     val winner = if (winnerTeam != null) game.playersOfTeam(winnerTeam).firstOrNull() else null
     val ppr = winner?.let { Game501Logic.matchPpr(it) } ?: 0.0
     val dbl = winner?.let { Game501Logic.doublesAccuracy(it) } ?: 0.0
-
     AlertDialog(
         onDismissRequest = { },
         confirmButton = { TextButton(onClick = onContinue) { Text("Продолжить", color = Accent) } },
@@ -1202,121 +863,40 @@ private fun WinDialog501(game: Game501, onUndo: () -> Unit, onContinue: () -> Un
     )
 }
 
-// ============================================================
-// Вспомогательные блоки для салюта рекорда
-// ============================================================
-
 private fun pluralDarts501(n: Int): String {
-    val mod10 = n % 10
-    val mod100 = n % 100
-    return when {
-        mod100 in 11..19 -> "дротиков"
-        mod10 == 1 -> "дротик"
-        mod10 in 2..4 -> "дротика"
-        else -> "дротиков"
-    }
+    val mod10 = n % 10; val mod100 = n % 100
+    return when { mod100 in 11..19 -> "дротиков"; mod10 == 1 -> "дротик"; mod10 in 2..4 -> "дротика"; else -> "дротиков" }
 }
 
 @Composable
-private fun CelebrationRecordBlock501(
-    title: String,
-    value: String,
-    prevValue: String,
-    scale: Float
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
-            .background(GoldAccent.copy(alpha = 0.15f))
-            .padding(14.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
+private fun CelebrationRecordBlock501(title: String, value: String, prevValue: String, scale: Float) {
+    Column(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(GoldAccent.copy(alpha = 0.15f)).padding(14.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         Text("🎉  ✨  🎊", fontSize = 22.sp, textAlign = TextAlign.Center)
         Spacer(Modifier.height(6.dp))
-        Text(
-            title,
-            color = GoldAccent,
-            fontSize = 22.sp,
-            fontWeight = FontWeight.Bold,
-            letterSpacing = 1.sp,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.scale(scale)
-        )
+        Text(title, color = GoldAccent, fontSize = 22.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp, textAlign = TextAlign.Center, modifier = Modifier.scale(scale))
         Spacer(Modifier.height(8.dp))
-        Text(
-            value,
-            color = GoldAccent,
-            fontSize = 32.sp,
-            fontWeight = FontWeight.Bold,
-            textAlign = TextAlign.Center
-        )
+        Text(value, color = GoldAccent, fontSize = 32.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
         Spacer(Modifier.height(4.dp))
-        Text(
-            "прошлый: $prevValue",
-            color = Color.White.copy(alpha = 0.55f),
-            fontSize = 12.sp,
-            textAlign = TextAlign.Center
-        )
+        Text("прошлый: $prevValue", color = Color.White.copy(alpha = 0.55f), fontSize = 12.sp, textAlign = TextAlign.Center)
     }
 }
 
 @Composable
 private fun AlmostRecordBlock501(text: String, bestValue: String) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
-            .background(Accent.copy(alpha = 0.10f))
-            .padding(14.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Text(
-            "💪 Почти рекорд",
-            color = Accent,
-            fontSize = 16.sp,
-            fontWeight = FontWeight.Bold,
-            textAlign = TextAlign.Center
-        )
+    Column(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Accent.copy(alpha = 0.10f)).padding(14.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        Text("💪 Почти рекорд", color = Accent, fontSize = 16.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
         Spacer(Modifier.height(4.dp))
-        Text(
-            text,
-            color = Color.White.copy(alpha = 0.85f),
-            fontSize = 13.sp,
-            textAlign = TextAlign.Center
-        )
+        Text(text, color = Color.White.copy(alpha = 0.85f), fontSize = 13.sp, textAlign = TextAlign.Center)
         Spacer(Modifier.height(4.dp))
-        Text(
-            "рекорд: $bestValue",
-            color = Color.White.copy(alpha = 0.5f),
-            fontSize = 11.sp,
-            textAlign = TextAlign.Center
-        )
+        Text("рекорд: $bestValue", color = Color.White.copy(alpha = 0.5f), fontSize = 11.sp, textAlign = TextAlign.Center)
     }
 }
 
 @Composable
 private fun FirstResultBlock501() {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
-            .background(TileBg.copy(alpha = 0.7f))
-            .padding(12.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Text(
-            "Твой результат сохранён",
-            color = Color.White.copy(alpha = 0.85f),
-            fontSize = 13.sp,
-            textAlign = TextAlign.Center
-        )
+    Column(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(TileBg.copy(alpha = 0.7f)).padding(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        Text("Твой результат сохранён", color = Color.White.copy(alpha = 0.85f), fontSize = 13.sp, textAlign = TextAlign.Center)
         Spacer(Modifier.height(2.dp))
-        Text(
-            "Рекорд появится со следующей игры",
-            color = Color.White.copy(alpha = 0.5f),
-            fontSize = 11.sp,
-            textAlign = TextAlign.Center
-        )
+        Text("Рекорд появится со следующей игры", color = Color.White.copy(alpha = 0.5f), fontSize = 11.sp, textAlign = TextAlign.Center)
     }
 }
