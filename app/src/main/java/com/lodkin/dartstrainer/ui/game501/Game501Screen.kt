@@ -5,6 +5,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
@@ -31,6 +32,8 @@ import com.lodkin.dartstrainer.theme.GoldAccent
 import com.lodkin.dartstrainer.theme.TileBg
 import com.lodkin.dartstrainer.theme.TileBgDark
 import com.lodkin.dartstrainer.ui.common.CelebrationOverlay
+import com.lodkin.dartstrainer.ui.online.ChatMessage
+import com.lodkin.dartstrainer.ui.online.OnlineChatOverlay
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -70,6 +73,7 @@ fun Game501Screen(
     initialGame: Game501,
     existingId: Long = 0L,
     isTrainingMode: Boolean = false,
+    isOnlineGame: Boolean = false, // НОВЫЙ ФЛАГ ДЛЯ ОНЛАЙНА
     trainingRepository: TrainingRepository? = null,
     onGameFinish: (Game501, Long) -> Unit,
     onBack: () -> Unit
@@ -100,6 +104,11 @@ fun Game501Screen(
     var lastSeenLegHistorySize by remember { mutableStateOf(game.legHistory.size) }
     var lastSeenSetNumber by remember { mutableStateOf(game.currentSetNumber) }
 
+    // ── Стейты для чата ──
+    var isChatExpanded by remember { mutableStateOf(true) }
+    var unreadChatCount by remember { mutableStateOf(0) }
+    val chatMessages = remember { mutableStateListOf<ChatMessage>() }
+
     // ── Рекорды ──
     var pendingLegRecord by remember { mutableStateOf<PendingLegRecord?>(null) }
     var pendingMatchRecord by remember { mutableStateOf<PendingMatchRecord?>(null) }
@@ -116,6 +125,21 @@ fun Game501Screen(
     val dialogOpen = showLegWonDialog || showSetWonDialog || showWinDialog ||
         showLegQuestionDialog || showDoublesQuestionDialog || showDoublesOnlyDialog
     val canUndo = history.isNotEmpty() && !dialogOpen
+
+    // Инициализация чата при старте онлайновой игры
+    LaunchedEffect(isOnlineGame) {
+        if (isOnlineGame) {
+            chatMessages.add(ChatMessage("1", "Система", "Игра началась! Удачной игры.", isSystem = true))
+            chatMessages.add(ChatMessage("2", game.players.getOrNull(1)?.name ?: "Соперник", "Привет! Погнали.", isMyMessage = false))
+        }
+    }
+
+    fun addChatSystemMessage(text: String) {
+        if (isOnlineGame) {
+            chatMessages.add(ChatMessage(System.currentTimeMillis().toString(), "Система", text, isSystem = true))
+            if (!isChatExpanded) unreadChatCount++
+        }
+    }
 
     // ── Проверка рекорда лега ──
     suspend fun checkLegRecord(): PendingLegRecord? {
@@ -278,6 +302,8 @@ fun Game501Screen(
             game = updated
             if (scoreBefore <= 50) showDoublesOnlyDialog = true
             else game = Game501Logic.finishTurn(game)
+            
+            if (isOnlineGame) addChatSystemMessage("${currentPlayer.name}: Перебор!")
             return
         }
 
@@ -287,6 +313,8 @@ fun Game501Screen(
             setLastScore(value)
         }
         game = updated
+
+        if (isOnlineGame) addChatSystemMessage("${currentPlayer.name} набрал $value. Остаток: ${updated.players[game.currentPlayerIndex].score}")
 
         if (scoreBefore <= 50) showDoublesOnlyDialog = true
         else game = Game501Logic.finishTurn(game)
@@ -328,6 +356,7 @@ fun Game501Screen(
             game = updated
             if (scoreBefore <= 50) showDoublesOnlyDialog = true
             else game = Game501Logic.finishTurn(game)
+            if (isOnlineGame) addChatSystemMessage("${currentPlayer.name}: Перебор!")
             return
         }
 
@@ -335,6 +364,8 @@ fun Game501Screen(
         recordSum = gained
         setLastScore(gained)
         game = updated
+
+        if (isOnlineGame) addChatSystemMessage("${currentPlayer.name} набрал $gained. Остаток: $value")
 
         if (scoreBefore <= 50) showDoublesOnlyDialog = true
         else game = Game501Logic.finishTurn(game)
@@ -382,6 +413,11 @@ fun Game501Screen(
         val scoreAfter = game.players.getOrNull(idx)?.matchScoreGained ?: 0
         val gained = scoreAfter - scoreBefore
         if (teamIdx == 0) lastScoreA = gained else lastScoreB = gained
+        
+        // Системное сообщение для бота в онлайне
+        if (isOnlineGame && game.players[idx].isBot) {
+            addChatSystemMessage("Соперник набрал $gained. Остаток: ${game.players[idx].score}")
+        }
     }
 
     LaunchedEffect(showBustMessage) {
@@ -423,63 +459,88 @@ fun Game501Screen(
 
     val activeTeam = game.currentPlayer?.teamIndex ?: 0
 
-    Column(modifier = Modifier.fillMaxSize().background(Color(0xFF0D1117))) {
-        TopBar501(game = game, onBack = { showBackConfirm = true })
-        PlayersHeader501(game = game)
-
-        Row(
-            modifier = Modifier.fillMaxWidth().background(Color(0xFF16202C))
-                .padding(horizontal = 12.dp, vertical = 6.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            PrevScoreBlock("Пред.", lastScoreA, activeTeam == 0, Alignment.Start)
-            Text(
-                if (inputText.isEmpty()) "—" else inputText,
-                color = if (inputText.isEmpty()) Color.White.copy(alpha = 0.3f) else GoldAccent,
-                fontSize = 36.sp, fontWeight = FontWeight.Bold,
-                modifier = Modifier.weight(1f), textAlign = TextAlign.Center
+    Box(modifier = Modifier.fillMaxSize()) {
+        Column(modifier = Modifier.fillMaxSize().background(Color(0xFF0D1117))) {
+            TopBar501(
+                game = game, 
+                onBack = { showBackConfirm = true },
+                isOnlineGame = isOnlineGame,
+                isChatExpanded = isChatExpanded,
+                unreadCount = unreadChatCount,
+                onToggleChat = { 
+                    isChatExpanded = !isChatExpanded
+                    if (isChatExpanded) unreadChatCount = 0 
+                }
             )
-            PrevScoreBlock("Пред.", lastScoreB, activeTeam == 1, Alignment.End)
+            PlayersHeader501(game = game)
+
+            Row(
+                modifier = Modifier.fillMaxWidth().background(Color(0xFF16202C))
+                    .padding(horizontal = 12.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                PrevScoreBlock("Пред.", lastScoreA, activeTeam == 0, Alignment.Start)
+                Text(
+                    if (inputText.isEmpty()) "—" else inputText,
+                    color = if (inputText.isEmpty()) Color.White.copy(alpha = 0.3f) else GoldAccent,
+                    fontSize = 36.sp, fontWeight = FontWeight.Bold,
+                    modifier = Modifier.weight(1f), textAlign = TextAlign.Center
+                )
+                PrevScoreBlock("Пред.", lastScoreB, activeTeam == 1, Alignment.End)
+            }
+
+            QuickButtonsWithLeg(
+                sums = quickSums,
+                enabled = !game.isFinished && game.currentPlayer?.isBot != true,
+                onQuick = { pressQuickButton(it) },
+                onLeg = { pressLeg() }
+            )
+
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                BigActionButton(
+                    "Остаток",
+                    !game.isFinished && game.currentPlayer?.isBot != true,
+                    TileBg, Accent, Modifier.weight(2f)
+                ) { submitRemaining() }
+                BigActionButton(
+                    "OK",
+                    !game.isFinished && game.currentPlayer?.isBot != true,
+                    Accent, Color(0xFF121212), Modifier.weight(4f)
+                ) { submitSum() }
+            }
+
+            Keyboard501(
+                enabled = !game.isFinished && game.currentPlayer?.isBot != true,
+                canUndo = canUndo,
+                isOnlineGame = isOnlineGame,
+                onDigit = { inputText = if (inputText.length < 3) inputText + it else inputText },
+                onBackspace = { inputText = if (inputText.isNotEmpty()) inputText.dropLast(1) else "" },
+                onClear = { inputText = "" },
+                onUndo = { undo() }
+            )
         }
 
-        QuickButtonsWithLeg(
-            sums = quickSums,
-            enabled = !game.isFinished && game.currentPlayer?.isBot != true,
-            onQuick = { pressQuickButton(it) },
-            onLeg = { pressLeg() }
-        )
-
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 4.dp),
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            BigActionButton(
-                "Остаток",
-                !game.isFinished && game.currentPlayer?.isBot != true,
-                TileBg, Accent, Modifier.weight(2f)
-            ) { submitRemaining() }
-            BigActionButton(
-                "OK",
-                !game.isFinished && game.currentPlayer?.isBot != true,
-                Accent, Color(0xFF121212), Modifier.weight(4f)
-            ) { submitSum() }
+        // Всплывающий чат в онлайн-режиме
+        if (isOnlineGame && isChatExpanded) {
+            OnlineChatOverlay(
+                modifier = Modifier.align(Alignment.TopCenter).padding(top = 60.dp, start = 16.dp, end = 16.dp),
+                messages = chatMessages,
+                unreadCount = unreadChatCount,
+                onSendMessage = { text ->
+                    chatMessages.add(ChatMessage(System.currentTimeMillis().toString(), "Вы", text, isMyMessage = true))
+                }
+            )
         }
 
-        Keyboard501(
-            enabled = !game.isFinished && game.currentPlayer?.isBot != true,
-            canUndo = canUndo,
-            onDigit = { inputText = if (inputText.length < 3) inputText + it else inputText },
-            onBackspace = { inputText = if (inputText.isNotEmpty()) inputText.dropLast(1) else "" },
-            onClear = { inputText = "" },
-            onUndo = { undo() }
-        )
-    }
-
-    if (showBustMessage) {
-        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Box(modifier = Modifier.clip(RoundedCornerShape(12.dp)).background(ErrorColor)
-                .padding(horizontal = 32.dp, vertical = 20.dp)) {
-                Text("ПЕРЕБОР", color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Bold)
+        if (showBustMessage) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Box(modifier = Modifier.clip(RoundedCornerShape(12.dp)).background(ErrorColor)
+                    .padding(horizontal = 32.dp, vertical = 20.dp)) {
+                    Text("ПЕРЕБОР", color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Bold)
+                }
             }
         }
     }
@@ -680,8 +741,6 @@ fun Game501Screen(
                 pendingLegRecord = null
             },
             onUndo = {
-                // Партия уже завершена, рекорд зафиксирован —
-                // отменять нечего, просто закрываем.
                 showLegRecordCelebration = false
                 pendingLegRecord = null
             }
@@ -929,17 +988,52 @@ private fun PlayerScoreCol(
 }
 
 @Composable
-private fun TopBar501(game: Game501, onBack: () -> Unit) {
+private fun TopBar501(
+    game: Game501, 
+    onBack: () -> Unit,
+    isOnlineGame: Boolean,
+    isChatExpanded: Boolean,
+    unreadCount: Int,
+    onToggleChat: () -> Unit
+) {
     Row(
         modifier = Modifier.fillMaxWidth().background(Color(0xFF1A2332)).padding(horizontal = 12.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(game.modeLabel, color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold,
             modifier = Modifier.weight(1f))
-        Spacer(Modifier.width(12.dp))
+        
+        // Иконка чата (только для онлайна и если он свернут)
+        if (isOnlineGame && !isChatExpanded) {
+            Box(
+                modifier = Modifier
+                    .padding(end = 12.dp)
+                    .size(40.dp)
+                    .clip(CircleShape)
+                    .background(TileBgDark)
+                    .clickable { onToggleChat() },
+                contentAlignment = Alignment.Center
+            ) {
+                Text("💬", fontSize = 20.sp)
+                if (unreadCount > 0) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(2.dp)
+                            .size(16.dp)
+                            .clip(CircleShape)
+                            .background(Color.Red),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(if (unreadCount > 9) "9+" else unreadCount.toString(), color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+
         Box(
             modifier = Modifier.clip(RoundedCornerShape(10.dp)).background(TileBg).clickable { onBack() }
-                .padding(horizontal = 24.dp, vertical = 10.dp),
+                .padding(horizontal = 16.dp, vertical = 10.dp),
             contentAlignment = Alignment.Center
         ) { Text("← Назад", color = Accent, fontSize = 16.sp, fontWeight = FontWeight.Bold) }
     }
@@ -991,9 +1085,13 @@ private fun BigActionButton(
 
 @Composable
 private fun Keyboard501(
-    enabled: Boolean, canUndo: Boolean,
-    onDigit: (String) -> Unit, onBackspace: () -> Unit,
-    onClear: () -> Unit, onUndo: () -> Unit
+    enabled: Boolean, 
+    canUndo: Boolean,
+    isOnlineGame: Boolean,
+    onDigit: (String) -> Unit, 
+    onBackspace: () -> Unit,
+    onClear: () -> Unit, 
+    onUndo: () -> Unit
 ) {
     Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 2.dp)) {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -1015,11 +1113,24 @@ private fun Keyboard501(
         }
         Spacer(Modifier.height(5.dp))
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            Box(
-                modifier = Modifier.weight(1f).height(54.dp).clip(RoundedCornerShape(10.dp))
-                    .background(TileBgDark).clickable(enabled = enabled) { onClear() },
-                contentAlignment = Alignment.Center
-            ) { Text("C", color = ErrorColor, fontSize = 22.sp, fontWeight = FontWeight.Bold) }
+            // Если онлайн - вместо кнопки "C" ставим "Отмену хода", чтобы сэкономить место
+            if (isOnlineGame) {
+                Box(
+                    modifier = Modifier.weight(1f).height(54.dp).clip(RoundedCornerShape(10.dp))
+                        .background(if (canUndo) PaleYellow else PaleYellow.copy(alpha = 0.35f))
+                        .clickable(enabled = canUndo) { onUndo() },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("↶", color = PaleYellowText, fontSize = 34.sp, fontWeight = FontWeight.Black)
+                }
+            } else {
+                Box(
+                    modifier = Modifier.weight(1f).height(54.dp).clip(RoundedCornerShape(10.dp))
+                        .background(TileBgDark).clickable(enabled = enabled) { onClear() },
+                    contentAlignment = Alignment.Center
+                ) { Text("C", color = ErrorColor, fontSize = 22.sp, fontWeight = FontWeight.Bold) }
+            }
+            
             DigitKey("0", enabled, onDigit, Modifier.weight(1f))
             Box(
                 modifier = Modifier.weight(1f).height(54.dp).clip(RoundedCornerShape(10.dp))
@@ -1027,19 +1138,24 @@ private fun Keyboard501(
                 contentAlignment = Alignment.Center
             ) { Text("⌫", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold) }
         }
-        Spacer(Modifier.height(5.dp))
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            Spacer(Modifier.weight(1f))
-            Box(
-                modifier = Modifier.weight(1f).height(54.dp).clip(RoundedCornerShape(10.dp))
-                    .background(if (canUndo) PaleYellow else PaleYellow.copy(alpha = 0.35f))
-                    .clickable(enabled = canUndo) { onUndo() },
-                contentAlignment = Alignment.Center
-            ) {
-                Text("↶", color = PaleYellowText, fontSize = 34.sp, fontWeight = FontWeight.Black)
+        
+        // Если это НЕ онлайн, показываем нижний ряд с отменой хода, как было раньше
+        if (!isOnlineGame) {
+            Spacer(Modifier.height(5.dp))
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Spacer(Modifier.weight(1f))
+                Box(
+                    modifier = Modifier.weight(1f).height(54.dp).clip(RoundedCornerShape(10.dp))
+                        .background(if (canUndo) PaleYellow else PaleYellow.copy(alpha = 0.35f))
+                        .clickable(enabled = canUndo) { onUndo() },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("↶", color = PaleYellowText, fontSize = 34.sp, fontWeight = FontWeight.Black)
+                }
+                Spacer(Modifier.weight(1f))
             }
-            Spacer(Modifier.weight(1f))
         }
+        
         Spacer(Modifier.height(6.dp))
     }
 }
