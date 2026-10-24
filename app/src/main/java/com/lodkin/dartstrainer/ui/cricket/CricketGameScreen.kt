@@ -301,12 +301,14 @@ fun CricketGameScreen(
 
     Box(modifier = Modifier.fillMaxSize().background(Color(0xFF0D1117))) {
         Column(modifier = Modifier.fillMaxSize()) {
-            // НОВАЯ ШАПКА
+            // ШАПКА (возвращена к рабочей версии)
             TopHeaderCricket(
                 game = game,
                 isOnlineGame = isOnlineGame,
                 isChatExpanded = isChatExpanded,
+                unreadCount = unreadChatCount,
                 onBack = { showBackConfirm = true },
+                onToggleChat = { isChatExpanded = !isChatExpanded; if (isChatExpanded) unreadChatCount = 0 },
                 chatMessages = chatMessages,
                 onExpand = { isChatExpanded = true; unreadChatCount = 0 }
             )
@@ -351,7 +353,7 @@ fun CricketGameScreen(
                     }
                 }
             } else {
-                Spacer(Modifier.weight(1f)) // Если чат открыт, таблица мишеней скрыта
+                Spacer(Modifier.weight(1f))
             }
         }
 
@@ -526,7 +528,9 @@ private fun TopHeaderCricket(
     game: CricketGame,
     isOnlineGame: Boolean,
     isChatExpanded: Boolean,
+    unreadCount: Int,
     onBack: () -> Unit,
+    onToggleChat: () -> Unit,
     chatMessages: List<ChatMessage>,
     onExpand: () -> Unit
 ) {
@@ -535,16 +539,15 @@ private fun TopHeaderCricket(
         verticalAlignment = Alignment.Top,
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        // ЛЕВАЯ ЧАСТЬ
+        // ЧАТ (занимает левую часть)
         if (isOnlineGame) {
-            // Если онлайн, то слева плашка чата
             Box(modifier = Modifier.weight(1f).height(85.dp)) {
                 if (!isChatExpanded) {
                     OnlineChatOverlay(
                         modifier = Modifier.fillMaxSize(),
                         isExpanded = false,
                         messages = chatMessages,
-                        unreadCount = 0,
+                        unreadCount = unreadCount,
                         onSendMessage = {},
                         onClose = {},
                         onExpand = onExpand
@@ -552,33 +555,42 @@ private fun TopHeaderCricket(
                 }
             }
         } else {
-            // Если не онлайн, то слева крупный заголовок
-            Box(modifier = Modifier.weight(1f).fillMaxHeight(), contentAlignment = Alignment.CenterStart) {
-                Text(
-                    text = "КРИКЕТ (АМЕРИКАНСКИЙ)",
-                    color = GoldAccent,
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.Bold,
-                    lineHeight = 24.sp
-                )
-            }
+            // Если не онлайн, просто заголовок
+            Text("Крикет", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f).padding(top = 8.dp))
         }
 
-        // ПРАВАЯ ЧАСТЬ
+        // ПРАВАЯ ЧАСТЬ (Кнопка назад, иконка чата, СЕТ/ЛЕГ)
         Column(horizontalAlignment = Alignment.End) {
-            // Кнопка Назад
-            Box(
-                modifier = Modifier.clip(RoundedCornerShape(8.dp)).background(TileBg)
-                    .clickable { onBack() }.padding(horizontal = 16.dp, vertical = 8.dp),
-                contentAlignment = Alignment.Center
-            ) { Text("←", color = Accent, fontSize = 22.sp, fontWeight = FontWeight.Black) }
+            // Кнопка Назад и иконка чата на одном уровне
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                if (isOnlineGame && !isChatExpanded) {
+                    Box(
+                        modifier = Modifier.size(32.dp).clip(CircleShape).background(TileBgDark).clickable { onToggleChat() },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("💬", fontSize = 16.sp)
+                        if (unreadCount > 0) {
+                            Box(modifier = Modifier.align(Alignment.TopEnd).size(12.dp).clip(CircleShape).background(Color.Red), contentAlignment = Alignment.Center) {
+                                Text("$unreadCount", color = Color.White, fontSize = 8.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                }
+                
+                // Короткая кнопка Назад
+                Box(
+                    modifier = Modifier.clip(RoundedCornerShape(8.dp)).background(TileBg)
+                        .clickable { onBack() }.padding(horizontal = 12.dp, vertical = 6.dp),
+                    contentAlignment = Alignment.Center
+                ) { Text("←", color = Accent, fontSize = 20.sp, fontWeight = FontWeight.Black) }
+            }
 
-            Spacer(Modifier.height(6.dp))
+            Spacer(Modifier.height(4.dp))
 
             // Параметры игры
             Column(horizontalAlignment = Alignment.End) {
-                Text("СЕТ: ${game.setsPerMatch}", color = Color(0xFFCCDDEE), fontSize = 12.sp)
-                Text("ЛЕГ: ${game.legsPerSet}", color = Color(0xFFCCDDEE), fontSize = 12.sp)
+                Text("СЕТ: ${game.setsPerMatch}", color = Color(0xFFCCDDEE), fontSize = 11.sp)
+                Text("ЛЕГ: ${game.legsPerSet}", color = Color(0xFFCCDDEE), fontSize = 11.sp)
             }
         }
     }
