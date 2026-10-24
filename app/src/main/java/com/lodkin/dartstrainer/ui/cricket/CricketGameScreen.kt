@@ -114,8 +114,9 @@ fun CricketGameScreen(
 
     LaunchedEffect(isOnlineGame) {
         if (isOnlineGame) {
-            chatMessages.add(ChatMessage("1", "Система", "Игра началась! Удачной игры.", isSystem = true))
-            chatMessages.add(ChatMessage("2", game.players.getOrNull(1)?.name ?: "Соперник", "Привет! Погнали.", isMyMessage = false))
+            chatMessages.add(ChatMessage("1", "Система", "Это чат игры. Здесь можно общаться с соперником.", isSystem = true))
+            chatMessages.add(ChatMessage("2", "Система", "Игра началась! Удачной игры.", isSystem = true))
+            chatMessages.add(ChatMessage("3", game.players.getOrNull(1)?.name ?: "Соперник", "Привет! Погнали.", isMyMessage = false))
         }
     }
 
@@ -576,8 +577,7 @@ private fun TopHeaderCricket(
             }
         }
 
-        // ПРАВАЯ ЧАСТЬ (Кнопка назад, СЕТ/ЛЕГ)
-        // Уменьшаем ширину с 0.4f до 0.25f (примерно на 40%)
+        // ПРАВАЯ ЧАСТЬ
         Column(horizontalAlignment = Alignment.End) {
             
             Box(
@@ -777,8 +777,8 @@ private fun TeamSectorCell(
     // Логика отображения
     val color = when {
         isDead -> Color(0xFF000000) // Черный, если сектор мертв
-        rawHits >= 3 && myScore > 0 -> Color(0xFF9C27B0) // Фиолетовый, если набираем очки
-        rawHits >= 3 -> Color(0xFFE53935) // Красный, если закрыт
+        rawHits > 3 -> Color(0xFF9C27B0) // Фиолетовый, если набираем очки (больше 3)
+        rawHits == 3 -> Color(0xFFE53935) // Красный, если ровно 3 (закрыт)
         rawHits == 2 -> Color(0xFFFFC107) // Желтый
         rawHits == 1 -> Color(0xFF4CAF50) // Зеленый
         else -> TileBgDark // Серый
@@ -786,8 +786,8 @@ private fun TeamSectorCell(
 
     val label = when {
         isDead -> rawHits.toString() // Если мертв, показываем реальное количество
-        rawHits >= 3 && myScore > 0 -> rawHits.toString() // Показываем реальное количество
-        rawHits >= 3 -> "3"
+        rawHits > 3 -> rawHits.toString() // Показываем реальное количество, если больше 3
+        rawHits == 3 -> "3"
         rawHits == 2 -> "2"
         rawHits == 1 -> "1"
         else -> "S"
