@@ -49,35 +49,42 @@ fun OnlineChatOverlay(
                 .clip(RoundedCornerShape(12.dp))
                 .background(TileBgDark)
                 .clickable { onExpand() }
-                .padding(12.dp)
+                .padding(10.dp),
+            contentAlignment = Alignment.CenterStart
         ) {
-            Column {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text("💬 Чат", color = GoldAccent, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                    if (unreadCount > 0) {
-                        Box(
-                            modifier = Modifier.size(20.dp).clip(CircleShape).background(Color.Red),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text("$unreadCount", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                        }
+            val lastMsg = messages.lastOrNull()
+            if (lastMsg != null) {
+                Column {
+                    if (!lastMsg.isSystem) {
+                        Text(
+                            lastMsg.senderName,
+                            color = GoldAccent,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(Modifier.height(2.dp))
                     }
-                }
-                Spacer(Modifier.height(4.dp))
-                val lastMsg = messages.lastOrNull()
-                if (lastMsg != null) {
                     Text(
-                        "${lastMsg.senderName}: ${lastMsg.text}",
-                        color = Color.White.copy(alpha = 0.8f),
+                        lastMsg.text,
+                        color = Color.White.copy(alpha = 0.85f),
                         fontSize = 13.sp,
-                        maxLines = 2
+                        maxLines = 2 // Ограничиваем двумя строками, чтобы не ломать высоту
                     )
-                } else {
-                    Text("Нет сообщений", color = Color.White.copy(alpha = 0.5f), fontSize = 13.sp)
+                }
+            } else {
+                Text("Нет сообщений", color = Color.White.copy(alpha = 0.5f), fontSize = 13.sp)
+            }
+            
+            if (unreadCount > 0) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .size(20.dp)
+                        .clip(CircleShape)
+                        .background(Color.Red),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("$unreadCount", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                 }
             }
         }
