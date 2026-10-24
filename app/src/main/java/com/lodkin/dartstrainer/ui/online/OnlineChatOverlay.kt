@@ -9,32 +9,27 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.platform.LocalFocusManager
-import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.lodkin.dartstrainer.theme.Accent
+import com.lodkin.dartstrainer.theme.GoldAccent
 import com.lodkin.dartstrainer.theme.TileBg
+import com.lodkin.dartstrainer.theme.TileBgDark
 
 data class ChatMessage(
     val id: String,
     val senderName: String,
     val text: String,
-    val isSystem: Boolean = false,
-    val isMyMessage: Boolean = false
+    val isMyMessage: Boolean = false,
+    val isSystem: Boolean = false
 )
 
 @Composable
@@ -47,185 +42,175 @@ fun OnlineChatOverlay(
     onClose: () -> Unit,
     onExpand: () -> Unit
 ) {
-    var inputText by remember { mutableStateOf("") }
-    val listState = rememberLazyListState()
-    val keyboardController = LocalSoftwareKeyboardController.current
-    val focusManager = LocalFocusManager.current
-
-    LaunchedEffect(messages.size) {
-        if (isExpanded && messages.isNotEmpty()) {
-            listState.animateScrollToItem(0)
-        }
-    }
-
-    if (isExpanded) {
-        // РАЗВЕРНУТЫЙ ЧАТ
-        Column(
+    if (!isExpanded) {
+        // Компактный вид (когда чат свернут)
+        Box(
             modifier = modifier
-                .fillMaxSize()
                 .clip(RoundedCornerShape(12.dp))
-                .background(Color(0xFFF5F5F5))
-                .padding(8.dp)
+                .background(TileBgDark)
+                .clickable { onExpand() }
+                .padding(12.dp)
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(24.dp)
-                        .clip(CircleShape)
-                        .background(Color(0xFFE0E0E0))
-                        .clickable { onClose() },
-                    contentAlignment = Alignment.Center
+            Column {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("✕", color = Color.DarkGray, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                }
-            }
-
-            LazyColumn(
-                state = listState,
-                modifier = Modifier.weight(1f).fillMaxWidth().padding(vertical = 4.dp),
-                reverseLayout = true,
-                verticalArrangement = Arrangement.spacedBy(4.dp, Alignment.Bottom)
-            ) {
-                items(messages.reversed()) { msg ->
-                    if (msg.isSystem) {
-                        Text(
-                            text = msg.text,
-                            color = Color.DarkGray,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Medium,
-                            modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
-                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                        )
-                    } else {
-                        val bgColor = if (msg.isMyMessage) Accent.copy(alpha = 0.2f) else Color.White
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = if (msg.isMyMessage) Arrangement.End else Arrangement.Start
+                    Text("💬 Чат", color = GoldAccent, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                    if (unreadCount > 0) {
+                        Box(
+                            modifier = Modifier.size(20.dp).clip(CircleShape).background(Color.Red),
+                            contentAlignment = Alignment.Center
                         ) {
-                            Column(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .background(bgColor)
-                                    .padding(horizontal = 8.dp, vertical = 4.dp)
-                            ) {
-                                if (!msg.isMyMessage) {
-                                    Text(msg.senderName, color = Color(0xFFE65100), fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                                }
-                                Text(text = msg.text, color = Color.Black, fontSize = 13.sp)
-                            }
+                            Text("$unreadCount", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                         }
                     }
                 }
-            }
-
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(44.dp)
-                        .clip(RoundedCornerShape(22.dp))
-                        .background(Color.White)
-                        .padding(horizontal = 16.dp),
-                    contentAlignment = Alignment.CenterStart
-                ) {
-                    BasicTextField(
-                        value = inputText,
-                        onValueChange = { if (it.length <= 200) inputText = it },
-                        textStyle = TextStyle(fontSize = 14.sp, color = Color.Black),
-                        cursorBrush = SolidColor(Accent),
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
-                        keyboardActions = KeyboardActions(onSend = {
-                            if (inputText.isNotBlank()) {
-                                onSendMessage(inputText.trim())
-                                inputText = ""
-                                keyboardController?.hide()
-                                focusManager.clearFocus()
-                            }
-                        }),
-                        decorationBox = { innerTextField ->
-                            if (inputText.isEmpty()) {
-                                Text("Сообщение...", fontSize = 14.sp, color = Color.Gray)
-                            }
-                            innerTextField()
-                        }
+                Spacer(Modifier.height(4.dp))
+                val lastMsg = messages.lastOrNull()
+                if (lastMsg != null) {
+                    Text(
+                        "${lastMsg.senderName}: ${lastMsg.text}",
+                        color = Color.White.copy(alpha = 0.8f),
+                        fontSize = 13.sp,
+                        maxLines = 2
                     )
-                }
-                
-                Spacer(Modifier.width(8.dp))
-                
-                Box(
-                    modifier = Modifier
-                        .size(44.dp)
-                        .clip(CircleShape)
-                        .background(if (inputText.isNotBlank()) Accent else Color.LightGray)
-                        .clickable(enabled = inputText.isNotBlank()) {
-                            onSendMessage(inputText.trim())
-                            inputText = ""
-                            keyboardController?.hide()
-                            focusManager.clearFocus()
-                        },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text("➤", color = if (inputText.isNotBlank()) Color.White else Color.Gray, fontSize = 18.sp)
+                } else {
+                    Text("Нет сообщений", color = Color.White.copy(alpha = 0.5f), fontSize = 13.sp)
                 }
             }
         }
     } else {
-        // СВЕРНУТЫЙ ЧАТ
-        val lastMessages = messages.takeLast(3)
+        // Развернутый вид (на весь экран)
+        val listState = rememberLazyListState()
+        var inputText by remember { mutableStateOf("") }
 
-        Column(
+        LaunchedEffect(messages.size) {
+            if (messages.isNotEmpty()) {
+                listState.animateScrollToItem(messages.size - 1)
+            }
+        }
+
+        // Поднимаем чат выше, чтобы поле ввода не наезжало на системные кнопки
+        Box(
             modifier = modifier
-                .fillMaxWidth()
-                .wrapContentHeight() // Автоматическая высота под текст
-                .clip(RoundedCornerShape(12.dp))
-                .background(TileBg)
-                .clickable { onExpand() }
-                .padding(horizontal = 8.dp, vertical = 4.dp)
+                .fillMaxSize()
+                .padding(bottom = 48.dp) // Отступ снизу
+                .clip(RoundedCornerShape(16.dp))
+                .background(Color(0xFFF5F5F5))
         ) {
-            if (lastMessages.isEmpty()) {
-                Text("Чат пуст...", color = Color.White.copy(alpha = 0.5f), fontSize = 11.sp)
-            } else {
-                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    lastMessages.forEach { msg ->
-                        val textToShow = if (msg.isSystem) msg.text else "${msg.senderName}: ${msg.text}"
-                        val textColor = if (msg.isMyMessage) Accent else Color.White.copy(alpha = 0.9f)
-                        
-                        Text(
-                            text = textToShow,
-                            color = textColor,
-                            fontSize = 11.sp,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.fillMaxWidth()
-                        )
+            Column(modifier = Modifier.fillMaxSize()) {
+                // Шапка чата
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color(0xFFE0E0E0))
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("Чат", color = Color.Black, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                    
+                    // Большой и заметный крестик
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(CircleShape)
+                            .background(Color(0xFFCCCCCC))
+                            .clickable { onClose() },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("✕", color = Color.Black, fontSize = 24.sp, fontWeight = FontWeight.Bold)
                     }
                 }
-            }
-            
-            if (unreadCount > 0) {
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.End)
-                        .padding(top = 2.dp)
-                        .size(16.dp)
-                        .clip(CircleShape)
-                        .background(Color.Red),
-                    contentAlignment = Alignment.Center
+
+                // Лента сообщений
+                LazyColumn(
+                    modifier = Modifier.weight(1f).fillMaxWidth(),
+                    state = listState,
+                    contentPadding = PaddingValues(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Text(
-                        text = if (unreadCount > 9) "9+" else unreadCount.toString(),
-                        color = Color.White,
-                        fontSize = 9.sp,
-                        fontWeight = FontWeight.Bold
+                    items(messages) { msg ->
+                        if (msg.isSystem) {
+                            Text(
+                                msg.text,
+                                color = Color.Gray,
+                                fontSize = 12.sp,
+                                modifier = Modifier.fillMaxWidth(),
+                                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                            )
+                        } else {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = if (msg.isMyMessage) Arrangement.End else Arrangement.Start
+                            ) {
+                                Column(
+                                    modifier = Modifier
+                                        .widthIn(max = 280.dp)
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .background(if (msg.isMyMessage) Accent else Color.White)
+                                        .padding(12.dp)
+                                ) {
+                                    if (!msg.isMyMessage) {
+                                        Text(
+                                            msg.senderName,
+                                            color = Color(0xFFE65100),
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                        Spacer(Modifier.height(4.dp))
+                                    }
+                                    Text(
+                                        msg.text,
+                                        color = if (msg.isMyMessage) Color.White else Color.Black,
+                                        fontSize = 15.sp
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Поле ввода
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color.White)
+                        .padding(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    BasicTextField(
+                        value = inputText,
+                        onValueChange = { inputText = it },
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(24.dp))
+                            .background(Color(0xFFF0F0F0))
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                        textStyle = TextStyle(color = Color.Black, fontSize = 15.sp),
+                        decorationBox = { innerTextField ->
+                            if (inputText.isEmpty()) {
+                                Text("Сообщение...", color = Color.Gray, fontSize = 15.sp)
+                            }
+                            innerTextField()
+                        }
                     )
+                    Spacer(Modifier.width(8.dp))
+                    Box(
+                        modifier = Modifier
+                            .size(48.dp)
+                            .clip(CircleShape)
+                            .background(if (inputText.isNotBlank()) Accent else Color(0xFFCCCCCC))
+                            .clickable(enabled = inputText.isNotBlank()) {
+                                onSendMessage(inputText)
+                                inputText = ""
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("➤", color = if (inputText.isNotBlank()) Color.White else Color.Gray, fontSize = 20.sp)
+                    }
                 }
             }
         }
