@@ -539,7 +539,7 @@ private fun TopHeaderCricket(
         verticalAlignment = Alignment.Top,
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        // ЛЕВАЯ ЧАСТЬ (Чат или Заголовок)
+        // ЛЕВАЯ ЧАСТЬ
         if (isOnlineGame) {
             Box(modifier = Modifier.weight(1f).height(85.dp)) {
                 if (!isChatExpanded) {
@@ -555,7 +555,6 @@ private fun TopHeaderCricket(
                 }
             }
         } else {
-            // Если не онлайн, показываем красивый заголовок
             Column(
                 modifier = Modifier.weight(1f).padding(top = 8.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
@@ -580,61 +579,26 @@ private fun TopHeaderCricket(
         // ПРАВАЯ ЧАСТЬ (Кнопка назад, СЕТ/ЛЕГ)
         Column(horizontalAlignment = Alignment.End) {
             
-            // Если онлайн и чат свернут, показываем иконку чата (если нужна). 
-            // В обычной игре иконки нет, кнопка растянута.
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                // Короткая кнопка Назад для онлайна (как было)
-                if (isOnlineGame) {
-                    if (!isChatExpanded) {
-                        Box(
-                            modifier = Modifier.size(32.dp).clip(CircleShape).background(TileBgDark).clickable { onToggleChat() },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text("💬", fontSize = 16.sp)
-                            if (unreadCount > 0) {
-                                Box(modifier = Modifier.align(Alignment.TopEnd).size(12.dp).clip(CircleShape).background(Color.Red), contentAlignment = Alignment.Center) {
-                                    Text("$unreadCount", color = Color.White, fontSize = 8.sp, fontWeight = FontWeight.Bold)
-                                }
-                            }
-                        }
-                    }
-                    Box(
-                        modifier = Modifier.clip(RoundedCornerShape(8.dp)).background(TileBg)
-                            .clickable { onBack() }.padding(horizontal = 12.dp, vertical = 6.dp),
-                        contentAlignment = Alignment.Center
-                    ) { Text("←", color = Accent, fontSize = 20.sp, fontWeight = FontWeight.Black) }
-                } else {
-                    // Длинная кнопка Назад для обычной игры
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth(0.4f) // Растягиваем примерно на 40% ширины
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(TileBg)
-                            .clickable { onBack() }
-                            .padding(vertical = 8.dp),
-                        contentAlignment = Alignment.Center
-                    ) { Text("НАЗАД", color = Accent, fontSize = 16.sp, fontWeight = FontWeight.Bold) }
-                }
-            }
+            // Длинная кнопка Назад
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth(0.4f) // Растягиваем
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(TileBg)
+                    .clickable { onBack() }
+                    .padding(vertical = 8.dp),
+                contentAlignment = Alignment.Center
+            ) { Text("НАЗАД", color = Accent, fontSize = 16.sp, fontWeight = FontWeight.Bold) }
 
             Spacer(Modifier.height(4.dp))
 
             // Параметры игры (СЕТ / ЛЕГ)
-            if (!isOnlineGame) {
-                // Для обычной игры растягиваем по ширине кнопки
-                Row(
-                    modifier = Modifier.fillMaxWidth(0.4f).padding(horizontal = 8.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text("СЕТ: ${game.setsPerMatch}", color = Color(0xFFCCDDEE), fontSize = 12.sp)
-                    Text("ЛЕГ: ${game.legsPerSet}", color = Color(0xFFCCDDEE), fontSize = 12.sp)
-                }
-            } else {
-                // Для онлайна оставляем как было (справа)
-                Column(horizontalAlignment = Alignment.End) {
-                    Text("СЕТ: ${game.setsPerMatch}", color = Color(0xFFCCDDEE), fontSize = 11.sp)
-                    Text("ЛЕГ: ${game.legsPerSet}", color = Color(0xFFCCDDEE), fontSize = 11.sp)
-                }
+            Row(
+                modifier = Modifier.fillMaxWidth(0.4f).padding(horizontal = 8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text("СЕТ: ${game.setsPerMatch}", color = Color(0xFFCCDDEE), fontSize = 12.sp)
+                Text("ЛЕГ: ${game.legsPerSet}", color = Color(0xFFCCDDEE), fontSize = 12.sp)
             }
         }
     }
