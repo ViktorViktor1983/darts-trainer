@@ -768,9 +768,38 @@ private fun TeamSectorCell(
     mirror: Boolean, modifier: Modifier
 ) {
     val rawHits = game.playersOfTeam(team).sumOf { it.hits[sector] ?: 0 }
-    val displayHits = rawHits.coerceAtMost(3)
     val myScore = teamScore(game, team, sector)
     val canThrow = isActive && !game.isFinished && game.currentTurnDarts < 3
+    
+    val teamAClosed = CricketLogic.isClosedByTeam(game, 0, sector)
+    val teamBClosed = CricketLogic.isClosedByTeam(game, 1, sector)
+    val isDead = teamAClosed && teamBClosed
+
+    // Логика отображения
+    val color = when {
+        isDead -> Color(0xFF000000) // Черный, если сектор мертв
+        rawHits >= 3 && myScore > 0 -> Color(0xFF9C27B0) // Фиолетовый, если набираем очки
+        rawHits >= 3 -> Color(0xFFE53935) // Красный, если закрыт
+        rawHits == 2 -> Color(0xFFFFC107) // Желтый
+        rawHits == 1 -> Color(0xFF4CAF50) // Зеленый
+        else -> TileBgDark // Серый
+    }
+
+    val label = when {
+        isDead -> rawHits.toString() // Если мертв, показываем реальное количество
+        rawHits >= 3 && myScore > 0 -> rawHits.toString() // Показываем реальное количество
+        rawHits >= 3 -> "3"
+        rawHits == 2 -> "2"
+        rawHits == 1 -> "1"
+        else -> "S"
+    }
+
+    val labelColor = when {
+        isDead -> Color.White
+        rawHits == 0 -> Color(0xFF78909C)
+        rawHits >= 3 -> Color.White
+        else -> Color(0xFF121212)
+    }
 
     Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically) {
         if (!mirror) {
@@ -780,11 +809,11 @@ private fun TeamSectorCell(
             }
             ThrowCircleButton("D", canThrow) { onThrow(ThrowResult.DOUBLE) }
             Spacer(Modifier.weight(1f))
-            HitsSquare(displayHits, myScore > 0, canThrow) { onThrow(ThrowResult.SINGLE) }
+            HitsSquare(label, color, labelColor, canThrow) { onThrow(ThrowResult.SINGLE) }
             Spacer(Modifier.weight(2f))
         } else {
             Spacer(Modifier.weight(2f))
-            HitsSquare(displayHits, myScore > 0, canThrow) { onThrow(ThrowResult.SINGLE) }
+            HitsSquare(label, color, labelColor, canThrow) { onThrow(ThrowResult.SINGLE) }
             Spacer(Modifier.weight(1f))
             ThrowCircleButton("D", canThrow) { onThrow(ThrowResult.DOUBLE) }
             if (sector.hasTriple) {
@@ -806,29 +835,10 @@ private fun ThrowCircleButton(label: String, enabled: Boolean, onClick: () -> Un
 }
 
 @Composable
-private fun HitsSquare(hits: Int, hasScore: Boolean, enabled: Boolean, onClick: () -> Unit) {
-    val color = when {
-        hits >= 3 && hasScore -> Color(0xFF9C27B0)
-        hits >= 3 -> Color(0xFFE53935)
-        hits == 2 -> Color(0xFFFFC107)
-        hits == 1 -> Color(0xFF4CAF50)
-        else -> TileBgDark
-    }
-    val label = when {
-        hits >= 3 && hasScore -> "3+"
-        hits >= 3 -> "3"
-        hits == 2 -> "2"
-        hits == 1 -> "1"
-        else -> "S"
-    }
-    val labelColor = when {
-        hits == 0 -> Color(0xFF78909C)
-        hits >= 3 -> Color.White
-        else -> Color(0xFF121212)
-    }
-    Box(modifier = Modifier.size(42.dp).clip(RoundedCornerShape(8.dp)).background(color)
+private fun HitsSquare(label: String, backgroundColor: Color, textColor: Color, enabled: Boolean, onClick: () -> Unit) {
+    Box(modifier = Modifier.size(42.dp).clip(RoundedCornerShape(8.dp)).background(backgroundColor)
         .clickable(enabled = enabled) { onClick() }, contentAlignment = Alignment.Center) {
-        Text(label, color = labelColor, fontSize = if (hits == 0) 18.sp else 16.sp, fontWeight = FontWeight.Bold)
+        Text(label, color = textColor, fontSize = 16.sp, fontWeight = FontWeight.Bold)
     }
 }
 
