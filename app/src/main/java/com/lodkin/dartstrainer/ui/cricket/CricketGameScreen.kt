@@ -766,36 +766,50 @@ private fun TeamSectorCell(
     isActive: Boolean, onThrow: (ThrowResult) -> Unit,
     mirror: Boolean, modifier: Modifier
 ) {
-    val hits = game.playersOfTeam(team).sumOf { it.hits[sector] ?: 0 }
+    // Берем попадания из базы игры
+    val hitsInDb = game.playersOfTeam(team).sumOf { it.hits[sector] ?: 0 }
     val canThrow = isActive && !game.isFinished && game.currentTurnDarts < 3
     
     val teamAClosed = CricketLogic.isClosedByTeam(game, 0, sector)
     val teamBClosed = CricketLogic.isClosedByTeam(game, 1, sector)
     val isDead = teamAClosed && teamBClosed
 
+    // Считаем реальное количество меток (с учетом очков) для отображения
+    val realMarks = if (isDead) {
+        hitsInDb // Если мертв, показываем сколько было
+    } else if (hitsInDb >= 3) {
+        // Если 3 и больше, показываем 3 + набитые очки / цену сектора
+        val sectorValue = if (sector == CricketSector.BULL) 25 else sector.number
+        val score = game.playersOfTeam(team).sumOf { it.scores[sector] ?: 0 }
+        val extraMarks = if (sectorValue > 0) (score / sectorValue) else 0
+        3 + extraMarks
+    } else {
+        hitsInDb
+    }
+
     // Логика отображения
     val color = when {
         isDead -> Color(0xFF000000)
-        hits > 3 -> Color(0xFF9C27B0)
-        hits == 3 -> Color(0xFFE53935)
-        hits == 2 -> Color(0xFFFFC107)
-        hits == 1 -> Color(0xFF4CAF50)
+        realMarks > 3 -> Color(0xFF9C27B0)
+        realMarks == 3 -> Color(0xFFE53935)
+        realMarks == 2 -> Color(0xFFFFC107)
+        realMarks == 1 -> Color(0xFF4CAF50)
         else -> TileBgDark
     }
 
     val label = when {
-        isDead -> hits.toString()
-        hits > 3 -> hits.toString()
-        hits == 3 -> "3"
-        hits == 2 -> "2"
-        hits == 1 -> "1"
+        isDead -> hitsInDb.toString() // Если мертв, показываем только физические попадания
+        realMarks > 3 -> realMarks.toString() // Показываем реальное количество меток
+        realMarks == 3 -> "3"
+        realMarks == 2 -> "2"
+        realMarks == 1 -> "1"
         else -> "S"
     }
 
     val labelColor = when {
         isDead -> Color.White
-        hits == 0 -> Color(0xFF78909C)
-        hits >= 3 -> Color.White
+        realMarks == 0 -> Color(0xFF78909C)
+        realMarks >= 3 -> Color.White
         else -> Color(0xFF121212)
     }
 
