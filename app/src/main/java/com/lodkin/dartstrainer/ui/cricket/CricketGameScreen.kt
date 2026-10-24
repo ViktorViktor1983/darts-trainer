@@ -796,7 +796,6 @@ private fun TeamSectorCell(
     }
 
     val label = when {
-        // Если мертв, показываем реальное количество набитых меток (даже если это 9)
         isDead -> realMarks.toString()
         realMarks > 3 -> realMarks.toString()
         realMarks == 3 -> "3"
