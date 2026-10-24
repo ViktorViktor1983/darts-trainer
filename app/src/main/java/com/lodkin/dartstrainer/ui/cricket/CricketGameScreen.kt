@@ -774,14 +774,12 @@ private fun TeamSectorCell(
     val teamBClosed = CricketLogic.isClosedByTeam(game, 1, sector)
     val isDead = teamAClosed && teamBClosed
 
-    // Считаем реальное количество меток (с учетом очков) для отображения
-    val realMarks = if (isDead) {
-        hitsInDb // Если мертв, показываем сколько было
-    } else if (hitsInDb >= 3) {
-        // Если 3 и больше, показываем 3 + набитые очки / цену сектора
-        val sectorValue = if (sector == CricketSector.BULL) 25 else sector.number
-        val score = game.playersOfTeam(team).sumOf { it.scores[sector] ?: 0 }
-        val extraMarks = if (sectorValue > 0) (score / sectorValue) else 0
+    // Считаем реальное количество меток (с учетом очков)
+    val sectorValue = if (sector == CricketSector.BULL) 25 else sector.number
+    val score = game.playersOfTeam(team).sumOf { it.scores[sector] ?: 0 }
+    val extraMarks = if (sectorValue > 0) (score / sectorValue) else 0
+    
+    val realMarks = if (hitsInDb >= 3) {
         3 + extraMarks
     } else {
         hitsInDb
@@ -798,8 +796,9 @@ private fun TeamSectorCell(
     }
 
     val label = when {
-        isDead -> hitsInDb.toString() // Если мертв, показываем только физические попадания
-        realMarks > 3 -> realMarks.toString() // Показываем реальное количество меток
+        // Если мертв, показываем реальное количество набитых меток (даже если это 9)
+        isDead -> realMarks.toString()
+        realMarks > 3 -> realMarks.toString()
         realMarks == 3 -> "3"
         realMarks == 2 -> "2"
         realMarks == 1 -> "1"
