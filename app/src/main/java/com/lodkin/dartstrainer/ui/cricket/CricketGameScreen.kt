@@ -577,28 +577,27 @@ private fun TopHeaderCricket(
         }
 
         // ПРАВАЯ ЧАСТЬ (Кнопка назад, СЕТ/ЛЕГ)
+        // Уменьшаем ширину с 0.4f до 0.25f (примерно на 40%)
         Column(horizontalAlignment = Alignment.End) {
             
-            // Длинная кнопка Назад
             Box(
                 modifier = Modifier
-                    .fillMaxWidth(0.4f) // Растягиваем
+                    .fillMaxWidth(0.25f) 
                     .clip(RoundedCornerShape(8.dp))
                     .background(TileBg)
                     .clickable { onBack() }
                     .padding(vertical = 8.dp),
                 contentAlignment = Alignment.Center
-            ) { Text("НАЗАД", color = Accent, fontSize = 16.sp, fontWeight = FontWeight.Bold) }
+            ) { Text("НАЗАД", color = Accent, fontSize = 14.sp, fontWeight = FontWeight.Bold) }
 
             Spacer(Modifier.height(4.dp))
 
-            // Параметры игры (СЕТ / ЛЕГ)
             Row(
-                modifier = Modifier.fillMaxWidth(0.4f).padding(horizontal = 8.dp),
+                modifier = Modifier.fillMaxWidth(0.25f).padding(horizontal = 4.dp),
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Text("СЕТ: ${game.setsPerMatch}", color = Color(0xFFCCDDEE), fontSize = 12.sp)
-                Text("ЛЕГ: ${game.legsPerSet}", color = Color(0xFFCCDDEE), fontSize = 12.sp)
+                Text("СЕТ: ${game.setsPerMatch}", color = Color(0xFFCCDDEE), fontSize = 11.sp)
+                Text("ЛЕГ: ${game.legsPerSet}", color = Color(0xFFCCDDEE), fontSize = 11.sp)
             }
         }
     }
