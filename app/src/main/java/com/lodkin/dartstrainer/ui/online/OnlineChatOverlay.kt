@@ -21,7 +21,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.lodkin.dartstrainer.theme.Accent
 import com.lodkin.dartstrainer.theme.GoldAccent
-import com.lodkin.dartstrainer.theme.TileBg
 import com.lodkin.dartstrainer.theme.TileBgDark
 
 data class ChatMessage(
@@ -49,7 +48,7 @@ fun OnlineChatOverlay(
                 .clip(RoundedCornerShape(12.dp))
                 .background(TileBgDark)
                 .clickable { onExpand() }
-                .padding(10.dp),
+                .padding(horizontal = 12.dp, vertical = 8.dp), // Уменьшили отступы
             contentAlignment = Alignment.CenterStart
         ) {
             val lastMsg = messages.lastOrNull()
@@ -62,13 +61,14 @@ fun OnlineChatOverlay(
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold
                         )
-                        Spacer(Modifier.height(2.dp))
+                        // Убрали Spacer(Modifier.height(2.dp)) - теперь текст прилипает к имени
                     }
                     Text(
                         lastMsg.text,
                         color = Color.White.copy(alpha = 0.85f),
                         fontSize = 13.sp,
-                        maxLines = 2 // Ограничиваем двумя строками, чтобы не ломать высоту
+                        maxLines = 3, // Теперь влезает 3 строки
+                        lineHeight = 16.sp // Чуть плотнее межстрочный интервал
                     )
                 }
             } else {
@@ -99,11 +99,11 @@ fun OnlineChatOverlay(
             }
         }
 
-        // Поднимаем чат выше, чтобы поле ввода не наезжало на системные кнопки
+        // Оставляем отступ снизу, чтобы поле ввода не наезжало на системные кнопки
         Box(
             modifier = modifier
                 .fillMaxSize()
-                .padding(bottom = 48.dp) // Отступ снизу
+                .padding(bottom = 48.dp)
                 .clip(RoundedCornerShape(16.dp))
                 .background(Color(0xFFF5F5F5))
         ) {
@@ -113,7 +113,7 @@ fun OnlineChatOverlay(
                     modifier = Modifier
                         .fillMaxWidth()
                         .background(Color(0xFFE0E0E0))
-                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                        .padding(horizontal = 16.dp, vertical = 8.dp), // Сделали шапку чуть тоньше
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -136,8 +136,8 @@ fun OnlineChatOverlay(
                 LazyColumn(
                     modifier = Modifier.weight(1f).fillMaxWidth(),
                     state = listState,
-                    contentPadding = PaddingValues(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                    contentPadding = PaddingValues(4.dp), // Убрали огромные отступы по 16dp
+                    verticalArrangement = Arrangement.spacedBy(4.dp) // Уменьшили расстояние между пузырьками
                 ) {
                     items(messages) { msg ->
                         if (msg.isSystem) {
@@ -145,7 +145,7 @@ fun OnlineChatOverlay(
                                 msg.text,
                                 color = Color.Gray,
                                 fontSize = 12.sp,
-                                modifier = Modifier.fillMaxWidth(),
+                                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
                                 textAlign = androidx.compose.ui.text.style.TextAlign.Center
                             )
                         } else {
@@ -158,21 +158,22 @@ fun OnlineChatOverlay(
                                         .widthIn(max = 280.dp)
                                         .clip(RoundedCornerShape(12.dp))
                                         .background(if (msg.isMyMessage) Accent else Color.White)
-                                        .padding(12.dp)
+                                        .padding(horizontal = 10.dp, vertical = 6.dp) // Сделали пузырьки компактнее
                                 ) {
                                     if (!msg.isMyMessage) {
                                         Text(
                                             msg.senderName,
                                             color = Color(0xFFE65100),
-                                            fontSize = 12.sp,
+                                            fontSize = 11.sp,
                                             fontWeight = FontWeight.Bold
                                         )
-                                        Spacer(Modifier.height(4.dp))
+                                        // Убрали Spacer(Modifier.height(4.dp))
                                     }
                                     Text(
                                         msg.text,
                                         color = if (msg.isMyMessage) Color.White else Color.Black,
-                                        fontSize = 15.sp
+                                        fontSize = 14.sp,
+                                        lineHeight = 18.sp
                                     )
                                 }
                             }
@@ -195,7 +196,7 @@ fun OnlineChatOverlay(
                             .weight(1f)
                             .clip(RoundedCornerShape(24.dp))
                             .background(Color(0xFFF0F0F0))
-                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                            .padding(horizontal = 16.dp, vertical = 8.dp), // Уменьшили высоту поля ввода
                         textStyle = TextStyle(color = Color.Black, fontSize = 15.sp),
                         decorationBox = { innerTextField ->
                             if (inputText.isEmpty()) {
