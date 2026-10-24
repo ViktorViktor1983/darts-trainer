@@ -766,8 +766,7 @@ private fun TeamSectorCell(
     isActive: Boolean, onThrow: (ThrowResult) -> Unit,
     mirror: Boolean, modifier: Modifier
 ) {
-    val rawHits = game.playersOfTeam(team).sumOf { it.hits[sector] ?: 0 }
-    val myScore = teamScore(game, team, sector)
+    val hits = game.playersOfTeam(team).sumOf { it.hits[sector] ?: 0 }
     val canThrow = isActive && !game.isFinished && game.currentTurnDarts < 3
     
     val teamAClosed = CricketLogic.isClosedByTeam(game, 0, sector)
@@ -776,27 +775,27 @@ private fun TeamSectorCell(
 
     // Логика отображения
     val color = when {
-        isDead -> Color(0xFF000000) // Черный, если сектор мертв
-        rawHits > 3 -> Color(0xFF9C27B0) // Фиолетовый, если набираем очки (больше 3)
-        rawHits == 3 -> Color(0xFFE53935) // Красный, если ровно 3 (закрыт)
-        rawHits == 2 -> Color(0xFFFFC107) // Желтый
-        rawHits == 1 -> Color(0xFF4CAF50) // Зеленый
-        else -> TileBgDark // Серый
+        isDead -> Color(0xFF000000)
+        hits > 3 -> Color(0xFF9C27B0)
+        hits == 3 -> Color(0xFFE53935)
+        hits == 2 -> Color(0xFFFFC107)
+        hits == 1 -> Color(0xFF4CAF50)
+        else -> TileBgDark
     }
 
     val label = when {
-        isDead -> rawHits.toString() // Если мертв, показываем реальное количество
-        rawHits > 3 -> rawHits.toString() // Показываем реальное количество, если больше 3
-        rawHits == 3 -> "3"
-        rawHits == 2 -> "2"
-        rawHits == 1 -> "1"
+        isDead -> hits.toString()
+        hits > 3 -> hits.toString()
+        hits == 3 -> "3"
+        hits == 2 -> "2"
+        hits == 1 -> "1"
         else -> "S"
     }
 
     val labelColor = when {
         isDead -> Color.White
-        rawHits == 0 -> Color(0xFF78909C)
-        rawHits >= 3 -> Color.White
+        hits == 0 -> Color(0xFF78909C)
+        hits >= 3 -> Color.White
         else -> Color(0xFF121212)
     }
 
