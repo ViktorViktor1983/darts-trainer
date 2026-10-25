@@ -360,9 +360,10 @@ fun CricketGameScreen(
 
         // Развернутый чат на весь экран поверх всего
         if (isOnlineGame && isChatExpanded) {
-            Box(modifier = Modifier.fillMaxSize()) { // Убрали imePadding
+            // Убрали fillMaxSize и добавили imePadding(), чтобы чат не уезжал под клавиатуру
+            Box(modifier = Modifier.fillMaxSize().imePadding()) {
                 OnlineChatOverlay(
-                    modifier = Modifier.fillMaxSize().padding(8.dp),
+                    modifier = Modifier.fillMaxWidth().padding(8.dp), // Заменили fillMaxSize на fillMaxWidth
                     isExpanded = isChatExpanded,
                     messages = chatMessages,
                     unreadCount = unreadChatCount,
