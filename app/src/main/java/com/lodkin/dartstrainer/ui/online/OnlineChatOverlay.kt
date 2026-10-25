@@ -52,24 +52,25 @@ fun OnlineChatOverlay(
                 .clip(RoundedCornerShape(12.dp))
                 .background(TileBgDark)
                 .clickable { onExpand() }
-                .padding(horizontal = 10.dp, vertical = 6.dp)
-                .heightIn(max = 68.dp), // Жестко ограничиваем высоту (примерно 3-4 строки)
+                .padding(horizontal = 10.dp, vertical = 6.dp),
             contentAlignment = Alignment.TopStart
         ) {
-            // Берем последние 4 сообщения (вдруг они короткие и влезут все)
-            val recentMessages = messages.takeLast(4)
+            // Берем последние 3 сообщения (для истории)
+            val recentMessages = messages.takeLast(3)
             
             if (recentMessages.isNotEmpty()) {
                 Column(
                     verticalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
-                    recentMessages.forEach { msg ->
+                    recentMessages.forEachIndexed { index, msg ->
+                        val isLast = index == recentMessages.lastIndex // Проверяем, последнее ли это сообщение
+
                         if (msg.isSystem) {
                             Text(
                                 msg.text,
                                 color = Color.Gray,
                                 fontSize = 11.sp,
-                                maxLines = 2,
+                                maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
                                 lineHeight = 14.sp
                             )
@@ -86,7 +87,9 @@ fun OnlineChatOverlay(
                                 },
                                 color = Color.White.copy(alpha = 0.85f),
                                 fontSize = 11.sp,
-                                maxLines = 3, 
+                                // Если это последнее сообщение — даем ему сколько угодно строк.
+                                // Если это старые сообщения — обрезаем до 1 строки.
+                                maxLines = if (isLast) Int.MAX_VALUE else 1, 
                                 overflow = TextOverflow.Ellipsis,
                                 lineHeight = 14.sp
                             )
