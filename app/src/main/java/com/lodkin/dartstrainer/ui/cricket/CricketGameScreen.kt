@@ -360,7 +360,7 @@ fun CricketGameScreen(
 
         // Развернутый чат на весь экран поверх всего
         if (isOnlineGame && isChatExpanded) {
-            Box(modifier = Modifier.fillMaxSize().padding(top = 60.dp)) {
+            Box(modifier = Modifier.fillMaxSize()) { // Убрали imePadding
                 OnlineChatOverlay(
                     modifier = Modifier.fillMaxSize().padding(8.dp),
                     isExpanded = isChatExpanded,
@@ -368,6 +368,8 @@ fun CricketGameScreen(
                     unreadCount = unreadChatCount,
                     onSendMessage = { text ->
                         chatMessages.add(ChatMessage(System.currentTimeMillis().toString(), "Вы", text, isMyMessage = true))
+                        // Автоматически сворачиваем чат после отправки
+                        isChatExpanded = false
                     },
                     onClose = { isChatExpanded = false },
                     onExpand = { isChatExpanded = true; unreadChatCount = 0 }
@@ -542,11 +544,10 @@ private fun TopHeaderCricket(
     ) {
         // ЛЕВАЯ ЧАСТЬ
         if (isOnlineGame) {
-            // Убрали жесткую высоту height(85.dp), чтобы чат мог тянуться
             Box(modifier = Modifier.weight(1f)) {
                 if (!isChatExpanded) {
                     OnlineChatOverlay(
-                        modifier = Modifier.fillMaxWidth(), // Растягиваем по ширине
+                        modifier = Modifier.fillMaxWidth(),
                         isExpanded = false,
                         messages = chatMessages,
                         unreadCount = unreadCount,
