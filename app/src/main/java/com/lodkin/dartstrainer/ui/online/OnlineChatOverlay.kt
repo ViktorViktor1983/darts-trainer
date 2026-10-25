@@ -15,9 +15,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.lodkin.dartstrainer.theme.Accent
@@ -66,16 +69,14 @@ fun OnlineChatOverlay(
                                 msg.text,
                                 color = Color.Gray,
                                 fontSize = 11.sp,
-                                // Системное сообщение тоже может занимать несколько строк
                                 maxLines = 2,
                                 overflow = TextOverflow.Ellipsis,
                                 lineHeight = 14.sp
                             )
                         } else {
-                            // Используем обычный Text с переносом строк, без maxLines = 1
                             Text(
                                 buildAnnotatedString {
-                                    withStyle(style = androidx.compose.ui.text.SpanStyle(
+                                    withStyle(style = SpanStyle(
                                         color = if (msg.isMyMessage) Accent else GoldAccent,
                                         fontWeight = FontWeight.Bold
                                     )) {
@@ -85,7 +86,6 @@ fun OnlineChatOverlay(
                                 },
                                 color = Color.White.copy(alpha = 0.85f),
                                 fontSize = 11.sp,
-                                // Ограничиваем максимум 3 строками для одного сообщения
                                 maxLines = 3, 
                                 overflow = TextOverflow.Ellipsis,
                                 lineHeight = 14.sp
@@ -212,7 +212,7 @@ fun OnlineChatOverlay(
                 ) {
                     BasicTextField(
                         value = inputText,
-                        onValueChange = { inputText = it }, // Убрали ограничение по символам
+                        onValueChange = { inputText = it },
                         modifier = Modifier
                             .weight(1f)
                             .clip(RoundedCornerShape(24.dp))
