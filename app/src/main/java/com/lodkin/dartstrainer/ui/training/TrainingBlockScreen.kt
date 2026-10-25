@@ -1,5 +1,8 @@
 package com.lodkin.dartstrainer.ui.training
 
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -7,11 +10,14 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -20,6 +26,7 @@ import com.lodkin.dartstrainer.theme.DarkBg
 import com.lodkin.dartstrainer.theme.GoldAccent
 import com.lodkin.dartstrainer.theme.TileBg
 import com.lodkin.dartstrainer.theme.TileBgDark
+import kotlinx.coroutines.delay
 
 @Composable
 fun TrainingBlockScreen(
@@ -140,6 +147,14 @@ fun TrainingBlockScreen(
                         )
                         Spacer(Modifier.height(16.dp))
                         
+                        // Круговой таймер
+                        TrainingTimer(
+                            totalMinutes = exercise.minutes,
+                            onFinish = onSkipCurrent
+                        )
+
+                        Spacer(Modifier.height(16.dp))
+                        
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -189,5 +204,101 @@ fun TrainingBlockScreen(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun TrainingTimer(
+    totalMinutes: Int,
+    onFinish: () -> Unit
+) {
+    var timeLeft by remember { mutableStateOf(totalMinutes * 60) }
+    var isRunning by remember { mutableStateOf(false) }
+    val totalSeconds = totalMinutes * 60
+
+    // Эффект для отсчета времени
+    LaunchedEffect(isRunning) {
+        if (isRunning) {
+            while (timeLeft > 0) {
+                delay(1000L)
+                timeLeft--
+            }
+            onFinish()
+        }
+    }
+
+    // Сброс таймера при смене упражнения
+    LaunchedEffect(totalMinutes) {
+        timeLeft = totalMinutes * 60
+        isRunning = false
+    }
+
+    val progress = if (totalSeconds > 0) timeLeft.toFloat() / totalSeconds else 0f
+    val animatedProgress by animateFloatAsState(
+        targetValue = progress,
+        animationSpec = tween(durationMillis = 300)
+    )
+
+    val minutes = timeLeft / 60
+    val seconds = timeLeft % 60
+    val timeString = String.format("%02d:%02d", minutes, seconds)
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(120.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Canvas(modifier = Modifier.size(120.dp)) {
+            val strokeWidth = 8.dp.toPx()
+            val diameter = size.minDimension - strokeWidth
+            
+            // Фон (темный круг)
+            drawArc(
+                color = Color.White.copy(alpha = 0.1f),
+                startAngle = -90f,
+                sweepAngle = 360f,
+                useCenter = false,
+                topLeft = androidx.compose.ui.geometry.Offset(strokeWidth / 2, strokeWidth / 2),
+                size = Size(diameter, diameter),
+                style = Stroke(width = strokeWidth, cap = StrokeCap.Round)
+            )
+            
+            // Прогресс (голубая дуга)
+            drawArc(
+                color = Accent,
+                startAngle = -90f,
+                sweepAngle = 360f * animatedProgress,
+                useCenter = false,
+                topLeft = androidx.compose.ui.geometry.Offset(strokeWidth / 2, strokeWidth / 2),
+                size = Size(diameter, diameter),
+                style = Stroke(width = strokeWidth, cap = StrokeCap.Round)
+            )
+        }
+        
+        Text(
+            text = timeString,
+            color = Color.White,
+            fontSize = 28.sp,
+            fontWeight = FontWeight.Bold
+        )
+    }
+    
+    // Кнопка старт/пауза
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(48.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(if (isRunning) TileBgDark else Accent)
+            .clickable { isRunning = !isRunning },
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = if (isRunning) "ПАУЗА" else "ЗАПУСТИТЬ ТАЙМЕР",
+            color = if (isRunning) Color.White else Color(0xFF121212),
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Bold
+        )
     }
 }
