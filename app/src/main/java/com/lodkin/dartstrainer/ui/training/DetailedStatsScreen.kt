@@ -213,11 +213,19 @@ fun DetailedStatsScreen(
             )
 
             disciplines.forEach { (id, title) ->
-                // Получаем краткую сводку для карточки (опционально)
+                // Получаем краткую сводку для карточки
                 val summary = when (id) {
                     "game501" -> a.avg501Ppr?.let { "Ср. PPR: ${String.format(Locale.US, "%.1f", it)} · ${a.count501Matches} партий" }
                     "cricket" -> a.avgCricketMpr?.let { "Ср. MPR: ${String.format(Locale.US, "%.1f", it)} · ${a.countCricketMatches} партий" }
                     else -> "Нажми для подробностей"
+                }
+
+                // Считаем количество проблем для Кругосветок
+                val problemsCount = when (id) {
+                    "aroundclock_sectors" -> if (a.sectorsDataAvailable) a.worstSectors.size else 0
+                    "aroundclock_doubles" -> if (a.doublesDataAvailable) a.worstDoubles.size else 0
+                    "aroundclock_trebles" -> if (a.treblesDataAvailable) a.worstTrebles.size else 0
+                    else -> 0
                 }
 
                 Row(
@@ -231,7 +239,25 @@ fun DetailedStatsScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
-                        Text(title, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(title, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                            
+                            // Красный счетчик проблем
+                            if (problemsCount > 0) {
+                                Spacer(Modifier.width(8.dp))
+                                val word = when (problemsCount) {
+                                    1 -> "проблема"
+                                    2, 3, 4 -> "проблемы"
+                                    else -> "проблем"
+                                }
+                                Text(
+                                    text = "$problemsCount $word",
+                                    color = Color(0xFFE57373), // Мягкий красный
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
                         if (summary != null) {
                             Spacer(Modifier.height(4.dp))
                             Text(summary, color = Color.White.copy(alpha = 0.5f), fontSize = 12.sp)
