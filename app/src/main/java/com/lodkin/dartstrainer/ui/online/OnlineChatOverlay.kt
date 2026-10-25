@@ -111,7 +111,7 @@ fun OnlineChatOverlay(
             }
         }
     } else {
-        // Развернутый вид (на весь экран)
+        // Развернутый вид
         val listState = rememberLazyListState()
         var inputText by remember { mutableStateOf("") }
 
@@ -121,12 +121,11 @@ fun OnlineChatOverlay(
             }
         }
 
-        // Уменьшили высоту с 560.dp до 340.dp, чтобы при появлении клавиатуры
-        // крестик оставался на виду.
+        // Увеличили высоту до 480.dp, чтобы уменьшить черное поле
         Box(
             modifier = modifier
                 .fillMaxWidth()
-                .height(340.dp) 
+                .height(480.dp) 
                 .clip(RoundedCornerShape(16.dp))
                 .background(Color(0xFFF5F5F5))
         ) {
