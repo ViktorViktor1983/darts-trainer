@@ -42,34 +42,47 @@ fun OnlineChatOverlay(
     onExpand: () -> Unit
 ) {
     if (!isExpanded) {
-        // Компактный вид (когда чат свернут)
+        // Компактный вид (когда чат свернут) - показываем историю
         Box(
             modifier = modifier
                 .clip(RoundedCornerShape(12.dp))
                 .background(TileBgDark)
                 .clickable { onExpand() }
-                .padding(horizontal = 12.dp, vertical = 8.dp), // Уменьшили отступы
-            contentAlignment = Alignment.CenterStart
+                .padding(horizontal = 10.dp, vertical = 6.dp),
+            contentAlignment = Alignment.TopStart
         ) {
-            val lastMsg = messages.lastOrNull()
-            if (lastMsg != null) {
-                Column {
-                    if (!lastMsg.isSystem) {
-                        Text(
-                            lastMsg.senderName,
-                            color = GoldAccent,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                        // Убрали Spacer(Modifier.height(2.dp)) - теперь текст прилипает к имени
+            // Берем последние 3-4 сообщения для отображения
+            val recentMessages = messages.takeLast(4)
+            
+            if (recentMessages.isNotEmpty()) {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
+                    recentMessages.forEach { msg ->
+                        if (msg.isSystem) {
+                            Text(
+                                msg.text,
+                                color = Color.Gray,
+                                fontSize = 11.sp,
+                                maxLines = 1
+                            )
+                        } else {
+                            Row {
+                                Text(
+                                    "${msg.senderName}: ",
+                                    color = if (msg.isMyMessage) Accent else GoldAccent,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    msg.text,
+                                    color = Color.White.copy(alpha = 0.85f),
+                                    fontSize = 11.sp,
+                                    maxLines = 2
+                                )
+                            }
+                        }
                     }
-                    Text(
-                        lastMsg.text,
-                        color = Color.White.copy(alpha = 0.85f),
-                        fontSize = 13.sp,
-                        maxLines = 3, // Теперь влезает 3 строки
-                        lineHeight = 16.sp // Чуть плотнее межстрочный интервал
-                    )
                 }
             } else {
                 Text("Нет сообщений", color = Color.White.copy(alpha = 0.5f), fontSize = 13.sp)
@@ -113,7 +126,7 @@ fun OnlineChatOverlay(
                     modifier = Modifier
                         .fillMaxWidth()
                         .background(Color(0xFFE0E0E0))
-                        .padding(horizontal = 16.dp, vertical = 8.dp), // Сделали шапку чуть тоньше
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -136,8 +149,8 @@ fun OnlineChatOverlay(
                 LazyColumn(
                     modifier = Modifier.weight(1f).fillMaxWidth(),
                     state = listState,
-                    contentPadding = PaddingValues(4.dp), // Убрали огромные отступы по 16dp
-                    verticalArrangement = Arrangement.spacedBy(4.dp) // Уменьшили расстояние между пузырьками
+                    contentPadding = PaddingValues(4.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     items(messages) { msg ->
                         if (msg.isSystem) {
@@ -158,7 +171,7 @@ fun OnlineChatOverlay(
                                         .widthIn(max = 280.dp)
                                         .clip(RoundedCornerShape(12.dp))
                                         .background(if (msg.isMyMessage) Accent else Color.White)
-                                        .padding(horizontal = 10.dp, vertical = 6.dp) // Сделали пузырьки компактнее
+                                        .padding(horizontal = 10.dp, vertical = 6.dp)
                                 ) {
                                     if (!msg.isMyMessage) {
                                         Text(
@@ -167,7 +180,6 @@ fun OnlineChatOverlay(
                                             fontSize = 11.sp,
                                             fontWeight = FontWeight.Bold
                                         )
-                                        // Убрали Spacer(Modifier.height(4.dp))
                                     }
                                     Text(
                                         msg.text,
@@ -196,7 +208,7 @@ fun OnlineChatOverlay(
                             .weight(1f)
                             .clip(RoundedCornerShape(24.dp))
                             .background(Color(0xFFF0F0F0))
-                            .padding(horizontal = 16.dp, vertical = 8.dp), // Уменьшили высоту поля ввода
+                            .padding(horizontal = 16.dp, vertical = 8.dp),
                         textStyle = TextStyle(color = Color.Black, fontSize = 15.sp),
                         decorationBox = { innerTextField ->
                             if (inputText.isEmpty()) {
