@@ -1,5 +1,6 @@
 package com.lodkin.dartstrainer.data.training
 
+import com.lodkin.dartstrainer.ui.training.getWarmupBlockItems
 import kotlin.math.roundToInt
 
 /**
@@ -35,29 +36,20 @@ object TrainingPlanner {
     // ─────────────────────────────────────────────
 
     enum class ExerciseKind {
-        WARMUP_MUSCLES,
-        WARMUP_TRAJECTORY,
-        WARMUP_ACCURACY,
-        WARMUP_AIM,
-
+        WARMUP,
         DOUBLES_ROUNDS,
         DOUBLES_TARGETED,
         DOUBLES_POSTPONED,
-
         SECTOR_20,
         SECTOR_19,
         SCORE_SET,
-
         AROUND_CLOCK_SECTORS,
         AROUND_CLOCK_DOUBLES,
         AROUND_CLOCK_TREBLES,
-
         TARGETED_PRACTICE,
-
         GAME_501,
         GAME_CRICKET,
         GAME_ANY,
-
         STRENGTH
     }
 
@@ -138,9 +130,19 @@ object TrainingPlanner {
         val blocks = mutableListOf<TrainingBlock>()
         var remaining = minutes
 
-        val warmup = buildWarmup(minutes)
-        blocks.addAll(warmup)
-        remaining -= warmup.sumOf { it.minutes }
+        // ── РАЗМИНКА (НОВАЯ ЛОГИКА) ──
+        val warmupExercises = getWarmupBlockItems()
+        warmupExercises.forEach { ex ->
+            blocks.add(
+                TrainingBlock(
+                    kind = ExerciseKind.WARMUP,
+                    title = ex.title,
+                    description = ex.whyImportant,
+                    minutes = ex.minutes
+                )
+            )
+            remaining -= ex.minutes
+        }
 
         if (postponedDoubles.isNotEmpty() && remaining > 0) {
             val minPostponed = minOf(remaining, postponedDoubles.size * 5)
@@ -373,43 +375,6 @@ object TrainingPlanner {
     }
 
     // ─────────────────────────────────────────────
-    // РАЗМИНКА
-    // ─────────────────────────────────────────────
-
-    private fun buildWarmup(totalMinutes: Int): List<TrainingBlock> {
-        val long = totalMinutes >= 100
-        val traj = if (long) 2 else 1
-        val acc = if (long) 2 else 1
-
-        return listOf(
-            TrainingBlock(
-                ExerciseKind.WARMUP_MUSCLES,
-                "Разминка: мышцы",
-                "Вращения плечами, локтями, кистями. Растяжка.",
-                3
-            ),
-            TrainingBlock(
-                ExerciseKind.WARMUP_TRAJECTORY,
-                "Разминка: траектория",
-                "Бросай без цели, следи только за движением руки.",
-                traj
-            ),
-            TrainingBlock(
-                ExerciseKind.WARMUP_ACCURACY,
-                "Разминка: кучность",
-                "Второй и третий — тем же движением. Следи за одинаковостью.",
-                acc
-            ),
-            TrainingBlock(
-                ExerciseKind.WARMUP_AIM,
-                "Прицеливание",
-                "Теперь целься в конкретный сектор.",
-                1
-            )
-        )
-    }
-
-    // ─────────────────────────────────────────────
     // БЛОКИ
     // ─────────────────────────────────────────────
 
@@ -497,14 +462,19 @@ object TrainingPlanner {
     private fun buildControlPlan(minutes: Int): TrainingPlan {
         val blocks = mutableListOf<TrainingBlock>()
 
-        blocks.add(
-            TrainingBlock(
-                ExerciseKind.WARMUP_MUSCLES,
-                "Разминка: мышцы",
-                "Лёгкая разминка перед экзаменом.",
-                3
+        // Разминка (используем новую логику)
+        val warmupExercises = getWarmupBlockItems()
+        warmupExercises.forEach { ex ->
+            blocks.add(
+                TrainingBlock(
+                    kind = ExerciseKind.WARMUP,
+                    title = ex.title,
+                    description = ex.whyImportant,
+                    minutes = ex.minutes
+                )
             )
-        )
+        }
+
         blocks.add(
             TrainingBlock(
                 ExerciseKind.SCORE_SET,
