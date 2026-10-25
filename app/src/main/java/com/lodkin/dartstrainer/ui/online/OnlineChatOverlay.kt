@@ -49,11 +49,12 @@ fun OnlineChatOverlay(
                 .clip(RoundedCornerShape(12.dp))
                 .background(TileBgDark)
                 .clickable { onExpand() }
-                .padding(horizontal = 10.dp, vertical = 6.dp),
+                .padding(horizontal = 10.dp, vertical = 6.dp)
+                .heightIn(max = 68.dp), // Жестко ограничиваем высоту (примерно 3-4 строки)
             contentAlignment = Alignment.TopStart
         ) {
-            // Берем РОВНО 3 последних сообщения
-            val recentMessages = messages.takeLast(3)
+            // Берем последние 4 сообщения (вдруг они короткие и влезут все)
+            val recentMessages = messages.takeLast(4)
             
             if (recentMessages.isNotEmpty()) {
                 Column(
@@ -65,25 +66,30 @@ fun OnlineChatOverlay(
                                 msg.text,
                                 color = Color.Gray,
                                 fontSize = 11.sp,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
+                                // Системное сообщение тоже может занимать несколько строк
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                                lineHeight = 14.sp
                             )
                         } else {
-                            Row {
-                                Text(
-                                    "${msg.senderName}: ",
-                                    color = if (msg.isMyMessage) Accent else GoldAccent,
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
-                                Text(
-                                    msg.text,
-                                    color = Color.White.copy(alpha = 0.85f),
-                                    fontSize = 11.sp,
-                                    maxLines = 1, // Каждое сообщение строго в одну строку
-                                    overflow = TextOverflow.Ellipsis // Если длинное — троеточие
-                                )
-                            }
+                            // Используем обычный Text с переносом строк, без maxLines = 1
+                            Text(
+                                buildAnnotatedString {
+                                    withStyle(style = androidx.compose.ui.text.SpanStyle(
+                                        color = if (msg.isMyMessage) Accent else GoldAccent,
+                                        fontWeight = FontWeight.Bold
+                                    )) {
+                                        append("${msg.senderName}: ")
+                                    }
+                                    append(msg.text)
+                                },
+                                color = Color.White.copy(alpha = 0.85f),
+                                fontSize = 11.sp,
+                                // Ограничиваем максимум 3 строками для одного сообщения
+                                maxLines = 3, 
+                                overflow = TextOverflow.Ellipsis,
+                                lineHeight = 14.sp
+                            )
                         }
                     }
                 }
@@ -206,7 +212,7 @@ fun OnlineChatOverlay(
                 ) {
                     BasicTextField(
                         value = inputText,
-                        onValueChange = { inputText = it },
+                        onValueChange = { inputText = it }, // Убрали ограничение по символам
                         modifier = Modifier
                             .weight(1f)
                             .clip(RoundedCornerShape(24.dp))
