@@ -121,11 +121,12 @@ fun OnlineChatOverlay(
             }
         }
 
-        // Убрали fillMaxSize, даем чату фиксированную высоту, чтобы он не уезжал под клавиатуру.
+        // Уменьшили высоту с 560.dp до 340.dp, чтобы при появлении клавиатуры
+        // крестик оставался на виду.
         Box(
             modifier = modifier
                 .fillMaxWidth()
-                .height(560.dp) // Ограничиваем высоту!
+                .height(340.dp) 
                 .clip(RoundedCornerShape(16.dp))
                 .background(Color(0xFFF5F5F5))
         ) {
