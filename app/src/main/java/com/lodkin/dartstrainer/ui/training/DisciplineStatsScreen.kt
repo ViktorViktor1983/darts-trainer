@@ -24,6 +24,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.lodkin.dartstrainer.data.training.DartsNorms
 import com.lodkin.dartstrainer.data.training.TrainingRepository
+import com.lodkin.dartstrainer.data.training.TrainingStatsAnalyzer
 import com.lodkin.dartstrainer.theme.Accent
 import com.lodkin.dartstrainer.theme.GoldAccent
 import com.lodkin.dartstrainer.theme.TileBg
@@ -87,18 +88,32 @@ fun DisciplineStatsScreen(
     var otherAccuracyData by remember { mutableStateOf<List<Double>>(emptyList()) }
     var otherChartTitle by remember { mutableStateOf("") }
 
+    // ── Стейты для дополнительного блока (проблемные сектора) ──
+    var problemWeaknesses by remember { mutableStateOf<List<TrainingStatsAnalyzer.SectorWeakness>>(emptyList()) }
+    var isCircularDiscipline by remember { mutableStateOf(false) }
+    var periodGamesCount by remember { mutableStateOf(0) }
+
     LaunchedEffect(disciplineId, period) {
         loading = true
         val cutoff = period.daysBack?.let {
             System.currentTimeMillis() - it * 24L * 60L * 60L * 1000L
         }
 
-        val allResults = withContext(Dispatchers.IO) {
+        // 1. Загружаем ВСЕ результаты за текущий период (для блока ДОПОЛНИТЕЛЬНЫЕ)
+        val allPeriodResults = withContext(Dispatchers.IO) {
             repository.getAllExerciseResultsByExerciseId(disciplineId)
         }
-        
-        val filtered = if (cutoff == null) allResults else allResults.filter { it.timestamp >= cutoff }
+
+        // 2. Фильтруем по выбранному времени (для ОСНОВНЫХ показателей и графиков)
+        val filtered = if (cutoff == null) allPeriodResults else allPeriodResults.filter { it.timestamp >= cutoff }
         totalAttempts = filtered.size
+
+        // 3. Считаем проблемы (только для кругосветок, только по всем данным за период)
+        isCircularDiscipline = disciplineId.startsWith("aroundclock_")
+        if (isCircularDiscipline) {
+            periodGamesCount = allPeriodResults.size
+            problemWeaknesses = computeWeaknesses(allPeriodResults)
+        }
 
         if (filtered.isNotEmpty()) {
             when (disciplineId) {
@@ -382,6 +397,84 @@ fun DisciplineStatsScreen(
                     
                     Spacer(Modifier.height(6.dp))
                     StatRowCard("Всего попыток", "$totalAttempts")
+
+                    // ── ДОПОЛНИТЕЛЬНЫЕ (Проблемные сектора) ──
+                    if (isCircularDiscipline) {
+                        Spacer(Modifier.height(20.dp))
+                        Text("ДОПОЛНИТЕЛЬНЫЕ", color = Accent, fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
+                        Spacer(Modifier.height(8.dp))
+
+                        val prefix = when (disciplineId) {
+                            "aroundclock_doubles" -> "D"
+                            "aroundclock_trebles" -> "T"
+                            else -> ""
+                        }
+                        val exerciseName = when (disciplineId) {
+                            "aroundclock_doubles" -> "Кругосветку: Удвоения"
+                            "aroundclock_trebles" -> "Кругосветку: Утроения"
+                            else -> "Кругосветку: Сектора"
+                        }
+
+                        when {
+                            periodGamesCount < 5 -> {
+                                val need = 5 - periodGamesCount
+                                val word = when (need) {
+                                    1 -> "раз"
+                                    2, 3, 4 -> "раза"
+                                    else -> "раз"
+                                }
+                                Box(
+                                    modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(TileBg).padding(16.dp)
+                                ) {
+                                    Text(
+                                        "Мало данных. Сыграйте «$exerciseName» ещё $need $word, чтобы выявить проблемные сектора.",
+                                        color = Color.White.copy(alpha = 0.8f), fontSize = 13.sp
+                                    )
+                                }
+                            }
+                            problemWeaknesses.isEmpty() -> {
+                                Box(
+                                    modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(TileBg).padding(16.dp)
+                                ) {
+                                    Text(
+                                        "Проблемные сектора не обнаружены. Точность соответствует вашему уровню. 👍",
+                                        color = Color.White.copy(alpha = 0.8f), fontSize = 13.sp
+                                    )
+                                }
+                            }
+                            else -> {
+                                Column(
+                                    modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(TileBg).padding(16.dp)
+                                ) {
+                                    Text(
+                                        "Проблемные сектора, которые тянут статистику вниз:",
+                                        color = Color.White.copy(alpha = 0.9f), fontSize = 13.sp
+                                    )
+                                    Spacer(Modifier.height(10.dp))
+                                    problemWeaknesses.forEach { w ->
+                                        val name = if (w.sector == 25) "Bull" else "$prefix${w.sector}"
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text(
+                                                "• $name",
+                                                color = GoldAccent,
+                                                fontSize = 14.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                modifier = Modifier.width(60.dp)
+                                            )
+                                            Text(
+                                                "точность ${String.format(Locale.US, "%.0f", w.percent)}% (на ${String.format(Locale.US, "%.0f", w.deviation)}% ниже среднего)",
+                                                color = Color.White.copy(alpha = 0.8f),
+                                                fontSize = 13.sp
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
                 
                 Spacer(Modifier.height(24.dp))
@@ -404,6 +497,72 @@ fun DisciplineStatsScreen(
             )
         }
     }
+}
+
+/**
+ * Локальная функция для расчета проблемных секторов (дублирует логику анализатора,
+ * но работает с переданным списком результатов).
+ */
+private fun computeWeaknesses(results: List<com.lodkin.dartstrainer.data.training.ExerciseResult>): List<TrainingStatsAnalyzer.SectorWeakness> {
+    if (results.isEmpty()) return emptyList()
+
+    val sumDarts = mutableMapOf<Int, Int>()
+    val countSector = mutableMapOf<Int, Int>()
+
+    results.forEach { r ->
+        val parsed = parseSectorDetails(r.detailsJson)
+        if (parsed.isNotEmpty()) {
+            parsed.forEach { (sector, darts) ->
+                if (darts > 0) {
+                    sumDarts[sector] = (sumDarts[sector] ?: 0) + darts
+                    countSector[sector] = (countSector[sector] ?: 0) + 1
+                }
+            }
+        }
+    }
+
+    val filtered = sumDarts.keys.filter { (countSector[it] ?: 0) >= 5 }
+    if (filtered.isEmpty()) return emptyList()
+
+    val totalCount = filtered.sumOf { countSector[it] ?: 0 }
+    val totalDarts = filtered.sumOf { sumDarts[it] ?: 0 }
+    if (totalDarts <= 0 || totalCount <= 0) return emptyList()
+    val generalPercent = totalCount.toDouble() / totalDarts.toDouble() * 100.0
+
+    return filtered
+        .map { sector ->
+            val c = countSector[sector] ?: 0
+            val d = sumDarts[sector] ?: 0
+            val sectorPercent = if (d > 0) c.toDouble() / d.toDouble() * 100.0 else 0.0
+            val deviation = if (generalPercent > 0.0) {
+                (generalPercent - sectorPercent) / generalPercent * 100.0
+            } else 0.0
+            TrainingStatsAnalyzer.SectorWeakness(
+                sector = sector,
+                percent = sectorPercent.toFloat(),
+                deviation = deviation.toFloat(),
+                count = c
+            )
+        }
+        .filter { it.deviation > 25.0 }
+        .sortedByDescending { it.deviation }
+        .take(3)
+}
+
+private fun parseSectorDetails(s: String): Map<Int, Int> {
+    if (s.isBlank()) return emptyMap()
+    val result = mutableMapOf<Int, Int>()
+    s.split(",").forEach { entry ->
+        val parts = entry.trim().split(":", limit = 2)
+        if (parts.size == 2) {
+            val sector = parts[0].trim().toIntOrNull()
+            val darts = parts[1].trim().toIntOrNull()
+            if (sector != null && darts != null) {
+                result[sector] = (result[sector] ?: 0) + darts
+            }
+        }
+    }
+    return result
 }
 
 // ─────────────────────────────────────────────
