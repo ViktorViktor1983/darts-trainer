@@ -17,6 +17,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.lodkin.dartstrainer.theme.Accent
@@ -42,7 +43,7 @@ fun OnlineChatOverlay(
     onExpand: () -> Unit
 ) {
     if (!isExpanded) {
-        // Компактный вид (когда чат свернут) - показываем историю
+        // Компактный вид (когда чат свернут)
         Box(
             modifier = modifier
                 .clip(RoundedCornerShape(12.dp))
@@ -51,8 +52,8 @@ fun OnlineChatOverlay(
                 .padding(horizontal = 10.dp, vertical = 6.dp),
             contentAlignment = Alignment.TopStart
         ) {
-            // Берем последние 3-4 сообщения для отображения
-            val recentMessages = messages.takeLast(4)
+            // Берем РОВНО 3 последних сообщения
+            val recentMessages = messages.takeLast(3)
             
             if (recentMessages.isNotEmpty()) {
                 Column(
@@ -64,7 +65,8 @@ fun OnlineChatOverlay(
                                 msg.text,
                                 color = Color.Gray,
                                 fontSize = 11.sp,
-                                maxLines = 1
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
                         } else {
                             Row {
@@ -78,7 +80,8 @@ fun OnlineChatOverlay(
                                     msg.text,
                                     color = Color.White.copy(alpha = 0.85f),
                                     fontSize = 11.sp,
-                                    maxLines = 2
+                                    maxLines = 1, // Каждое сообщение строго в одну строку
+                                    overflow = TextOverflow.Ellipsis // Если длинное — троеточие
                                 )
                             }
                         }
