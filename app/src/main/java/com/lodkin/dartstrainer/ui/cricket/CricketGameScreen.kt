@@ -542,10 +542,11 @@ private fun TopHeaderCricket(
     ) {
         // ЛЕВАЯ ЧАСТЬ
         if (isOnlineGame) {
-            Box(modifier = Modifier.weight(1f).height(85.dp)) {
+            // Убрали жесткую высоту height(85.dp), чтобы чат мог тянуться
+            Box(modifier = Modifier.weight(1f)) {
                 if (!isChatExpanded) {
                     OnlineChatOverlay(
-                        modifier = Modifier.fillMaxSize(),
+                        modifier = Modifier.fillMaxWidth(), // Растягиваем по ширине
                         isExpanded = false,
                         messages = chatMessages,
                         unreadCount = unreadCount,
