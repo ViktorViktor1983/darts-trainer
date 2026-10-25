@@ -302,15 +302,56 @@ internal fun getNextStrengthExercises(context: Context): List<PlannedExercise> {
 }
 
 // ─────────────────────────────────────────────
-// РАЗМИНКА И ОСНОВНАЯ ЧАСТЬ (блоки)
+// РАЗМИНКА (НОВАЯ ЛОГИКА)
 // ─────────────────────────────────────────────
 
-internal fun getWarmupBlockItems(): List<BlockExerciseItem> = listOf(
-    BlockExerciseItem("warm_muscles", "Разминка: мышцы"),
-    BlockExerciseItem("warm_trajectory", "Разминка: траектория"),
-    BlockExerciseItem("warm_accuracy", "Разминка: кучность"),
-    BlockExerciseItem("warm_aim", "Прицеливание")
+// Группа 1: Шея
+private val WARMUP_NECK = listOf(
+    PlannedExercise("warm_neck_rot", "Вращения шеей", 1, "Медленные наклоны головы вперед-назад и влево-вправо. Снимает напряжение и улучшает прицеливание."),
+    PlannedExercise("warm_neck_tilt", "Наклоны головы к плечам", 1, "Плавные наклоны к левому и правому плечу. По 10 секунд на каждую сторону."),
+    PlannedExercise("warm_neck_turn", "Повороты головы", 1, "Медленно повернуть голову влево, задержаться, затем вправо. По 5 раз в каждую сторону.")
 )
+
+// Группа 2: Плечевой пояс
+private val WARMUP_SHOULDERS = listOf(
+    PlannedExercise("warm_shoulder_rot", "Вращения плечами", 1, "Руки свободно опущены. Круговые движения плечами вперед и назад. По 10 раз."),
+    PlannedExercise("warm_mill", "Мельница", 1, "Вращения прямыми руками вперед и назад. По 10 раз."),
+    PlannedExercise("warm_chest_stretch", "Растяжка грудных мышц", 1, "Руки в замок за спиной, отводим назад и раскрываем грудь. 20 секунд.")
+)
+
+// Группа 3: Кисти и предплечья
+private val WARMUP_WRISTS = listOf(
+    PlannedExercise("warm_wrist_rot", "Вращения кистями", 1, "Руки в стороны, вращаем кулаками в запястьях. По 10 раз в каждую сторону."),
+    PlannedExercise("warm_grip", "Сжимание эспандера (или кулака)", 1, "Максимально сжать и разжать. 15 раз."),
+    PlannedExercise("warm_triceps_stretch", "Растяжка трицепса", 1, "Рука за головой, другая давит на локоть. По 20 секунд на каждую руку.")
+)
+
+// Группа 4: Тазобедренный пояс и ноги
+private val WARMUP_LEGS = listOf(
+    PlannedExercise("warm_hips", "Вращения тазом", 1, "Руки на поясе, круговые движения бедрами. По 10 раз в каждую сторону."),
+    PlannedExercise("warm_body_bends", "Наклоны корпуса", 1, "Вперед (к полу) и в стороны. По 10 раз."),
+    PlannedExercise("warm_knees", "Вращения в коленях и голеностопе", 1, "Ноги на ширине плеч, вращаем коленями, затем по очереди стопами. По 10 раз.")
+)
+
+// Группа 5: С дротиками
+private val WARMUP_DARTS = listOf(
+    PlannedExercise("warm_darts_free", "Бросание без цели", 2, "10 подходов по 3 дротика. Просто в мишень, следя за свободой движения."),
+    PlannedExercise("warm_darts_imitation", "Имитация броска", 2, "30 раз. Полноценное движение рукой без дротика, представляя его."),
+    PlannedExercise("warm_darts_bull", "Бросок в Bull", 2, "10 подходов по 3 дротика. 30 дротиков в центр.")
+)
+
+internal fun getWarmupBlockItems(): List<PlannedExercise> {
+    val result = mutableListOf<PlannedExercise>()
+    
+    // Берем случайное по одному из каждой группы
+    result.add(WARMUP_NECK.random())
+    result.add(WARMUP_SHOULDERS.random())
+    result.add(WARMUP_WRISTS.random())
+    result.add(WARMUP_LEGS.random())
+    result.add(WARMUP_DARTS.random())
+    
+    return result
+}
 
 internal fun getDefaultMainBlockItems(recommendedIds: Set<String>): List<BlockExerciseItem> {
     return getDefaultMainExercises().map { BlockExerciseItem(it.id, it.title) }
