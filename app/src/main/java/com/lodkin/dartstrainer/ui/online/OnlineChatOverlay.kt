@@ -55,7 +55,6 @@ fun OnlineChatOverlay(
                 .padding(horizontal = 10.dp, vertical = 6.dp),
             contentAlignment = Alignment.TopStart
         ) {
-            // Берем последние 3 сообщения (для истории)
             val recentMessages = messages.takeLast(3)
             
             if (recentMessages.isNotEmpty()) {
@@ -63,7 +62,7 @@ fun OnlineChatOverlay(
                     verticalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
                     recentMessages.forEachIndexed { index, msg ->
-                        val isLast = index == recentMessages.lastIndex // Проверяем, последнее ли это сообщение
+                        val isLast = index == recentMessages.lastIndex
 
                         if (msg.isSystem) {
                             Text(
@@ -87,9 +86,7 @@ fun OnlineChatOverlay(
                                 },
                                 color = Color.White.copy(alpha = 0.85f),
                                 fontSize = 11.sp,
-                                // Если это последнее сообщение — даем ему сколько угодно строк.
-                                // Если это старые сообщения — обрезаем до 1 строки.
-                                maxLines = if (isLast) Int.MAX_VALUE else 1, 
+                                maxLines = if (isLast) Int.MAX_VALUE else 1,
                                 overflow = TextOverflow.Ellipsis,
                                 lineHeight = 14.sp
                             )
@@ -124,11 +121,13 @@ fun OnlineChatOverlay(
             }
         }
 
-        // Оставляем отступ снизу, чтобы поле ввода не наезжало на системные кнопки
+        // Убрали fillMaxSize и padding(bottom). 
+        // Вместо этого даем чату фиксированную высоту, чтобы он не уезжал под клавиатуру.
+        // 560.dp — это примерная высота, которая оставит место сверху для крестика.
         Box(
             modifier = modifier
-                .fillMaxSize()
-                .padding(bottom = 48.dp)
+                .fillMaxWidth()
+                .height(560.dp) // Ограничиваем высоту!
                 .clip(RoundedCornerShape(16.dp))
                 .background(Color(0xFFF5F5F5))
         ) {
