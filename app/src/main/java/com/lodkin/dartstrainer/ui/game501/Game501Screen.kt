@@ -467,6 +467,7 @@ fun Game501Screen(
                             unreadCount = unreadChatCount,
                             onSendMessage = { text ->
                                 chatMessages.add(ChatMessage(System.currentTimeMillis().toString(), "Вы", text, isMyMessage = true))
+                                isChatExpanded = false // Автосворачивание
                             },
                             onClose = { isChatExpanded = false },
                             onExpand = { isChatExpanded = true; unreadChatCount = 0 }
