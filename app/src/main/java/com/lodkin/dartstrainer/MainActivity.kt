@@ -68,6 +68,7 @@ import com.lodkin.dartstrainer.data.training.TrainingRepository
 import com.lodkin.dartstrainer.data.training.TrainingSession
 import com.lodkin.dartstrainer.data.training.TrainingStateStorage
 import com.lodkin.dartstrainer.data.training.TrainingStatsAnalyzer
+import com.lodkin.dartstrainer.data.training.TrainingUnfinishedStorage
 import com.lodkin.dartstrainer.data.training.WeaknessType
 import com.lodkin.dartstrainer.theme.Accent
 import com.lodkin.dartstrainer.theme.DarkBg
@@ -609,7 +610,29 @@ fun DartsTrainerApp() {
                     )
                 }
 
-                "detailed_stats" -> DetailedStatsScreen(repository = trainingRepository, onBack = { screen = "main" }, onOpenDiscipline = { selectedDiscipline = it; screen = "discipline_stats" })
+                "detailed_stats" -> DetailedStatsScreen(
+                    repository = trainingRepository,
+                    game501Repository = game501Repository,
+                    cricketRepository = cricketRepository,
+                    onBack = { screen = "main" },
+                    onOpenDiscipline = { selectedDiscipline = it; screen = "discipline_stats" },
+                    onResumeGame501 = { entity -> 
+                        Game501Serializer.fromJson(entity.stateBlob)?.let { 
+                            game501 = it
+                            game501ExistingId = entity.id
+                            isTraining501 = true 
+                            screen = "game501_game" 
+                        } 
+                    },
+                    onResumeCricket = { entity -> 
+                        CricketSerializer.fromJson(entity.stateBlob)?.let { 
+                            cricketGame = it
+                            cricketExistingId = entity.id
+                            isTrainingCricket = true
+                            screen = "cricket_game" 
+                        } 
+                    }
+                )
                 
                 "discipline_stats" -> DisciplineStatsScreen(repository = trainingRepository, disciplineId = selectedDiscipline ?: "game501", onBack = { screen = "detailed_stats" })
 
@@ -669,7 +692,7 @@ fun DartsTrainerApp() {
                         onFreePlayAction = { launchExercise(it ?: "") }, onFreePlayDirect = { id, isFriend ->
                             if (isFriend && (id == "game501" || id == "cricket")) {
                                 isSetupForTraining = true; 
-                                if (id == "game501") isTraining501 = true else isTrainingCricket = true // <--- ДОБАВЛЕНО
+                                if (id == "game501") isTraining501 = true else isTrainingCricket = true
                                 scope.launch { screen = if (id == "game501") "game501_setup" else "cricket_setup" }
                             } else { freeCurrentId = id; launchExercise(id) }
                         }, onFreeSkip = { id -> if (id != null) freeSkippedIds = freeSkippedIds + id; freeCurrentId = null }, onFreeFinish = { screen = "training_free_summary" },
