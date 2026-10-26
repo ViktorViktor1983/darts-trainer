@@ -197,13 +197,12 @@ fun DartsTrainerApp() {
     var isTraining501 by remember { mutableStateOf(false) }
     var isTrainingCricket by remember { mutableStateOf(false) }
     var isOnlineGame by remember { mutableStateOf(false) }
-    var isResumingFromStats by remember { mutableStateOf(false) } // Флаг для возврата в статистику
+    var isResumingFromStats by remember { mutableStateOf(false) } 
 
     // ── СТЕЙТЫ ОНЛАЙНА ──
     var pendingOnlineGameParams by remember { mutableStateOf<OnlineGameParams?>(null) }
 
     // ── СТЕЙТЫ СВОБОДНОЙ ТРЕНИРОВКИ ──
-    // Читаем сохраненные настройки из памяти
     val prefs = context.getSharedPreferences("free_training_prefs", Context.MODE_PRIVATE)
     var isFreeTraining by remember { mutableStateOf(false) }
     var isSingleExercisePlay by remember { mutableStateOf(false) }
@@ -219,16 +218,8 @@ fun DartsTrainerApp() {
     var freeExercisesCompleted by remember { mutableStateOf(0) }
     var showFreeNewRoundDialog by remember { mutableStateOf(false) }
 
-    // Функции для сохранения настроек
-    fun saveFreeNoRepeat(value: Boolean) {
-        prefs.edit().putBoolean("free_no_repeat", value).apply()
-        freeNoRepeat = value
-    }
-
-    fun saveFreeChooseMyself(value: Boolean) {
-        prefs.edit().putBoolean("free_choose_myself", value).apply()
-        freeChooseMyself = value
-    }
+    fun saveFreeNoRepeat(value: Boolean) { prefs.edit().putBoolean("free_no_repeat", value).apply(); freeNoRepeat = value }
+    fun saveFreeChooseMyself(value: Boolean) { prefs.edit().putBoolean("free_choose_myself", value).apply(); freeChooseMyself = value }
 
     // ── СТЕЙТЫ ОТДЫХА ──
     var showRestTimer by remember { mutableStateOf(false) }
@@ -261,13 +252,25 @@ fun DartsTrainerApp() {
     var pendingNormativesResume by remember { mutableStateOf<NormativesStateStorage.Snapshot?>(null) }
     var isNormativesExercise by remember { mutableStateOf(false) }
 
-    // Сброс флагов онлайна при возврате в лобби
+    // Сброс флагов при смене режима
     LaunchedEffect(screen) {
         if (screen == "online_lobby") {
             isOnlineGame = false
             isTraining501 = false
             isTrainingCricket = false
             isResumingFromStats = false
+        }
+        if (screen == "main" || screen == "game_select") {
+            isTraining501 = false
+            isTrainingCricket = false
+            isResumingFromStats = false
+            isOnlineGame = false
+        }
+        if (screen == "training") {
+            isTraining501 = false
+            isTrainingCricket = false
+            isResumingFromStats = false
+            isOnlineGame = false
         }
     }
 
@@ -574,13 +577,16 @@ fun DartsTrainerApp() {
 
     LaunchedEffect(isTrainingActive, screen) {
         if (!isTrainingActive || screen !in TRAINING_SCREENS) return@LaunchedEffect
-        while (true) { delay(30_000L); if (!isFreeTraining && !normativesActive) saveCurrentTrainingState() }
+        while (true) {
+            delay(30_000L)
+            if (!isFreeTraining && !normativesActive) saveCurrentTrainingState()
+        }
     }
 
     if (stage == "loading") LaunchedEffect(Unit) { delay(3000); stage = "main" }
 
     // ────────────────────────────────────────────────────────
-    // UI И НАВИГАЦИЯ
+    // UI И НАВИГ
     // ────────────────────────────────────────────────────────
     Box(modifier = Modifier.fillMaxSize()) {
         when (stage) {
@@ -609,7 +615,15 @@ fun DartsTrainerApp() {
                         scope.launch { normativesAvailable = TrainingStatsAnalyzer.analyze(trainingRepository).isReadyForNormatives }
                         screen = "training"
                     },
-                    onFreePlay = { screen = "game_select" }, onStatsClick = { statsMenuKey++; screen = "stats_menu" },
+                    onFreePlay = { 
+                        // СБРОС ФЛАГОВ ТРЕНИРОВКИ ПРИ ВХОДЕ В СВОБОДНУЮ ИГРУ
+                        isTraining501 = false
+                        isTrainingCricket = false
+                        isResumingFromStats = false
+                        isOnlineGame = false
+                        screen = "game_select" 
+                    }, 
+                    onStatsClick = { statsMenuKey++; screen = "stats_menu" },
                     onSettingsClick = { screen = "settings" }, onOpenDetailedStats = { screen = "detailed_stats" },
                     onOnlineClick = { screen = "online_lobby" }
                 )
@@ -714,6 +728,7 @@ fun DartsTrainerApp() {
                         isOnlineGame = isOnlineGame, isResumingFromStats = isResumingFromStats, 
                         trainingSessionId = trainingSessionId, exerciseStartMillis = exerciseStartMillis, isNormativesExercise = isNormativesExercise,
                         onTrainingGameFinished = { playerWon, isGame501 ->
+                            // Очищаем ID из хранилища, если игра завершена
                             if (isGame501) {
                                 TrainingUnfinishedStorage.removeUnfinished501(context, game501ExistingId)
                             } else {
