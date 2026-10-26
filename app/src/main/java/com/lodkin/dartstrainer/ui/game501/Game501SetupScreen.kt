@@ -66,6 +66,7 @@ private fun OutMode.displayName(): String = when (this) {
 @Composable
 fun Game501SetupScreen(
     playerName: String,
+    isTrainingMode: Boolean = false, // НОВЫЙ ПАРАМЕТР
     onStartGame: (GameType, OutMode, List<Player501>, Int, Int, Boolean, Int, Int) -> Unit,
     onBack: () -> Unit
 ) {
@@ -100,6 +101,7 @@ fun Game501SetupScreen(
     var myAvgPpr by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(playerName) {
+        if (isTrainingMode) return@LaunchedEffect // Не загружаем статистику в тренировке
         val games = game501Repo.getAllGames()
         var sum = 0.0
         var count = 0
@@ -120,6 +122,7 @@ fun Game501SetupScreen(
     }
 
     fun plateFor(slot: Slot501): String? {
+        if (isTrainingMode) return null // В тренировке не показываем плашку
         return when {
             slot.isBot -> {
                 val range = slot.bot.pprLabel.substringBefore("·").trim()
