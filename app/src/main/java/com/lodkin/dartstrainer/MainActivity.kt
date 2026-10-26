@@ -621,7 +621,7 @@ fun DartsTrainerApp() {
                             game501 = it
                             game501ExistingId = entity.id
                             isTraining501 = true 
-                            // Создаем новую сессию для продолжения
+                            isFreeTraining = true // ВАЖНО: Запускаем в режиме свободной тренировки
                             scope.launch {
                                 val session = TrainingSession(
                                     dateMillis = System.currentTimeMillis(),
@@ -644,7 +644,7 @@ fun DartsTrainerApp() {
                             cricketGame = it
                             cricketExistingId = entity.id
                             isTrainingCricket = true
-                            // Создаем новую сессию для продолжения
+                            isFreeTraining = true // ВАЖНО: Запускаем в режиме свободной тренировки
                             scope.launch {
                                 val session = TrainingSession(
                                     dateMillis = System.currentTimeMillis(),
