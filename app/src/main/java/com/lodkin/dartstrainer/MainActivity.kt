@@ -665,6 +665,13 @@ fun DartsTrainerApp() {
                         isOnlineGame = isOnlineGame,
                         trainingSessionId = trainingSessionId, exerciseStartMillis = exerciseStartMillis, isNormativesExercise = isNormativesExercise,
                         onTrainingGameFinished = { playerWon, isGame501 ->
+                            // Очищаем ID из хранилища, если игра завершена
+                            if (isGame501) {
+                                TrainingUnfinishedStorage.removeUnfinished501(context, game501ExistingId)
+                            } else {
+                                TrainingUnfinishedStorage.removeUnfinishedCricket(context, cricketExistingId)
+                            }
+                            
                             isTraining501 = false; isTrainingCricket = false; game501 = null; game501ExistingId = 0L; cricketGame = null; cricketExistingId = 0L
                             if (isNormativesExercise) afterNormativesLeg(playerWon, isGame501) else finishCurrentMainExercise()
                         }
