@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
@@ -14,6 +15,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -55,7 +57,7 @@ fun DetailedStatsScreen(
     onResumeCricket: (CricketGameEntity) -> Unit = {}
 ) {
     val scope = rememberCoroutineScope()
-    val context = androidx.compose.ui.platform.LocalContext.current
+    val context = LocalContext.current
     
     var analysis by remember { mutableStateOf<TrainingStatsAnalyzer.TrainingAnalysis?>(null) }
     var loading by remember { mutableStateOf(true) }
@@ -149,36 +151,6 @@ fun DetailedStatsScreen(
                 .weight(1f)
                 .verticalScroll(rememberScrollState())
         ) {
-            // ── БЛОК НЕЗАВЕРШЁННЫХ ПАРТИЙ ──
-            if (unfinished501.isNotEmpty() || unfinishedCricket.isNotEmpty()) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(Color(0xFF3A1A1A))
-                        .clickable {
-                            if (unfinished501.isNotEmpty()) showUnfinishedDialog501 = true
-                            else showUnfinishedDialogCricket = true
-                        }
-                        .padding(14.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            "⏸ Незавершённые партии (${unfinished501.size + unfinishedCricket.size})",
-                            color = ErrorColor,
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Text("▶", color = ErrorColor, fontSize = 14.sp)
-                    }
-                }
-                Spacer(Modifier.height(12.dp))
-            }
-
             // ── БЛОК ЭКЗАМЕНА ──
             Box(
                 modifier = Modifier
@@ -291,42 +263,74 @@ fun DetailedStatsScreen(
                     else -> 0
                 }
 
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 4.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(TileBgDark)
-                        .clickable { onOpenDiscipline(id) }
-                        .padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(title, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
-                            
-                            // Красный счетчик проблем
-                            if (problemsCount > 0) {
-                                Spacer(Modifier.width(8.dp))
-                                val word = when (problemsCount) {
-                                    1 -> "проблема"
-                                    2, 3, 4 -> "проблемы"
-                                    else -> "проблем"
+                // Считаем количество незавершённых партий для 501 и Крикета
+                val unfinishedCount = when (id) {
+                    "game501" -> unfinished501.size
+                    "cricket" -> unfinishedCricket.size
+                    else -> 0
+                }
+
+                Box(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(TileBgDark)
+                            .clickable { onOpenDiscipline(id) }
+                            .padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(title, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                                
+                                // Красный счетчик проблем
+                                if (problemsCount > 0) {
+                                    Spacer(Modifier.width(8.dp))
+                                    val word = when (problemsCount) {
+                                        1 -> "проблема"
+                                        2, 3, 4 -> "проблемы"
+                                        else -> "проблем"
+                                    }
+                                    Text(
+                                        text = "$problemsCount $word",
+                                        color = Color(0xFFE57373),
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
                                 }
-                                Text(
-                                    text = "$problemsCount $word",
-                                    color = Color(0xFFE57373), // Мягкий красный
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
+                            }
+                            if (summary != null) {
+                                Spacer(Modifier.height(4.dp))
+                                Text(summary, color = Color.White.copy(alpha = 0.5f), fontSize = 12.sp)
                             }
                         }
-                        if (summary != null) {
-                            Spacer(Modifier.height(4.dp))
-                            Text(summary, color = Color.White.copy(alpha = 0.5f), fontSize = 12.sp)
+                        Text("▶", color = Accent, fontSize = 14.sp)
+                    }
+
+                    // Значок незавершённой партии (в правом верхнем углу плашки)
+                    if (unfinishedCount > 0) {
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.TopEnd)
+                                .padding(8.dp)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(ErrorColor)
+                                .clickable {
+                                    if (id == "game501") showUnfinishedDialog501 = true
+                                    if (id == "cricket") showUnfinishedDialogCricket = true
+                                }
+                                .padding(horizontal = 8.dp, vertical = 4.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                "⏸ $unfinishedCount",
+                                color = Color.White,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold
+                            )
                         }
                     }
-                    Text("▶", color = Accent, fontSize = 14.sp)
                 }
             }
             Spacer(Modifier.height(20.dp))
@@ -578,7 +582,7 @@ private fun formatMonth(monthStr: String): String {
 }
 
 // ─────────────────────────────────────────────
-// ДИАЛОГИ НЕЗАВЕРШЁННЫХ ПАРТИЙ (скопированы из StatsMenuScreen)
+// ДИАЛОГИ НЕЗАВЕРШЁННЫХ ПАРТИЙ
 // ─────────────────────────────────────────────
 
 @Composable
