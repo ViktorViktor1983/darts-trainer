@@ -82,6 +82,7 @@ fun GameRoutes(
     isTraining501: Boolean = false,
     isTrainingCricket: Boolean = false,
     isOnlineGame: Boolean = false,
+    isResumingFromStats: Boolean = false, // НОВЫЙ ПАРАМЕТР
     trainingSessionId: Long = 0L,
     exerciseStartMillis: Long = 0L,
     isNormativesExercise: Boolean = false,
@@ -177,6 +178,7 @@ fun GameRoutes(
                         onCricketExistingIdChange(0L)
                         onScreenChange(
                             when {
+                                isResumingFromStats -> "detailed_stats" // ВОЗВРАТ В СТАТИСТИКУ
                                 isOnlineGame -> "online_lobby"
                                 isTrainingCricket -> "training_free_next"
                                 else -> "game_select"
@@ -287,6 +289,7 @@ fun GameRoutes(
                         onGame501ExistingIdChange(0L)
                         onScreenChange(
                             when {
+                                isResumingFromStats -> "detailed_stats" // ВОЗВРАТ В СТАТИСТИКУ
                                 isOnlineGame -> "online_lobby"
                                 isTraining501 -> "training_free_next"
                                 else -> "game_select"
