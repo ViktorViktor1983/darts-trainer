@@ -668,7 +668,9 @@ fun DartsTrainerApp() {
                         onPickNextFreeExercise = { pickNextFreeExercise() },
                         onFreePlayAction = { launchExercise(it ?: "") }, onFreePlayDirect = { id, isFriend ->
                             if (isFriend && (id == "game501" || id == "cricket")) {
-                                isSetupForTraining = true; scope.launch { screen = if (id == "game501") "game501_setup" else "cricket_setup" }
+                                isSetupForTraining = true; 
+                                if (id == "game501") isTraining501 = true else isTrainingCricket = true // <--- ДОБАВЛЕНО
+                                scope.launch { screen = if (id == "game501") "game501_setup" else "cricket_setup" }
                             } else { freeCurrentId = id; launchExercise(id) }
                         }, onFreeSkip = { id -> if (id != null) freeSkippedIds = freeSkippedIds + id; freeCurrentId = null }, onFreeFinish = { screen = "training_free_summary" },
                         showRestTimer = showRestTimer, restTimerSeconds = restTimerSeconds, restNextTitle = restNextTitle,
