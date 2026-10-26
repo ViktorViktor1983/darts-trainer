@@ -86,65 +86,79 @@ internal fun FreeRouletteScreen(
 
         Spacer(Modifier.height(16.dp))
 
-        // ── Переключатели ──
+        // ── Главный переключатель (Рулетка / Выбрать самому) ──
         Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(14.dp))
+                .background(TileBg)
+                .padding(4.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            // 1. Без повторов
-            Row(
+            // Кнопка "Рулетка"
+            Box(
                 modifier = Modifier
                     .weight(1f)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(if (!chooseMyself) Accent else Color.Transparent)
+                    .clickable { onToggleChooseMyself(false) }
+                    .padding(vertical = 12.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    "РУЛЕТКА",
+                    color = if (!chooseMyself) Color(0xFF121212) else Color.White.copy(alpha = 0.6f),
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+
+            // Кнопка "Выбрать самому"
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(if (chooseMyself) GoldAccent else Color.Transparent)
+                    .clickable { onToggleChooseMyself(true) }
+                    .padding(vertical = 12.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    "ВЫБРАТЬ САМОМУ",
+                    color = if (chooseMyself) Color(0xFF121212) else Color.White.copy(alpha = 0.6f),
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        }
+
+        Spacer(Modifier.height(12.dp))
+
+        // ── Дополнительный переключатель (Без повторов) — только для рулетки ──
+        if (!chooseMyself) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
                     .clip(RoundedCornerShape(12.dp))
                     .background(TileBg)
                     .clickable { onToggleNoRepeat(!noRepeat) }
-                    .padding(horizontal = 10.dp, vertical = 10.dp),
+                    .padding(horizontal = 16.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
                     "Без повторов",
                     color = Color.White,
-                    fontSize = 13.sp,
+                    fontSize = 14.sp,
                     fontWeight = FontWeight.Medium,
                     modifier = Modifier.weight(1f)
                 )
                 Switch(
                     checked = noRepeat,
                     onCheckedChange = { onToggleNoRepeat(it) },
-                    modifier = Modifier.scale(0.7f),
+                    modifier = Modifier.scale(0.8f),
                     colors = SwitchDefaults.colors(
                         checkedThumbColor = Accent,
                         checkedTrackColor = Accent.copy(alpha = 0.5f),
-                        uncheckedThumbColor = Color.White,
-                        uncheckedTrackColor = TileBgDark
-                    )
-                )
-            }
-
-            // 2. Выбор вручную
-            Row(
-                modifier = Modifier
-                    .weight(1f)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(TileBg)
-                    .clickable { onToggleChooseMyself(!chooseMyself) }
-                    .padding(horizontal = 10.dp, vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    "Выбрать самому",
-                    color = Color.White,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Medium,
-                    modifier = Modifier.weight(1f)
-                )
-                Switch(
-                    checked = chooseMyself,
-                    onCheckedChange = { onToggleChooseMyself(it) },
-                    modifier = Modifier.scale(0.7f),
-                    colors = SwitchDefaults.colors(
-                        checkedThumbColor = GoldAccent,
-                        checkedTrackColor = GoldAccent.copy(alpha = 0.5f),
                         uncheckedThumbColor = Color.White,
                         uncheckedTrackColor = TileBgDark
                     )
