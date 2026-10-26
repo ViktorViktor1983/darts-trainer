@@ -1,5 +1,6 @@
 package com.lodkin.dartstrainer
 
+import android.content.Context
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -173,7 +174,7 @@ fun DartsTrainerApp() {
 
     // ── СТЕЙТЫ ТРЕНИРОВКИ ──
     var trainingMinutes by remember {
-        mutableStateOf(context.getSharedPreferences("training_prefs", android.content.Context.MODE_PRIVATE).getInt("session_minutes", SettingsStorage.getTrainingMinutes(context)))
+        mutableStateOf(context.getSharedPreferences("training_prefs", Context.MODE_PRIVATE).getInt("session_minutes", SettingsStorage.getTrainingMinutes(context)))
     }
     var trainingSessionId by remember { mutableStateOf(0L) }
     var isTrainingActive by remember { mutableStateOf(false) }
@@ -196,23 +197,38 @@ fun DartsTrainerApp() {
     var isTraining501 by remember { mutableStateOf(false) }
     var isTrainingCricket by remember { mutableStateOf(false) }
     var isOnlineGame by remember { mutableStateOf(false) }
-    var isResumingFromStats by remember { mutableStateOf(false) } // НОВЫЙ ФЛАГ
+    var isResumingFromStats by remember { mutableStateOf(false) } // Флаг для возврата в статистику
 
     // ── СТЕЙТЫ ОНЛАЙНА ──
     var pendingOnlineGameParams by remember { mutableStateOf<OnlineGameParams?>(null) }
 
     // ── СТЕЙТЫ СВОБОДНОЙ ТРЕНИРОВКИ ──
+    // Читаем сохраненные настройки из памяти
+    val prefs = context.getSharedPreferences("free_training_prefs", Context.MODE_PRIVATE)
     var isFreeTraining by remember { mutableStateOf(false) }
     var isSingleExercisePlay by remember { mutableStateOf(false) }
     var isSetupForTraining by remember { mutableStateOf(false) }
-    var freeNoRepeat by remember { mutableStateOf(false) }
-    var freeChooseMyself by remember { mutableStateOf(false) }
+    
+    var freeNoRepeat by remember { mutableStateOf(prefs.getBoolean("free_no_repeat", false)) }
+    var freeChooseMyself by remember { mutableStateOf(prefs.getBoolean("free_choose_myself", false)) }
+    
     var freeCompletedIds by remember { mutableStateOf<Set<String>>(emptySet()) }
     var freeSkippedIds by remember { mutableStateOf<Set<String>>(emptySet()) }
     var freeCurrentId by remember { mutableStateOf<String?>(null) }
     var freeRouletteKey by remember { mutableStateOf(0) }
     var freeExercisesCompleted by remember { mutableStateOf(0) }
     var showFreeNewRoundDialog by remember { mutableStateOf(false) }
+
+    // Функции для сохранения настроек
+    fun saveFreeNoRepeat(value: Boolean) {
+        prefs.edit().putBoolean("free_no_repeat", value).apply()
+        freeNoRepeat = value
+    }
+
+    fun saveFreeChooseMyself(value: Boolean) {
+        prefs.edit().putBoolean("free_choose_myself", value).apply()
+        freeChooseMyself = value
+    }
 
     // ── СТЕЙТЫ ОТДЫХА ──
     var showRestTimer by remember { mutableStateOf(false) }
@@ -474,7 +490,7 @@ fun DartsTrainerApp() {
         currentExerciseIndex = 0; exerciseStatuses = emptyMap(); exerciseStartMillis = 0L
         isTraining501 = false; isTrainingCricket = false; showRestTimer = false; restNextTitle = null; pendingNextStep = null
         showExitTrainingDialog = false; isFreeTraining = false; isSingleExercisePlay = false; isSetupForTraining = false
-        freeNoRepeat = false; freeChooseMyself = false; freeCompletedIds = emptySet(); freeSkippedIds = emptySet(); freeCurrentId = null
+        freeCompletedIds = emptySet(); freeSkippedIds = emptySet(); freeCurrentId = null
         freeRouletteKey = 0; freeExercisesCompleted = 0; showFreeNewRoundDialog = false; showBullDraw = false; bullDrawExerciseId = null
         normativesActive = false; normativesCompletedSteps = emptySet(); normatives501Levels = emptyList()
         normatives501PlayerWins = 0; normatives501BotWins = 0; normatives501CurrentLeg = 0; normativesCricketLevels = emptyList()
@@ -624,7 +640,7 @@ fun DartsTrainerApp() {
                             game501 = it
                             game501ExistingId = entity.id
                             isTraining501 = true 
-                            isResumingFromStats = true // ВАЖНО: Устанавливаем флаг
+                            isResumingFromStats = true 
                             scope.launch {
                                 val session = TrainingSession(
                                     dateMillis = System.currentTimeMillis(),
@@ -647,7 +663,7 @@ fun DartsTrainerApp() {
                             cricketGame = it
                             cricketExistingId = entity.id
                             isTrainingCricket = true
-                            isResumingFromStats = true // ВАЖНО: Устанавливаем флаг
+                            isResumingFromStats = true 
                             scope.launch {
                                 val session = TrainingSession(
                                     dateMillis = System.currentTimeMillis(),
@@ -695,10 +711,9 @@ fun DartsTrainerApp() {
                         aroundClockOrder = aroundClockOrder, onAroundClockOrderChange = { aroundClockOrder = it }, aroundClockHits = aroundClockHits, onAroundClockHitsChange = { aroundClockHits = it },
                         bigRoundCategory = bigRoundCategory, onBigRoundCategoryChange = { bigRoundCategory = it },
                         sessionStartTime = sessionStartTime, sessionForm = sessionForm, isTraining501 = isTraining501, isTrainingCricket = isTrainingCricket,
-                        isOnlineGame = isOnlineGame, isResumingFromStats = isResumingFromStats, // ПЕРЕДАЕМ ФЛАГ
+                        isOnlineGame = isOnlineGame, isResumingFromStats = isResumingFromStats, 
                         trainingSessionId = trainingSessionId, exerciseStartMillis = exerciseStartMillis, isNormativesExercise = isNormativesExercise,
                         onTrainingGameFinished = { playerWon, isGame501 ->
-                            // Очищаем ID из хранилища, если игра завершена
                             if (isGame501) {
                                 TrainingUnfinishedStorage.removeUnfinished501(context, game501ExistingId)
                             } else {
@@ -724,7 +739,8 @@ fun DartsTrainerApp() {
                         currentExerciseIndex = currentExerciseIndex, onCurrentExerciseIndexChange = { currentExerciseIndex = it }, exerciseStatuses = exerciseStatuses,
                         onExerciseStatusesChange = { exerciseStatuses = it }, currentWeakness = currentWeakness, currentLevel = currentLevel, currentTargetGoals = currentTargetGoals,
                         isFreeTraining = isFreeTraining, isSingleExercisePlay = isSingleExercisePlay, isSetupForTraining = isSetupForTraining, onIsSetupForTrainingChange = { isSetupForTraining = it },
-                        freeNoRepeat = freeNoRepeat, onToggleNoRepeat = { freeNoRepeat = it }, freeChooseMyself = freeChooseMyself, onToggleChooseMyself = { freeChooseMyself = it },
+                        freeNoRepeat = freeNoRepeat, onToggleNoRepeat = { saveFreeNoRepeat(it) }, 
+                        freeChooseMyself = freeChooseMyself, onToggleChooseMyself = { saveFreeChooseMyself(it) },
                         freeCompletedIds = freeCompletedIds, onFreeCompletedIdsChange = { freeCompletedIds = it }, freeSkippedIds = freeSkippedIds, onFreeSkippedIdsChange = { freeSkippedIds = it },
                         freeCurrentId = freeCurrentId, onFreeCurrentIdChange = { freeCurrentId = it }, freeRouletteKey = freeRouletteKey, freeExercisesCompleted = freeExercisesCompleted,
                         onFreeExercisesCompletedChange = { freeExercisesCompleted = it }, showFreeNewRoundDialog = showFreeNewRoundDialog, onShowFreeNewRoundDialogChange = { showFreeNewRoundDialog = it },
@@ -772,7 +788,7 @@ fun DartsTrainerApp() {
                         onBackFromNormativesExercise = { isNormativesExercise = false; sectorToPlay = null; bigRoundCategory = null; screen = "normatives" },
                         onStartTrainingClick = {
                             autoOpenTimeDialog = false
-                            trainingMinutes = context.getSharedPreferences("training_prefs", android.content.Context.MODE_PRIVATE).getInt("session_minutes", SettingsStorage.getTrainingMinutes(context))
+                            trainingMinutes = context.getSharedPreferences("training_prefs", Context.MODE_PRIVATE).getInt("session_minutes", SettingsStorage.getTrainingMinutes(context))
                             scope.launch {
                                 val analysis = TrainingStatsAnalyzer.analyze(trainingRepository)
                                 val completedCount = trainingRepository.getCompletedSessionCount()
@@ -827,7 +843,7 @@ fun DartsTrainerApp() {
                                 mainExercises = dynamicIds.mapNotNull { d -> baseMap[d.id]?.copy(minutes = d.minutes) }.ifEmpty { getDefaultMainExercises() }
                                 psychologyExercises = emptyList(); strengthExercises = emptyList()
                                 currentPhase = TrainingBlockPhase.MAIN; currentExerciseIndex = 0; exerciseStatuses = emptyMap()
-                                isTrainingActive = true; isFreeTraining = true; freeNoRepeat = false; freeChooseMyself = false
+                                isTrainingActive = true; isFreeTraining = true; 
                                 freeCompletedIds = emptySet(); freeSkippedIds = emptySet(); freeCurrentId = null; freeRouletteKey = 0; freeExercisesCompleted = 0
                                 screen = "training_free_next"
                             }
