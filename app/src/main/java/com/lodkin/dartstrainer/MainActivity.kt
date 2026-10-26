@@ -621,7 +621,22 @@ fun DartsTrainerApp() {
                             game501 = it
                             game501ExistingId = entity.id
                             isTraining501 = true 
-                            screen = "game501_game" 
+                            // Создаем новую сессию для продолжения
+                            scope.launch {
+                                val session = TrainingSession(
+                                    dateMillis = System.currentTimeMillis(),
+                                    plannedMinutes = 0,
+                                    actualMinutes = 0,
+                                    levelAtStart = currentLevel,
+                                    mode = TrainingMode.FLEXIBLE,
+                                    focus = null,
+                                    isControl = false,
+                                    isCompleted = false
+                                )
+                                trainingSessionId = trainingRepository.insertSession(session)
+                                isTrainingActive = true
+                                screen = "game501_game"
+                            }
                         } 
                     },
                     onResumeCricket = { entity -> 
@@ -629,7 +644,22 @@ fun DartsTrainerApp() {
                             cricketGame = it
                             cricketExistingId = entity.id
                             isTrainingCricket = true
-                            screen = "cricket_game" 
+                            // Создаем новую сессию для продолжения
+                            scope.launch {
+                                val session = TrainingSession(
+                                    dateMillis = System.currentTimeMillis(),
+                                    plannedMinutes = 0,
+                                    actualMinutes = 0,
+                                    levelAtStart = currentLevel,
+                                    mode = TrainingMode.FLEXIBLE,
+                                    focus = null,
+                                    isControl = false,
+                                    isCompleted = false
+                                )
+                                trainingSessionId = trainingRepository.insertSession(session)
+                                isTrainingActive = true
+                                screen = "cricket_game"
+                            }
                         } 
                     }
                 )
