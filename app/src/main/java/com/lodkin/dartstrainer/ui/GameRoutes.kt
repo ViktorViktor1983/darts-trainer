@@ -82,7 +82,7 @@ fun GameRoutes(
     isTraining501: Boolean = false,
     isTrainingCricket: Boolean = false,
     isOnlineGame: Boolean = false,
-    isResumingFromStats: Boolean = false, // НОВЫЙ ПАРАМЕТР
+    isResumingFromStats: Boolean = false, 
     trainingSessionId: Long = 0L,
     exerciseStartMillis: Long = 0L,
     isNormativesExercise: Boolean = false,
@@ -110,7 +110,9 @@ fun GameRoutes(
                 onCricketExistingIdChange(0L)
                 onScreenChange("cricket_game")
             },
-            onBack = { onScreenChange("game_select") }
+            onBack = { 
+                onScreenChange(if (isTrainingCricket) "training" else "game_select") 
+            }
         )
 
         "cricket_game" -> {
@@ -122,7 +124,7 @@ fun GameRoutes(
                     initialGame = g,
                     existingId = cricketExistingId,
                     isTrainingMode = isTrainingCricket,
-                    isOnlineGame = isOnlineGame, // ПЕРЕДАЕМ ФЛАГ
+                    isOnlineGame = isOnlineGame,
                     trainingRepository = trainingRepository,
                     onGameFinish = { f: CricketGame, id: Long ->
                         if (isTrainingCricket) {
@@ -178,7 +180,7 @@ fun GameRoutes(
                         onCricketExistingIdChange(0L)
                         onScreenChange(
                             when {
-                                isResumingFromStats -> "detailed_stats" // ВОЗВРАТ В СТАТИСТИКУ
+                                isResumingFromStats -> "detailed_stats"
                                 isOnlineGame -> "online_lobby"
                                 isTrainingCricket -> "training_free_next"
                                 else -> "game_select"
@@ -209,6 +211,7 @@ fun GameRoutes(
 
         "game501_setup" -> Game501SetupScreen(
             playerName = playerName,
+            isTrainingMode = isTraining501, // ПЕРЕДАЕМ ФЛАГ ТРЕНИРОВКИ
             onStartGame = { gameType, outMode, players, legsPerSet, setsPerMatch, isPairGame, startingTeam, autoOkSeconds ->
                 val newGame = Game501Logic.newGame(
                     gameType, outMode, players, legsPerSet, setsPerMatch, isPairGame,
@@ -218,7 +221,9 @@ fun GameRoutes(
                 onGame501ExistingIdChange(0L)
                 onScreenChange("game501_game")
             },
-            onBack = { onScreenChange("game_select") }
+            onBack = { 
+                onScreenChange(if (isTraining501) "training" else "game_select") 
+            }
         )
 
         "game501_game" -> {
@@ -289,7 +294,7 @@ fun GameRoutes(
                         onGame501ExistingIdChange(0L)
                         onScreenChange(
                             when {
-                                isResumingFromStats -> "detailed_stats" // ВОЗВРАТ В СТАТИСТИКУ
+                                isResumingFromStats -> "detailed_stats"
                                 isOnlineGame -> "online_lobby"
                                 isTraining501 -> "training_free_next"
                                 else -> "game_select"
