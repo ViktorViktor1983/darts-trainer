@@ -26,6 +26,7 @@ import com.lodkin.dartstrainer.data.SettingsStorage
 import com.lodkin.dartstrainer.data.freerecords.FreePlayRecordsRepository
 import com.lodkin.dartstrainer.data.game501.*
 import com.lodkin.dartstrainer.data.training.TrainingRepository
+import com.lodkin.dartstrainer.data.training.TrainingUnfinishedStorage
 import com.lodkin.dartstrainer.theme.Accent
 import com.lodkin.dartstrainer.theme.ErrorColor
 import com.lodkin.dartstrainer.theme.GoldAccent
@@ -131,7 +132,6 @@ fun Game501Screen(
 
     fun addChatSystemMessage(text: String) {
         if (isOnlineGame) {
-            // Системные сообщения НЕ увеличивают счетчик непрочитанных
             chatMessages.add(ChatMessage(System.currentTimeMillis().toString(), "Система", text, isSystem = true))
         }
     }
@@ -687,8 +687,19 @@ fun Game501Screen(
     if (showBackConfirm) {
         AlertDialog(
             onDismissRequest = { showBackConfirm = false },
-            confirmButton = { TextButton(onClick = { showBackConfirm = false; onBack() }) { Text("Продолжить позже", color = Accent) } },
-            dismissButton = { TextButton(onClick = { showBackConfirm = false; scope.launch { if (currentId > 0L) repository.deleteGame(currentId); onBack() } }) { Text("Удалить партию", color = ErrorColor) } },
+            confirmButton = { 
+                TextButton(onClick = { 
+                    if (isTrainingMode) {
+                        TrainingUnfinishedStorage.addUnfinished501(context, currentId)
+                    }
+                    showBackConfirm = false; onBack() 
+                }) { Text("Продолжить позже", color = Accent) } 
+            },
+            dismissButton = { 
+                TextButton(onClick = { 
+                    showBackConfirm = false; scope.launch { if (currentId > 0L) repository.deleteGame(currentId); onBack() } 
+                }) { Text("Удалить партию", color = ErrorColor) } 
+            },
             title = { Text("Прервать игру?", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold) },
             text = { Text("Партия автоматически сохраняется. Ты можешь вернуться к ней позже из статистики — она будет отмечена красным.\n\nЛибо удалить её навсегда.", color = Color.White, fontSize = 14.sp) }
         )
