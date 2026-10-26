@@ -196,6 +196,7 @@ fun DartsTrainerApp() {
     var isTraining501 by remember { mutableStateOf(false) }
     var isTrainingCricket by remember { mutableStateOf(false) }
     var isOnlineGame by remember { mutableStateOf(false) }
+    var isResumingFromStats by remember { mutableStateOf(false) } // НОВЫЙ ФЛАГ
 
     // ── СТЕЙТЫ ОНЛАЙНА ──
     var pendingOnlineGameParams by remember { mutableStateOf<OnlineGameParams?>(null) }
@@ -250,6 +251,7 @@ fun DartsTrainerApp() {
             isOnlineGame = false
             isTraining501 = false
             isTrainingCricket = false
+            isResumingFromStats = false
         }
     }
 
@@ -478,6 +480,7 @@ fun DartsTrainerApp() {
         normatives501PlayerWins = 0; normatives501BotWins = 0; normatives501CurrentLeg = 0; normativesCricketLevels = emptyList()
         normativesCricketPlayerWins = 0; normativesCricketBotWins = 0; normativesCricketCurrentLeg = 0; normativesNewLevel = null
         isNormativesExercise = false; currentWeakness = null; currentLevel = 1; currentTargetGoals = emptyList()
+        isResumingFromStats = false
     }
 
     fun activePhases(): List<TrainingBlockPhase> {
@@ -621,7 +624,7 @@ fun DartsTrainerApp() {
                             game501 = it
                             game501ExistingId = entity.id
                             isTraining501 = true 
-                            isFreeTraining = true // ВАЖНО: Запускаем в режиме свободной тренировки
+                            isResumingFromStats = true // ВАЖНО: Устанавливаем флаг
                             scope.launch {
                                 val session = TrainingSession(
                                     dateMillis = System.currentTimeMillis(),
@@ -644,7 +647,7 @@ fun DartsTrainerApp() {
                             cricketGame = it
                             cricketExistingId = entity.id
                             isTrainingCricket = true
-                            isFreeTraining = true // ВАЖНО: Запускаем в режиме свободной тренировки
+                            isResumingFromStats = true // ВАЖНО: Устанавливаем флаг
                             scope.launch {
                                 val session = TrainingSession(
                                     dateMillis = System.currentTimeMillis(),
@@ -692,7 +695,7 @@ fun DartsTrainerApp() {
                         aroundClockOrder = aroundClockOrder, onAroundClockOrderChange = { aroundClockOrder = it }, aroundClockHits = aroundClockHits, onAroundClockHitsChange = { aroundClockHits = it },
                         bigRoundCategory = bigRoundCategory, onBigRoundCategoryChange = { bigRoundCategory = it },
                         sessionStartTime = sessionStartTime, sessionForm = sessionForm, isTraining501 = isTraining501, isTrainingCricket = isTrainingCricket,
-                        isOnlineGame = isOnlineGame,
+                        isOnlineGame = isOnlineGame, isResumingFromStats = isResumingFromStats, // ПЕРЕДАЕМ ФЛАГ
                         trainingSessionId = trainingSessionId, exerciseStartMillis = exerciseStartMillis, isNormativesExercise = isNormativesExercise,
                         onTrainingGameFinished = { playerWon, isGame501 ->
                             // Очищаем ID из хранилища, если игра завершена
