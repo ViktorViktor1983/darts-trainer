@@ -225,7 +225,7 @@ private val ALL_PSYCHOLOGY_EXERCISES = listOf(
     PlannedExercise("psy_tunnel", "Туннельное зрение", 3, "Учит мозг не отвлекаться на фон и концентрироваться только на цели."),
     PlannedExercise("psy_ritual", "Ритуал трёх шагов", 3, "Стабильность — залог победы. Одинаковые действия настраивают на бросок."),
     PlannedExercise("psy_visual", "Визуализация полёта", 3, "Прогревает нейронные связи, и рука бросает точнее."),
-    PlannedExercise("psy_single", "Один дротик", 3, "Убирает расслабленность. Каждый бросок — решающий."),
+    PlannedExercise("psy_single", "Один дротик", 2, "Убирает расслабленность. Каждый бросок — решающий."),
     PlannedExercise("psy_trigger_word", "Триггер-слово", 3, "Создаёт условный рефлекс для тела начать правильное движение."),
     PlannedExercise("psy_mirror", "Зеркало", 3, "Контроль техники и осознанность движений."),
     PlannedExercise("psy_ideomotor", "Идеомоторная тренировка", 3, "Улучшение техники без физических бросков.")
@@ -344,11 +344,11 @@ internal fun getWarmupBlockItems(): List<PlannedExercise> {
     val result = mutableListOf<PlannedExercise>()
     
     // Берем случайное по одному из каждой группы
-    result.add(WARMUP_NECK.random())
-    result.add(WARMUP_SHOULDERS.random())
-    result.add(WARMUP_WRISTS.random())
-    result.add(WARMUP_LEGS.random())
-    result.add(WARMUP_DARTS.random())
+    result.add(WARMUP_NECK.random().copy(minutes = 1)) // 1 минута = 60 сек, но мы изменим логику в UI
+    result.add(WARMUP_SHOULDERS.random().copy(minutes = 1))
+    result.add(WARMUP_WRISTS.random().copy(minutes = 1))
+    result.add(WARMUP_LEGS.random().copy(minutes = 1))
+    result.add(WARMUP_DARTS.random().copy(minutes = 2))
     
     return result
 }
