@@ -60,6 +60,7 @@ import com.lodkin.dartstrainer.data.training.DartsNorms
 import com.lodkin.dartstrainer.data.training.ExerciseResult
 import com.lodkin.dartstrainer.data.training.InventoryStorage
 import com.lodkin.dartstrainer.data.training.NormativesStateStorage
+import com.lodkin.dartstrainer.data.training.ProblemSectorsStorage
 import com.lodkin.dartstrainer.data.training.TrainingBlocksStorage
 import com.lodkin.dartstrainer.data.training.TrainingBotLevelStorage
 import com.lodkin.dartstrainer.data.training.TrainingDatabase
@@ -192,7 +193,6 @@ fun DartsTrainerApp() {
     var currentWeakness by remember { mutableStateOf<WeaknessType?>(null) }
     var currentLevel by remember { mutableStateOf(1) }
     var currentTargetGoals by remember { mutableStateOf<List<String>>(emptyList()) }
-    var currentAnalysis by remember { mutableStateOf<TrainingStatsAnalyzer.TrainingAnalysis?>(null) } // НОВЫЙ СТЕЙТ
     var exerciseStartMillis by remember { mutableStateOf(0L) }
 
     var isTraining501 by remember { mutableStateOf(false) }
@@ -424,8 +424,7 @@ fun DartsTrainerApp() {
             if (newLvl > startLvl) {
                 trainingRepository.clearStatisticsAfterNormatives()
                 TrainingStateStorage.clear(context); NormativesStateStorage.clear(context)
-                // Сбрасываем пометки пройденных проблемных секторов
-                com.lodkin.dartstrainer.data.training.ProblemSectorsStorage.clear(context)
+                ProblemSectorsStorage.clear(context) // Очищаем пройденные сектора при экзамене
             } else {
                 NormativesStateStorage.clear(context)
             }
@@ -503,7 +502,6 @@ fun DartsTrainerApp() {
         normativesCricketPlayerWins = 0; normativesCricketBotWins = 0; normativesCricketCurrentLeg = 0; normativesNewLevel = null
         isNormativesExercise = false; currentWeakness = null; currentLevel = 1; currentTargetGoals = emptyList()
         isResumingFromStats = false
-        currentAnalysis = null // Сбрасываем анализ
     }
 
     fun activePhases(): List<TrainingBlockPhase> {
@@ -755,7 +753,7 @@ fun DartsTrainerApp() {
                         context = context, scope = scope, trainingMinutes = trainingMinutes, isTrainingActive = isTrainingActive,
                         trainingElapsedSeconds = trainingElapsedSeconds, trainingPaused = trainingPaused, onTogglePause = { trainingPaused = !trainingPaused },
                         currentPhase = currentPhase.name, 
-                        currentAnalysis = currentAnalysis, // ПЕРЕДАЕМ АНАЛИЗ
+                        // УБРАЛИ currentAnalysis
                         mainExercises = mainExercises, psychologyExercises = psychologyExercises, strengthExercises = strengthExercises,
                         currentExerciseIndex = currentExerciseIndex, onCurrentExerciseIndexChange = { currentExerciseIndex = it }, exerciseStatuses = exerciseStatuses,
                         onExerciseStatusesChange = { exerciseStatuses = it }, currentWeakness = currentWeakness, currentLevel = currentLevel, currentTargetGoals = currentTargetGoals,
@@ -812,7 +810,6 @@ fun DartsTrainerApp() {
                             trainingMinutes = context.getSharedPreferences("training_prefs", Context.MODE_PRIVATE).getInt("session_minutes", SettingsStorage.getTrainingMinutes(context))
                             scope.launch {
                                 val analysis = TrainingStatsAnalyzer.analyze(trainingRepository)
-                                currentAnalysis = analysis // СОХРАНЯЕМ АНАЛИЗ
                                 val completedCount = trainingRepository.getCompletedSessionCount()
                                 currentWeakness = analysis.weakestType; currentLevel = analysis.level; currentTargetGoals = analysis.targetPracticeGoals
                                 val session = TrainingSession(
@@ -846,7 +843,6 @@ fun DartsTrainerApp() {
                             autoOpenTimeDialog = false
                             scope.launch {
                                 val analysis = TrainingStatsAnalyzer.analyze(trainingRepository)
-                                currentAnalysis = analysis // СОХРАНЯЕМ АНАЛИЗ
                                 val completedCount = trainingRepository.getCompletedSessionCount()
                                 currentWeakness = analysis.weakestType; currentLevel = analysis.level; currentTargetGoals = analysis.targetPracticeGoals
                                 val session = TrainingSession(
