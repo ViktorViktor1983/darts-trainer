@@ -594,10 +594,15 @@ fun DartsTrainerApp() {
         when (stage) {
             "welcome" -> WelcomeScreen(onStart = { stage = "onboarding" })
             "onboarding" -> OnboardingScreen(onFinish = { result ->
-                SettingsStorage.setPlayerName(context, result.name); SettingsStorage.setTrainingMinutes(context, result.trainingMinutes)
-                SettingsStorage.setTrainingsPerWeek(context, result.trainingsPerWeek); SettingsStorage.setTrainingMode(context, result.trainingMode)
-                SettingsStorage.setStartMode(context, result.startMode); SettingsStorage.setOnboardingDone(context)
-                onboardingDone = true; stage = "main"
+                SettingsStorage.setPlayerName(context, result.name)
+                SettingsStorage.setTrainingMinutes(context, result.trainingMinutes)
+                SettingsStorage.setTrainingsPerWeek(context, result.trainingsPerWeek)
+                SettingsStorage.setTrainingMode(context, result.trainingMode)
+                SettingsStorage.setStartMode(context, result.startMode)
+                SettingsStorage.setStartLevel(context, result.startLevel) // СОХРАНЯЕМ УРОВЕНЬ
+                SettingsStorage.setOnboardingDone(context)
+                onboardingDone = true
+                stage = "main"
             })
             "loading" -> LoadingScreen()
 
@@ -618,7 +623,6 @@ fun DartsTrainerApp() {
                         screen = "training"
                     },
                     onFreePlay = { 
-                        // СБРОС ФЛАГОВ ТРЕНИРОВКИ ПРИ ВХОДЕ В СВОБОДНУЮ ИГРУ
                         isTraining501 = false
                         isTrainingCricket = false
                         isResumingFromStats = false
@@ -730,7 +734,6 @@ fun DartsTrainerApp() {
                         isOnlineGame = isOnlineGame, isResumingFromStats = isResumingFromStats, 
                         trainingSessionId = trainingSessionId, exerciseStartMillis = exerciseStartMillis, isNormativesExercise = isNormativesExercise,
                         onTrainingGameFinished = { playerWon, isGame501 ->
-                            // Очищаем ID из хранилища, если игра завершена
                             if (isGame501) {
                                 TrainingUnfinishedStorage.removeUnfinished501(context, game501ExistingId)
                             } else {
@@ -753,7 +756,6 @@ fun DartsTrainerApp() {
                         context = context, scope = scope, trainingMinutes = trainingMinutes, isTrainingActive = isTrainingActive,
                         trainingElapsedSeconds = trainingElapsedSeconds, trainingPaused = trainingPaused, onTogglePause = { trainingPaused = !trainingPaused },
                         currentPhase = currentPhase.name, 
-                        // УБРАЛИ currentAnalysis
                         mainExercises = mainExercises, psychologyExercises = psychologyExercises, strengthExercises = strengthExercises,
                         currentExerciseIndex = currentExerciseIndex, onCurrentExerciseIndexChange = { currentExerciseIndex = it }, exerciseStatuses = exerciseStatuses,
                         onExerciseStatusesChange = { exerciseStatuses = it }, currentWeakness = currentWeakness, currentLevel = currentLevel, currentTargetGoals = currentTargetGoals,
