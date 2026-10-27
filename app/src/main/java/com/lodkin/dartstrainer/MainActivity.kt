@@ -422,6 +422,9 @@ fun DartsTrainerApp() {
             normativesNewLevel = if (newLvl > startLvl) newLvl else startLvl
 
             if (newLvl > startLvl) {
+                // СОХРАНЯЕМ НОВЫЙ УРОВЕНЬ
+                SettingsStorage.setStartLevel(context, newLvl)
+                
                 trainingRepository.clearStatisticsAfterNormatives()
                 TrainingStateStorage.clear(context); NormativesStateStorage.clear(context)
                 ProblemSectorsStorage.clear(context) // Очищаем пройденные сектора при экзамене
