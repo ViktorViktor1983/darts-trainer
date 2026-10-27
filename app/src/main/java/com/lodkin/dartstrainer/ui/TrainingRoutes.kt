@@ -18,7 +18,6 @@ import com.lodkin.dartstrainer.data.scoreset.ScoreSetRepository
 import com.lodkin.dartstrainer.data.sector.SectorRepository
 import com.lodkin.dartstrainer.data.training.BlockType
 import com.lodkin.dartstrainer.data.training.TrainingRepository
-import com.lodkin.dartstrainer.data.training.TrainingStatsAnalyzer
 import com.lodkin.dartstrainer.data.training.WeaknessType
 import com.lodkin.dartstrainer.ui.training.*
 import kotlinx.coroutines.CoroutineScope
@@ -44,7 +43,6 @@ fun TrainingRoutes(
     onTogglePause: () -> Unit,
     
     currentPhase: String,
-    currentAnalysis: TrainingStatsAnalyzer.TrainingAnalysis?, // НОВЫЙ ПАРАМЕТР
     mainExercises: List<PlannedExercise>,
     psychologyExercises: List<PlannedExercise>,
     strengthExercises: List<PlannedExercise>,
@@ -254,21 +252,13 @@ fun TrainingRoutes(
 
             if (current != null) {
                 if (current.id == "problem_sectors") {
-                    if (currentAnalysis != null) {
-                        ProblemSectorsScreen(
-                            analysis = currentAnalysis,
-                            playerLevel = currentLevel,
-                            onFinish = { onScreenChange("training_free_next") },
-                            onBack = { onScreenChange("training_free_next") }
-                        )
-                    } else {
-                        TrainingExercisePlaceholder(
-                            title = "Ошибка",
-                            description = "Нет данных для анализа. Сыграйте 5 Кругосветок.",
-                            onDone = { onScreenChange("training_free_next") },
-                            onBack = { onScreenChange("training_free_next") }
-                        )
-                    }
+                    // ТЕПЕРЬ ПЕРЕДАЕМ REPOSITORY, А НЕ ANALYSIS
+                    ProblemSectorsScreen(
+                        repository = trainingRepository,
+                        playerLevel = currentLevel,
+                        onFinish = { onScreenChange("training_free_next") },
+                        onBack = { onScreenChange("training_free_next") }
+                    )
                 } else if (trainingPhase == "PSYCHOLOGY") {
                     PsychologyExerciseScreen(
                         exerciseId = current.id,
