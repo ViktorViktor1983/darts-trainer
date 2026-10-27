@@ -1,8 +1,5 @@
 package com.lodkin.dartstrainer.ui.training
 
-import android.os.Build
-import android.os.VibrationEffect
-import android.os.Vibrator
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -13,7 +10,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -300,7 +296,6 @@ private fun TunnelVisionExerciseContent(
     modifier: Modifier = Modifier,
     onFinish: () -> Unit
 ) {
-    val context = LocalContext.current
     var timeLeft by remember { mutableStateOf(15) }
     var isFocusing by remember { mutableStateOf(true) }
     var dartsThrown by remember { mutableStateOf(0) }
@@ -315,19 +310,6 @@ private fun TunnelVisionExerciseContent(
         }
         if (timeLeft == 0) {
             isFocusing = false
-            val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                val vibratorManager = context.getSystemService(android.content.Context.VIBRATOR_MANAGER_SERVICE) as android.os.VibratorManager
-                vibratorManager.defaultVibrator
-            } else {
-                @Suppress("DEPRECATION")
-                context.getSystemService(android.content.Context.VIBRATOR_SERVICE) as Vibrator
-            }
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                vibrator.vibrate(VibrationEffect.createOneShot(500, VibrationEffect.DEFAULT_AMPLITUDE))
-            } else {
-                @Suppress("DEPRECATION")
-                vibrator.vibrate(500)
-            }
         }
     }
 
@@ -353,7 +335,7 @@ private fun TunnelVisionExerciseContent(
                     Spacer(Modifier.height(24.dp))
                     Text("Не отводи взгляд", color = Color.White.copy(alpha = 0.5f), fontSize = 14.sp)
                 } else {
-                    Text("ВИБРАЦИЯ! ДЕЛАЙ БРОСОК!", color = GoldAccent, fontSize = 24.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+                    Text("ВРЕМЯ ВЫШЛО! ДЕЛАЙ БРОСОК!", color = GoldAccent, fontSize = 24.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
                     Spacer(Modifier.height(32.dp))
                     Box(
                         modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Accent).clickable { dartsThrown += 1; isFocusing = true }.padding(vertical = 20.dp),
