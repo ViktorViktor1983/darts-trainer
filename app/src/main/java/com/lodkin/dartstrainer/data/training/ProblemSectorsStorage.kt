@@ -11,6 +11,7 @@ object ProblemSectorsStorage {
     private const val PREFS_NAME = "problem_sectors_prefs"
     private const val KEY_COMPLETED = "completed_sectors"
     private const val KEY_RESULTS = "session_results" // Формат: "D1:hits/total|D15:hits/total"
+    private const val KEY_PREFERRED_DARTS = "preferred_darts"
 
     private fun prefs(context: Context) =
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -46,11 +47,23 @@ object ProblemSectorsStorage {
         }.toMap()
     }
 
+    /** Сохранить предпочтительное количество дротиков */
+    fun savePreferredDarts(context: Context, count: Int) {
+        prefs(context).edit().putInt(KEY_PREFERRED_DARTS, count).apply()
+    }
+
+    /** Получить предпочтительное количество дротиков (по умолчанию 15) */
+    fun getPreferredDarts(context: Context): Int {
+        return prefs(context).getInt(KEY_PREFERRED_DARTS, 15)
+    }
+
     /** Очистить все пометки и результаты (вызывается при сдаче экзамена) */
     fun clear(context: Context) {
         prefs(context).edit()
             .remove(KEY_COMPLETED)
             .remove(KEY_RESULTS)
             .apply()
+        // Мы НЕ удаляем KEY_PREFERRED_DARTS, чтобы игроку не приходилось 
+        // выбирать количество дротиков заново после каждого экзамена.
     }
 }
