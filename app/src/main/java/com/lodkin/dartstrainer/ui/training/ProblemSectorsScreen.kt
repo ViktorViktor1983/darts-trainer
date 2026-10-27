@@ -40,7 +40,7 @@ private data class TargetItem(
     val currentPercent: Float,
     val normPercent: Float,
     val isCompleted: Boolean,
-    val lastSessionResult: String? // Результат прошлой отработки
+    val lastSessionResult: String?
 )
 
 private data class CategoryGroup(
@@ -59,7 +59,9 @@ fun ProblemSectorsScreen(
     val context = LocalContext.current
     var isPlaying by remember { mutableStateOf(false) }
     var selectedTargets by remember { mutableStateOf<List<TargetItem>>(emptyList()) }
-    var dartsCount by remember { mutableStateOf(15) }
+    
+    // Запоминаем количество дротиков
+    var dartsCount by remember { mutableStateOf(ProblemSectorsStorage.getPreferredDarts(context)) }
     
     var analysis by remember { mutableStateOf<TrainingStatsAnalyzer.TrainingAnalysis?>(null) }
     var loading by remember { mutableStateOf(true) }
@@ -90,6 +92,18 @@ fun ProblemSectorsScreen(
     val completed = ProblemSectorsStorage.getCompleted(context)
     val sessionResults = ProblemSectorsStorage.getSessionResults(context)
 
+    // Функция для перевода "hits/total" в проценты
+    fun formatLastResult(raw: String?): String? {
+        if (raw == null) return null
+        val parts = raw.split("/")
+        if (parts.size != 2) return null
+        val hits = parts[0].toIntOrNull() ?: 0
+        val total = parts[1].toIntOrNull() ?: 0
+        if (total <= 0) return null
+        val pct = (hits.toFloat() / total * 100).toInt()
+        return "Прошлый раз: $pct%"
+    }
+
     // Группируем цели
     val groups = listOf(
         CategoryGroup(
@@ -97,7 +111,7 @@ fun ProblemSectorsScreen(
             dataAvailable = currentAnalysis.sectorsDataAvailable,
             targets = currentAnalysis.worstSectors.take(3).map { w ->
                 val name = if (w.sector == 25) "Bull" else "S${w.sector}"
-                TargetItem(name, name, w.percent, norm.sectorsPercent, completed.contains(name), sessionResults[name])
+                TargetItem(name, name, w.percent, norm.sectorsPercent, completed.contains(name), formatLastResult(sessionResults[name]))
             }
         ),
         CategoryGroup(
@@ -105,7 +119,7 @@ fun ProblemSectorsScreen(
             dataAvailable = currentAnalysis.doublesDataAvailable,
             targets = currentAnalysis.worstDoubles.take(3).map { w ->
                 val name = if (w.sector == 25) "D-Bull" else "D${w.sector}"
-                TargetItem(name, name, w.percent, norm.doublesPercent, completed.contains(name), sessionResults[name])
+                TargetItem(name, name, w.percent, norm.doublesPercent, completed.contains(name), formatLastResult(sessionResults[name]))
             }
         ),
         CategoryGroup(
@@ -113,7 +127,7 @@ fun ProblemSectorsScreen(
             dataAvailable = currentAnalysis.treblesDataAvailable,
             targets = currentAnalysis.worstTrebles.take(3).map { w ->
                 val name = if (w.sector == 25) "T-Bull" else "T${w.sector}"
-                TargetItem(name, name, w.percent, norm.treblePercent, completed.contains(name), sessionResults[name])
+                TargetItem(name, name, w.percent, norm.treblePercent, completed.contains(name), formatLastResult(sessionResults[name]))
             }
         )
     )
@@ -140,7 +154,10 @@ fun ProblemSectorsScreen(
                 }
             },
             dartsCount = dartsCount,
-            onDartsCountChange = { dartsCount = it },
+            onDartsCountChange = { newCount ->
+                dartsCount = newCount
+                ProblemSectorsStorage.savePreferredDarts(context, newCount)
+            },
             onStart = { isPlaying = true },
             onBack = onBack
         )
@@ -159,6 +176,7 @@ private fun ProblemSectorsSetup(
 ) {
     val dartsOptions = listOf(15, 30, 45, 60, 75, 90, 105, 120)
     var expandedGroup by remember { mutableStateOf<String?>(null) }
+    var expandedDarts by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
@@ -188,11 +206,55 @@ private fun ProblemSectorsSetup(
         Spacer(Modifier.height(20.dp))
 
         Column(modifier = Modifier.weight(1f).verticalScroll(rememberScrollState())) {
+            // 1. Блок с количеством дротиков
+            Column(modifier = Modifier.padding(vertical = 4.dp)) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(TileBg)
+                        .clickable { expandedDarts = !expandedDarts }
+                        .padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("Количество дротиков", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                    Text("$dartsCount", color = GoldAccent, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.width(8.dp))
+                    Text(if (expandedDarts) "▲" else "▼", color = Accent, fontSize = 14.sp)
+                }
+                
+                if (expandedDarts) {
+                    Row(modifier = Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        dartsOptions.chunked(4).forEach { row ->
+                            Column(modifier = Modifier.weight(1f)) {
+                                row.forEach { count ->
+                                    val isSel = dartsCount == count
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(vertical = 4.dp)
+                                            .clip(RoundedCornerShape(8.dp))
+                                            .background(if (isSel) Accent else TileBgDark)
+                                            .clickable { onDartsCountChange(count) }
+                                            .padding(vertical = 10.dp),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text("$count", color = if (isSel) Color(0xFF121212) else Color.White, fontWeight = FontWeight.Bold)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(12.dp))
+
+            // 2. Блоки с категориями
             groups.forEach { group ->
                 val isExpanded = expandedGroup == group.title
                 
                 Column(modifier = Modifier.padding(vertical = 4.dp)) {
-                    // Заголовок группы
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -214,7 +276,6 @@ private fun ProblemSectorsSetup(
                         Text(if (isExpanded) "▲" else "▼", color = Accent, fontSize = 14.sp)
                     }
 
-                    // Раскрывающийся список целей
                     if (isExpanded && group.dataAvailable) {
                         if (group.targets.isEmpty()) {
                             Box(modifier = Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
@@ -249,7 +310,7 @@ private fun ProblemSectorsSetup(
                                         if (target.lastSessionResult != null) {
                                             Spacer(Modifier.height(4.dp))
                                             Text(
-                                                "Прошлый раз: ${target.lastSessionResult}",
+                                                target.lastSessionResult,
                                                 color = Accent, fontSize = 12.sp, fontWeight = FontWeight.Medium
                                             )
                                         }
@@ -263,33 +324,6 @@ private fun ProblemSectorsSetup(
                                     }
                                 }
                             }
-                        }
-                    }
-                }
-            }
-        }
-
-        Spacer(Modifier.height(16.dp))
-
-        Text("Количество дротиков на каждый сектор:", color = Accent, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-        Spacer(Modifier.height(8.dp))
-        
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            dartsOptions.chunked(4).forEach { row ->
-                Column(modifier = Modifier.weight(1f)) {
-                    row.forEach { count ->
-                        val isSel = dartsCount == count
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 4.dp)
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(if (isSel) Accent else TileBgDark)
-                                .clickable { onDartsCountChange(count) }
-                                .padding(vertical = 10.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text("$count", color = if (isSel) Color(0xFF121212) else Color.White, fontWeight = FontWeight.Bold)
                         }
                     }
                 }
@@ -325,7 +359,6 @@ private fun ProblemSectorsGame(
     var showFinishDialog by remember { mutableStateOf(false) }
     var flashMiss by remember { mutableStateOf(false) }
     
-    // Храним результаты бросков: индекс цели, попал/не попал
     val allThrows = remember { mutableStateListOf<Pair<Int, Boolean>>() }
     
     val currentTargetIndex = allThrows.size / dartsPerTarget
@@ -369,7 +402,6 @@ private fun ProblemSectorsGame(
             .fillMaxSize()
             .background(DarkBg)
     ) {
-        // Шапка
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -412,7 +444,6 @@ private fun ProblemSectorsGame(
             }
         }
 
-        // Прогресс-бар по целям
         Row(
             modifier = Modifier.fillMaxWidth().background(Color(0xFF0D1117)).padding(horizontal = 8.dp, vertical = 6.dp),
             horizontalArrangement = Arrangement.spacedBy(4.dp)
@@ -440,7 +471,6 @@ private fun ProblemSectorsGame(
             }
         }
 
-        // Центральный блок
         if (!isFinished && currentTarget != null) {
             Column(
                 modifier = Modifier
@@ -495,7 +525,6 @@ private fun ProblemSectorsGame(
 
         Spacer(Modifier.height(6.dp))
 
-        // Ряды ввода (по 3 дротика, как в Кругосветке)
         if (!isFinished && currentTarget != null) {
             Column(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
@@ -520,7 +549,6 @@ private fun ProblemSectorsGame(
 
         Spacer(Modifier.height(8.dp))
 
-        // Кнопки управления
         Column(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp).weight(1f),
             verticalArrangement = Arrangement.Bottom
@@ -597,11 +625,11 @@ private fun ProblemSectorsGame(
                         val sessionThrows = allThrows.subList(start, end)
                         val hits = sessionThrows.count { it.second }
                         val total = sessionThrows.size
-                        val pct = if (total > 0) (hits.toFloat() / total * 100f) else 0f
+                        val pct = if (total > 0) (hits.toFloat() / total * 100f).toInt() else 0
                         
                         Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp), horizontalArrangement = Arrangement.SpaceBetween) {
                             Text(t.displayName, color = Color.White, fontSize = 14.sp)
-                            Text("$hits из $total (${String.format(Locale.US, "%.0f", pct)}%)", color = GoldAccent, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                            Text("$pct%", color = GoldAccent, fontSize = 14.sp, fontWeight = FontWeight.Bold)
                         }
                     }
                     
