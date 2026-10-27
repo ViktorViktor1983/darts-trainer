@@ -19,6 +19,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.lodkin.dartstrainer.data.SettingsStorage
 import com.lodkin.dartstrainer.data.cricket.CricketGameEntity
 import com.lodkin.dartstrainer.data.cricket.CricketRepository
 import com.lodkin.dartstrainer.data.game501.Game501Entity
@@ -253,7 +254,10 @@ fun DetailedStatsScreen(
             Spacer(Modifier.height(10.dp))
 
             // ── ПОДГОТОВКА СПИСКА С ЦВЕТАМИ И СОРТИРОВКОЙ ──
-            val currentLevel = a.level
+            
+            // Берем ТОЛЬКО сохраненный уровень (из анкеты или после экзамена)
+            val currentLevel = SettingsStorage.getStartLevel(context)
+            
             val list = mutableListOf<DisciplineCard>()
 
             val ppr = a.avg501Ppr
