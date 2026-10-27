@@ -22,14 +22,16 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.lodkin.dartstrainer.data.training.DartsNorms
 import com.lodkin.dartstrainer.data.training.ProblemSectorsStorage
+import com.lodkin.dartstrainer.data.training.TrainingRepository
 import com.lodkin.dartstrainer.data.training.TrainingStatsAnalyzer
 import com.lodkin.dartstrainer.theme.Accent
 import com.lodkin.dartstrainer.theme.DarkBg
-import com.lodkin.dartstrainer.theme.ErrorColor
 import com.lodkin.dartstrainer.theme.GoldAccent
 import com.lodkin.dartstrainer.theme.TileBg
 import com.lodkin.dartstrainer.theme.TileBgDark
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 import java.util.Locale
 
 private data class TargetItem(
@@ -37,12 +39,19 @@ private data class TargetItem(
     val displayName: String,
     val currentPercent: Float,
     val normPercent: Float,
-    val isCompleted: Boolean
+    val isCompleted: Boolean,
+    val lastSessionResult: String? // Результат прошлой отработки
+)
+
+private data class CategoryGroup(
+    val title: String,
+    val targets: List<TargetItem>,
+    val dataAvailable: Boolean
 )
 
 @Composable
 fun ProblemSectorsScreen(
-    analysis: TrainingStatsAnalyzer.TrainingAnalysis,
+    repository: TrainingRepository,
     playerLevel: Int,
     onFinish: () -> Unit,
     onBack: () -> Unit
@@ -51,27 +60,63 @@ fun ProblemSectorsScreen(
     var isPlaying by remember { mutableStateOf(false) }
     var selectedTargets by remember { mutableStateOf<List<TargetItem>>(emptyList()) }
     var dartsCount by remember { mutableStateOf(15) }
+    
+    var analysis by remember { mutableStateOf<TrainingStatsAnalyzer.TrainingAnalysis?>(null) }
+    var loading by remember { mutableStateOf(true) }
 
-    // Собираем все цели из анализа
-    val allTargets = remember(analysis, playerLevel) {
-        val list = mutableListOf<TargetItem>()
-        val norm = DartsNorms.getNorm(playerLevel)
-        val completed = ProblemSectorsStorage.getCompleted(context)
-
-        analysis.worstSectors.take(3).forEach { w ->
-            val name = if (w.sector == 25) "Bull" else "S${w.sector}"
-            list.add(TargetItem(name, name, w.percent, norm.sectorsPercent, completed.contains(name)))
-        }
-        analysis.worstDoubles.take(3).forEach { w ->
-            val name = if (w.sector == 25) "D-Bull" else "D${w.sector}"
-            list.add(TargetItem(name, name, w.percent, norm.doublesPercent, completed.contains(name)))
-        }
-        analysis.worstTrebles.take(3).forEach { w ->
-            val name = if (w.sector == 25) "T-Bull" else "T${w.sector}"
-            list.add(TargetItem(name, name, w.percent, norm.treblePercent, completed.contains(name)))
-        }
-        list
+    // Загружаем свежий анализ при входе на экран
+    LaunchedEffect(Unit) {
+        val a = withContext(Dispatchers.IO) { TrainingStatsAnalyzer.analyze(repository) }
+        analysis = a
+        loading = false
     }
+
+    if (loading) {
+        Box(modifier = Modifier.fillMaxSize().background(DarkBg), contentAlignment = Alignment.Center) {
+            Text("Анализируем данные...", color = Accent)
+        }
+        return
+    }
+
+    val currentAnalysis = analysis
+    if (currentAnalysis == null) {
+        Box(modifier = Modifier.fillMaxSize().background(DarkBg), contentAlignment = Alignment.Center) {
+            Text("Ошибка загрузки данных", color = Color.Red)
+        }
+        return
+    }
+
+    val norm = DartsNorms.getNorm(playerLevel)
+    val completed = ProblemSectorsStorage.getCompleted(context)
+    val sessionResults = ProblemSectorsStorage.getSessionResults(context)
+
+    // Группируем цели
+    val groups = listOf(
+        CategoryGroup(
+            title = "Сектора",
+            dataAvailable = currentAnalysis.sectorsDataAvailable,
+            targets = currentAnalysis.worstSectors.take(3).map { w ->
+                val name = if (w.sector == 25) "Bull" else "S${w.sector}"
+                TargetItem(name, name, w.percent, norm.sectorsPercent, completed.contains(name), sessionResults[name])
+            }
+        ),
+        CategoryGroup(
+            title = "Удвоения",
+            dataAvailable = currentAnalysis.doublesDataAvailable,
+            targets = currentAnalysis.worstDoubles.take(3).map { w ->
+                val name = if (w.sector == 25) "D-Bull" else "D${w.sector}"
+                TargetItem(name, name, w.percent, norm.doublesPercent, completed.contains(name), sessionResults[name])
+            }
+        ),
+        CategoryGroup(
+            title = "Утроения",
+            dataAvailable = currentAnalysis.treblesDataAvailable,
+            targets = currentAnalysis.worstTrebles.take(3).map { w ->
+                val name = if (w.sector == 25) "T-Bull" else "T${w.sector}"
+                TargetItem(name, name, w.percent, norm.treblePercent, completed.contains(name), sessionResults[name])
+            }
+        )
+    )
 
     if (isPlaying) {
         ProblemSectorsGame(
@@ -85,7 +130,7 @@ fun ProblemSectorsScreen(
         )
     } else {
         ProblemSectorsSetup(
-            targets = allTargets,
+            groups = groups,
             selectedTargets = selectedTargets,
             onToggleTarget = { target ->
                 selectedTargets = if (selectedTargets.any { it.name == target.name }) {
@@ -104,7 +149,7 @@ fun ProblemSectorsScreen(
 
 @Composable
 private fun ProblemSectorsSetup(
-    targets: List<TargetItem>,
+    groups: List<CategoryGroup>,
     selectedTargets: List<TargetItem>,
     onToggleTarget: (TargetItem) -> Unit,
     dartsCount: Int,
@@ -113,6 +158,7 @@ private fun ProblemSectorsSetup(
     onBack: () -> Unit
 ) {
     val dartsOptions = listOf(15, 30, 45, 60, 75, 90, 105, 120)
+    var expandedGroup by remember { mutableStateOf<String?>(null) }
 
     Column(
         modifier = Modifier
@@ -141,46 +187,83 @@ private fun ProblemSectorsSetup(
 
         Spacer(Modifier.height(20.dp))
 
-        if (targets.isEmpty()) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("Проблемных секторов пока нет.\nСыграйте 5 Кругосветок для сбора статистики.", color = Color.White.copy(alpha = 0.5f), textAlign = TextAlign.Center)
-            }
-            return@Column
-        }
-
         Column(modifier = Modifier.weight(1f).verticalScroll(rememberScrollState())) {
-            targets.forEach { target ->
-                val isSelected = selectedTargets.any { it.name == target.name }
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 4.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(if (isSelected) Accent.copy(alpha = 0.15f) else TileBg)
-                        .clickable { onToggleTarget(target) }
-                        .padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(target.displayName, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                            if (target.isCompleted) {
-                                Spacer(Modifier.width(8.dp))
-                                Text("✅", fontSize = 16.sp)
+            groups.forEach { group ->
+                val isExpanded = expandedGroup == group.title
+                
+                Column(modifier = Modifier.padding(vertical = 4.dp)) {
+                    // Заголовок группы
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(TileBg)
+                            .clickable { expandedGroup = if (isExpanded) null else group.title }
+                            .padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(group.title, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                        if (!group.dataAvailable) {
+                            Text("Мало данных", color = Color.White.copy(alpha = 0.5f), fontSize = 14.sp)
+                        } else if (group.targets.isEmpty()) {
+                            Text("Всё отлично", color = Accent, fontSize = 14.sp)
+                        } else {
+                            Text("Проблем: ${group.targets.size}", color = GoldAccent, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                        }
+                        Spacer(Modifier.width(8.dp))
+                        Text(if (isExpanded) "▲" else "▼", color = Accent, fontSize = 14.sp)
+                    }
+
+                    // Раскрывающийся список целей
+                    if (isExpanded && group.dataAvailable) {
+                        if (group.targets.isEmpty()) {
+                            Box(modifier = Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
+                                Text("В этой категории проблем нет.", color = Color.White.copy(alpha = 0.6f), fontSize = 14.sp)
+                            }
+                        } else {
+                            group.targets.forEach { target ->
+                                val isSelected = selectedTargets.any { it.name == target.name }
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(top = 4.dp)
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .background(if (isSelected) Accent.copy(alpha = 0.15f) else TileBgDark)
+                                        .clickable { onToggleTarget(target) }
+                                        .padding(16.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Text(target.displayName, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                                            if (target.isCompleted) {
+                                                Spacer(Modifier.width(8.dp))
+                                                Text("✅", fontSize = 14.sp)
+                                            }
+                                        }
+                                        Spacer(Modifier.height(4.dp))
+                                        Text(
+                                            "Точность: ${String.format(Locale.US, "%.1f", target.currentPercent)}% (норма: ${String.format(Locale.US, "%.0f", target.normPercent)}%)",
+                                            color = Color.White.copy(alpha = 0.7f), fontSize = 13.sp
+                                        )
+                                        if (target.lastSessionResult != null) {
+                                            Spacer(Modifier.height(4.dp))
+                                            Text(
+                                                "Прошлый раз: ${target.lastSessionResult}",
+                                                color = Accent, fontSize = 12.sp, fontWeight = FontWeight.Medium
+                                            )
+                                        }
+                                    }
+                                    Box(
+                                        modifier = Modifier.size(24.dp).clip(RoundedCornerShape(12.dp))
+                                            .background(if (isSelected) Accent else TileBgDark),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        if (isSelected) Text("✓", color = Color(0xFF121212), fontWeight = FontWeight.Bold)
+                                    }
+                                }
                             }
                         }
-                        Spacer(Modifier.height(4.dp))
-                        Text(
-                            "Точность: ${String.format(Locale.US, "%.1f", target.currentPercent)}% (норма: ${String.format(Locale.US, "%.0f", target.normPercent)}%)",
-                            color = Color.White.copy(alpha = 0.7f), fontSize = 13.sp
-                        )
-                    }
-                    Box(
-                        modifier = Modifier.size(24.dp).clip(RoundedCornerShape(12.dp))
-                            .background(if (isSelected) Accent else TileBgDark),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        if (isSelected) Text("✓", color = Color(0xFF121212), fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -242,7 +325,7 @@ private fun ProblemSectorsGame(
     var showFinishDialog by remember { mutableStateOf(false) }
     var flashMiss by remember { mutableStateOf(false) }
     
-    // Храним результаты бросков: индекс цели и попал/не попал
+    // Храним результаты бросков: индекс цели, попал/не попал
     val allThrows = remember { mutableStateListOf<Pair<Int, Boolean>>() }
     
     val currentTargetIndex = allThrows.size / dartsPerTarget
@@ -470,7 +553,18 @@ private fun ProblemSectorsGame(
             } else {
                 Box(
                     modifier = Modifier.fillMaxWidth().height(60.dp).clip(RoundedCornerShape(14.dp))
-                        .background(Accent).clickable { showFinishDialog = true },
+                        .background(Accent).clickable { 
+                            // Сохраняем результаты перед показом диалога
+                            targets.forEachIndexed { idx, t ->
+                                val start = idx * dartsPerTarget
+                                val end = (start + dartsPerTarget).coerceAtMost(allThrows.size)
+                                val sessionThrows = allThrows.subList(start, end)
+                                val hits = sessionThrows.count { it.second }
+                                val total = sessionThrows.size
+                                ProblemSectorsStorage.saveSessionResult(context, t.name, hits, total)
+                            }
+                            showFinishDialog = true 
+                        },
                     contentAlignment = Alignment.Center
                 ) {
                     Text("ЗАВЕРШИТЬ", color = Color(0xFF121212), fontSize = 16.sp, fontWeight = FontWeight.Bold)
@@ -493,10 +587,26 @@ private fun ProblemSectorsGame(
             },
             title = { Text("Отработка завершена!", color = GoldAccent, fontSize = 20.sp, fontWeight = FontWeight.Bold) },
             text = {
-                Column {
-                    Text("Отличная работа. Эти сектора теперь помечены как пройденные.", color = Color.White, fontSize = 14.sp)
+                Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                    Text("Ваши результаты за эту отработку:", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
                     Spacer(Modifier.height(12.dp))
-                    Text("Помни: данные не идут в статистику. Следующие проблемные сектора появятся после сдачи экзамена и набора новой статистики.", color = Color.White.copy(alpha = 0.7f), fontSize = 13.sp, lineHeight = 18.sp)
+                    
+                    targets.forEachIndexed { idx, t ->
+                        val start = idx * dartsPerTarget
+                        val end = (start + dartsPerTarget).coerceAtMost(allThrows.size)
+                        val sessionThrows = allThrows.subList(start, end)
+                        val hits = sessionThrows.count { it.second }
+                        val total = sessionThrows.size
+                        val pct = if (total > 0) (hits.toFloat() / total * 100f) else 0f
+                        
+                        Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text(t.displayName, color = Color.White, fontSize = 14.sp)
+                            Text("$hits из $total (${String.format(Locale.US, "%.0f", pct)}%)", color = GoldAccent, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                    
+                    Spacer(Modifier.height(16.dp))
+                    Text("Помни: данные не идут в общую статистику. Следующие проблемные сектора появятся после сдачи экзамена и набора новой статистики.", color = Color.White.copy(alpha = 0.6f), fontSize = 12.sp, lineHeight = 16.sp)
                 }
             }
         )
