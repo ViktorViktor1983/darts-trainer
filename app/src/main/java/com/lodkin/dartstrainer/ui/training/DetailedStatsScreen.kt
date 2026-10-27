@@ -4,7 +4,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
@@ -24,6 +23,7 @@ import com.lodkin.dartstrainer.data.cricket.CricketGameEntity
 import com.lodkin.dartstrainer.data.cricket.CricketRepository
 import com.lodkin.dartstrainer.data.game501.Game501Entity
 import com.lodkin.dartstrainer.data.game501.Game501Repository
+import com.lodkin.dartstrainer.data.training.DartsNorms
 import com.lodkin.dartstrainer.data.training.MonthlyDartsStat
 import com.lodkin.dartstrainer.data.training.TrainingRepository
 import com.lodkin.dartstrainer.data.training.TrainingStatsAnalyzer
@@ -41,11 +41,20 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-/**
- * Экран «Подробная статистика».
- *
- * Хаб для просмотра детальной аналитики по всем дисциплинам.
- */
+private val StatusRed = Color(0xFFE57373)
+private val StatusYellow = Color(0xFFFFD54F)
+private val StatusGreen = Color(0xFF81C784)
+private val StatusGrey = Color.White.copy(alpha = 0.5f)
+
+private data class DisciplineCard(
+    val id: String,
+    val title: String,
+    val subText: String,
+    val textColor: Color,
+    val badgeCount: Int,
+    val status: Int // 0 - red, 1 - yellow, 2 - green, 3 - grey
+)
+
 @Composable
 fun DetailedStatsScreen(
     repository: TrainingRepository,
@@ -69,27 +78,35 @@ fun DetailedStatsScreen(
     var showProgressDialog by remember { mutableStateOf(false) }
     var showDartsDialog by remember { mutableStateOf(false) }
 
-    // ── Незавершённые партии ──
     var unfinished501 by remember { mutableStateOf<List<Game501Entity>>(emptyList()) }
     var unfinishedCricket by remember { mutableStateOf<List<CricketGameEntity>>(emptyList()) }
     var showUnfinishedDialog501 by remember { mutableStateOf(false) }
     var showUnfinishedDialogCricket by remember { mutableStateOf(false) }
     var reloadKey by remember { mutableStateOf(0) }
 
+    var avgSector20 by remember { mutableStateOf<Float?>(null) }
+    var avgScoreSet by remember { mutableStateOf<Float?>(null) }
+    var avgBigRound by remember { mutableStateOf<Float?>(null) }
+
     LaunchedEffect(reloadKey) {
-        val a = withContext(Dispatchers.IO) {
-            TrainingStatsAnalyzer.analyze(repository)
-        }
+        val a = withContext(Dispatchers.IO) { TrainingStatsAnalyzer.analyze(repository) }
         val td = withContext(Dispatchers.IO) { repository.getTotalDartsThrown() }
         val dw = withContext(Dispatchers.IO) { repository.getDartsThrownThisWeek() }
         val dm = withContext(Dispatchers.IO) { repository.getDartsByMonth() }
+
+        val s20Results = withContext(Dispatchers.IO) { repository.getAllExerciseResultsByExerciseId("sector20") }
+        val ssResults = withContext(Dispatchers.IO) { repository.getAllExerciseResultsByExerciseId("scoreset") }
+        val brResults = withContext(Dispatchers.IO) { repository.getAllExerciseResultsByExerciseId("biground") }
+
+        avgSector20 = if (s20Results.isNotEmpty()) s20Results.map { it.score }.average().toFloat() else null
+        avgScoreSet = if (ssResults.isNotEmpty()) ssResults.map { it.score }.average().toFloat() else null
+        avgBigRound = if (brResults.isNotEmpty()) brResults.map { it.score }.average().toFloat() else null
 
         analysis = a
         totalDarts = td
         dartsThisWeek = dw
         dartsByMonth = dm
 
-        // Загружаем незавершённые партии
         val ids501 = TrainingUnfinishedStorage.getUnfinished501(context)
         val allUnfinished501 = withContext(Dispatchers.IO) { game501Repository.getUnfinishedGames() }
         unfinished501 = allUnfinished501.filter { ids501.contains(it.id) }
@@ -235,96 +252,148 @@ fun DetailedStatsScreen(
             )
             Spacer(Modifier.height(10.dp))
 
-            // ── СПИСОК ДИСЦИПЛИН ──
-            val disciplines = listOf(
-                "game501" to "501",
-                "cricket" to "Крикет",
-                "sector20" to "Сектор 20",
-                "biground" to "Большой раунд",
-                "scoreset" to "Набор очков",
-                "aroundclock_sectors" to "Кругосветка: Сектора",
-                "aroundclock_doubles" to "Кругосветка: Удвоения",
-                "aroundclock_trebles" to "Кругосветка: Утроения"
-            )
+            // ── ПОДГОТОВКА СПИСКА С ЦВЕТАМИ И СОРТИРОВКОЙ ──
+            val currentLevel = a.level
+            val list = mutableListOf<DisciplineCard>()
 
-            disciplines.forEach { (id, title) ->
-                // Получаем краткую сводку для карточки
-                val summary = when (id) {
-                    "game501" -> a.avg501Ppr?.let { "Ср. PPR: ${String.format(Locale.US, "%.1f", it)} · ${a.count501Matches} партий" }
-                    "cricket" -> a.avgCricketMpr?.let { "Ср. MPR: ${String.format(Locale.US, "%.1f", it)} · ${a.countCricketMatches} партий" }
-                    else -> "Нажми для подробностей"
-                }
+            val ppr = a.avg501Ppr
+            val pprStatus = if (ppr != null) DartsNorms.getStatus(ppr, currentLevel, "game501") else 3
+            val pprColor = when(pprStatus) { 0 -> StatusRed; 1 -> StatusYellow; 2 -> StatusGreen; else -> StatusGrey }
+            list.add(DisciplineCard(
+                id = "game501", title = "501",
+                subText = if (ppr != null) "средний набор ${String.format(Locale.US, "%.1f", ppr)}" else "Нажми для подробностей",
+                textColor = pprColor, badgeCount = unfinished501.size, status = pprStatus
+            ))
 
-                // Считаем количество проблем для Кругосветок
-                val problemsCount = when (id) {
-                    "aroundclock_sectors" -> if (a.sectorsDataAvailable) a.worstSectors.size else 0
-                    "aroundclock_doubles" -> if (a.doublesDataAvailable) a.worstDoubles.size else 0
-                    "aroundclock_trebles" -> if (a.treblesDataAvailable) a.worstTrebles.size else 0
-                    else -> 0
-                }
+            val mpr = a.avgCricketMpr
+            val mprStatus = if (mpr != null) DartsNorms.getStatus(mpr, currentLevel, "cricket") else 3
+            val mprColor = when(mprStatus) { 0 -> StatusRed; 1 -> StatusYellow; 2 -> StatusGreen; else -> StatusGrey }
+            list.add(DisciplineCard(
+                id = "cricket", title = "Крикет",
+                subText = if (mpr != null) "средний набор ${String.format(Locale.US, "%.1f", mpr)}" else "Нажми для подробностей",
+                textColor = mprColor, badgeCount = unfinishedCricket.size, status = mprStatus
+            ))
 
-                // Считаем количество незавершённых партий для 501 и Крикета
-                val unfinishedCount = when (id) {
-                    "game501" -> unfinished501.size
-                    "cricket" -> unfinishedCricket.size
-                    else -> 0
-                }
+            val s20Status = if (avgSector20 != null) DartsNorms.getStatus(avgSector20!!, currentLevel, "sector20") else 3
+            val s20Color = when(s20Status) { 0 -> StatusRed; 1 -> StatusYellow; 2 -> StatusGreen; else -> StatusGrey }
+            list.add(DisciplineCard(
+                id = "sector20", title = "Сектор 20",
+                subText = if (avgSector20 != null) "${avgSector20!!.toInt()} очков" else "Нажми для подробностей",
+                textColor = s20Color, badgeCount = 0, status = s20Status
+            ))
 
+            val brStatus = if (avgBigRound != null) DartsNorms.getStatus(avgBigRound!!, currentLevel, "biground") else 3
+            val brColor = when(brStatus) { 0 -> StatusRed; 1 -> StatusYellow; 2 -> StatusGreen; else -> StatusGrey }
+            list.add(DisciplineCard(
+                id = "biground", title = "Большой раунд",
+                subText = if (avgBigRound != null) "${avgBigRound!!.toInt()} очков" else "Нажми для подробностей",
+                textColor = brColor, badgeCount = 0, status = brStatus
+            ))
+
+            val ssStatus = if (avgScoreSet != null) DartsNorms.getStatus(avgScoreSet!!, currentLevel, "scoreset") else 3
+            val ssColor = when(ssStatus) { 0 -> StatusRed; 1 -> StatusYellow; 2 -> StatusGreen; else -> StatusGrey }
+            list.add(DisciplineCard(
+                id = "scoreset", title = "Набор очков",
+                subText = if (avgScoreSet != null) "${avgScoreSet!!.toInt()} очков" else "Нажми для подробностей",
+                textColor = ssColor, badgeCount = 0, status = ssStatus
+            ))
+
+            val secPct = a.avgSectorsPercent
+            val secStatus = if (secPct != null) DartsNorms.getStatus(secPct, currentLevel, "aroundclock_sectors") else 3
+            val secColor = when(secStatus) { 0 -> StatusRed; 1 -> StatusYellow; 2 -> StatusGreen; else -> StatusGrey }
+            list.add(DisciplineCard(
+                id = "aroundclock_sectors", title = "Кругосветка: Сектора",
+                subText = if (secPct != null) "точность ${String.format(Locale.US, "%.0f", secPct)}%" else "Нажми для подробностей",
+                textColor = secColor, badgeCount = 0, status = secStatus
+            ))
+
+            val dblPct = a.avgDoublesPercent
+            val dblStatus = if (dblPct != null) DartsNorms.getStatus(dblPct, currentLevel, "aroundclock_doubles") else 3
+            val dblColor = when(dblStatus) { 0 -> StatusRed; 1 -> StatusYellow; 2 -> StatusGreen; else -> StatusGrey }
+            list.add(DisciplineCard(
+                id = "aroundclock_doubles", title = "Кругосветка: Удвоения",
+                subText = if (dblPct != null) "точность ${String.format(Locale.US, "%.0f", dblPct)}%" else "Нажми для подробностей",
+                textColor = dblColor, badgeCount = 0, status = dblStatus
+            ))
+
+            val trbPct = a.avgTreblesPercent
+            val trbStatus = if (trbPct != null) DartsNorms.getStatus(trbPct, currentLevel, "aroundclock_trebles") else 3
+            val trbColor = when(trbStatus) { 0 -> StatusRed; 1 -> StatusYellow; 2 -> StatusGreen; else -> StatusGrey }
+            list.add(DisciplineCard(
+                id = "aroundclock_trebles", title = "Кругосветка: Утроения",
+                subText = if (trbPct != null) "точность ${String.format(Locale.US, "%.0f", trbPct)}%" else "Нажми для подробностей",
+                textColor = trbColor, badgeCount = 0, status = trbStatus
+            ))
+
+            // Сортируем: 0 (Красные) -> 1 (Желтые) -> 2 (Зеленые) -> 3 (Серые)
+            val sortedList = list.sortedBy { it.status }
+
+            sortedList.forEach { discipline ->
                 Box(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(12.dp))
                             .background(TileBgDark)
-                            .clickable { onOpenDiscipline(id) }
+                            .clickable { onOpenDiscipline(discipline.id) }
                             .padding(16.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(title, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                                Text(discipline.title, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
                                 
-                                // Красный счетчик проблем
-                                if (problemsCount > 0) {
-                                    Spacer(Modifier.width(8.dp))
-                                    val word = when (problemsCount) {
-                                        1 -> "проблема"
-                                        2, 3, 4 -> "проблемы"
-                                        else -> "проблем"
+                                if (discipline.id.startsWith("aroundclock_")) {
+                                    val problemsCount = when (discipline.id) {
+                                        "aroundclock_sectors" -> if (a.sectorsDataAvailable) a.worstSectors.size else 0
+                                        "aroundclock_doubles" -> if (a.doublesDataAvailable) a.worstDoubles.size else 0
+                                        "aroundclock_trebles" -> if (a.treblesDataAvailable) a.worstTrebles.size else 0
+                                        else -> 0
                                     }
-                                    Text(
-                                        text = "$problemsCount $word",
-                                        color = Color(0xFFE57373),
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.Bold
-                                    )
+                                    if (problemsCount > 0) {
+                                        Spacer(Modifier.width(8.dp))
+                                        val word = when (problemsCount) {
+                                            1 -> "проблема"
+                                            2, 3, 4 -> "проблемы"
+                                            else -> "проблем"
+                                        }
+                                        Text(
+                                            text = "$problemsCount $word",
+                                            color = StatusRed,
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
                                 }
                             }
-                            if (summary != null) {
-                                Spacer(Modifier.height(4.dp))
-                                Text(summary, color = Color.White.copy(alpha = 0.5f), fontSize = 12.sp)
-                            }
+                            
+                            Spacer(Modifier.height(4.dp))
+                            Text(
+                                discipline.subText, 
+                                color = discipline.textColor, 
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Medium
+                            )
                         }
                         Text("▶", color = Accent, fontSize = 14.sp)
                     }
 
-                    // Значок незавершённой партии (в правом верхнем углу плашки)
-                    if (unfinishedCount > 0) {
+                    if (discipline.badgeCount > 0) {
                         Box(
                             modifier = Modifier
                                 .align(Alignment.TopEnd)
                                 .padding(8.dp)
                                 .clip(RoundedCornerShape(10.dp))
-                                .background(ErrorColor)
+                                .background(StatusRed)
                                 .clickable {
-                                    if (id == "game501") showUnfinishedDialog501 = true
-                                    if (id == "cricket") showUnfinishedDialogCricket = true
+                                    if (discipline.id == "game501") showUnfinishedDialog501 = true
+                                    if (discipline.id == "cricket") showUnfinishedDialogCricket = true
                                 }
                                 .padding(horizontal = 8.dp, vertical = 4.dp),
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
-                                "⏸ $unfinishedCount",
+                                "⏸ ${discipline.badgeCount}",
                                 color = Color.White,
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Bold
@@ -333,6 +402,7 @@ fun DetailedStatsScreen(
                     }
                 }
             }
+
             Spacer(Modifier.height(20.dp))
         }
     }
@@ -355,7 +425,6 @@ fun DetailedStatsScreen(
         )
     }
 
-    // ── ДИАЛОГИ НЕЗАВЕРШЁННЫХ ПАРТИЙ ──
     if (showUnfinishedDialog501) {
         UnfinishedDialog501(
             games = unfinished501,
@@ -582,7 +651,7 @@ private fun formatMonth(monthStr: String): String {
 }
 
 // ─────────────────────────────────────────────
-// ДИАЛОГИ НЕЗАВЕРШЁННЫХ ПАРТИЙ
+// ДИАЛОГИ НЕЗАВЕРШЁННЫХ ПАРТИЙ (скопированы из StatsMenuScreen)
 // ─────────────────────────────────────────────
 
 @Composable
