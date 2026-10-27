@@ -11,7 +11,8 @@ object SettingsStorage {
     private const val KEY_TRAININGS_PER_WEEK = "trainings_per_week"
     private const val KEY_TRAINING_MODE = "training_mode"
     private const val KEY_START_MODE = "start_mode"
-    private const val KEY_START_LEVEL = "start_level" // НОВОЕ ПОЛЕ
+    private const val KEY_START_LEVEL = "start_level"
+    private const val KEY_FAILED_EXAMS_STREAK = "failed_exams_streak" // НОВОЕ ПОЛЕ
 
     // Анкета пройдена или нет
     fun isOnboardingDone(context: Context): Boolean =
@@ -73,13 +74,23 @@ object SettingsStorage {
             .edit().putString(KEY_START_MODE, mode).apply()
     }
 
-    // НОВОЕ: Сохранение и загрузка выбранного стартового уровня (1-16)
+    // Сохранение и загрузка выбранного стартового уровня (1-16)
     fun getStartLevel(context: Context): Int =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .getInt(KEY_START_LEVEL, 7) // По умолчанию 7
+            .getInt(KEY_START_LEVEL, 7)
 
     fun setStartLevel(context: Context, level: Int) {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .edit().putInt(KEY_START_LEVEL, level).apply()
+    }
+
+    // Счётчик подряд идущих экзаменов, сданных ниже уровня
+    fun getFailedExamsStreak(context: Context): Int =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .getInt(KEY_FAILED_EXAMS_STREAK, 0)
+
+    fun setFailedExamsStreak(context: Context, count: Int) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .edit().putInt(KEY_FAILED_EXAMS_STREAK, count).apply()
     }
 }
