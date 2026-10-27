@@ -32,6 +32,7 @@ import kotlinx.coroutines.delay
 fun TrainingBlockScreen(
     exercises: List<PlannedExercise>,
     currentIndex: Int,
+    showTimer: Boolean,
     onStartCurrent: () -> Unit,
     onSkipCurrent: () -> Unit,
     onBack: () -> Unit
@@ -86,15 +87,14 @@ fun TrainingBlockScreen(
                 val isPast = index < currentIndex
                 val isFuture = index > currentIndex
 
-                // Если упражнение текущее, показываем превью (5 секунд) и затем таймер
                 if (isCurrent) {
                     CurrentExerciseCard(
                         exercise = exercise,
+                        showTimer = showTimer,
                         onFinish = onSkipCurrent,
                         onBack = onBack
                     )
                 } else {
-                    // Обычная карточка для прошлых/будущих упражнений
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -161,21 +161,24 @@ fun TrainingBlockScreen(
 @Composable
 private fun CurrentExerciseCard(
     exercise: PlannedExercise,
+    showTimer: Boolean,
     onFinish: () -> Unit,
     onBack: () -> Unit
 ) {
-    var showPreview by remember { mutableStateOf(true) }
+    var showPreview by remember { mutableStateOf(showTimer) }
     var previewTimeLeft by remember { mutableStateOf(5) }
+    var timerStarted by remember { mutableStateOf(false) }
 
-    // Определяем время для таймера (40 сек для мышц, 2 мин для дротиков)
-    val totalSeconds = if (exercise.id.startsWith("warm_darts")) {
-        2 * 60
-    } else {
-        40
+    // Определяем время для таймера
+    val totalSeconds = when {
+        exercise.id.startsWith("warm_darts") -> 2 * 60
+        exercise.id.startsWith("warm_") -> 40
+        else -> exercise.minutes * 60
     }
 
     // Логика превью (5 секунд)
     LaunchedEffect(Unit) {
+        if (!showTimer) return@LaunchedEffect
         previewTimeLeft = 5
         while (previewTimeLeft > 0) {
             delay(1000L)
@@ -203,7 +206,7 @@ private fun CurrentExerciseCard(
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    "1", // Индекс не передается, но визуально он текущий
+                    "1",
                     color = Color(0xFF121212),
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Bold
@@ -229,33 +232,37 @@ private fun CurrentExerciseCard(
 
         Spacer(Modifier.height(16.dp))
 
-        if (showPreview) {
-            Box(
-                modifier = Modifier.fillMaxWidth().height(120.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(
-                        "ПРИГОТОВЬСЯ",
-                        color = Accent,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 2.sp
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        "$previewTimeLeft",
-                        color = Color.White,
-                        fontSize = 48.sp,
-                        fontWeight = FontWeight.Bold
-                    )
+        if (showTimer) {
+            if (showPreview) {
+                Box(
+                    modifier = Modifier.fillMaxWidth().height(120.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            "ПРИГОТОВЬСЯ",
+                            color = Accent,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 2.sp
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            "$previewTimeLeft",
+                            color = Color.White,
+                            fontSize = 48.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
                 }
+            } else {
+                TrainingTimer(
+                    totalSeconds = totalSeconds,
+                    isStarted = timerStarted,
+                    onStart = { timerStarted = true },
+                    onFinish = onFinish
+                )
             }
-        } else {
-            TrainingTimer(
-                totalSeconds = totalSeconds,
-                onFinish = onFinish
-            )
         }
 
         Spacer(Modifier.height(16.dp))
@@ -269,15 +276,15 @@ private fun CurrentExerciseCard(
                     .weight(1f)
                     .height(48.dp)
                     .clip(RoundedCornerShape(12.dp))
-                    .background(TileBgDark)
-                    .clickable { onBack() },
+                    .background(Accent)
+                    .clickable { onStartCurrent() }, // Здесь вызов запуска игры, но для показателя "Начать" используем onStartCurrent
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    "НАЗАД",
-                    color = Color.White.copy(alpha = 0.7f),
+                    "НАЧАТЬ",
+                    color = Color(0xFF121212),
                     fontSize = 14.sp,
-                    fontWeight = FontWeight.Medium
+                    fontWeight = FontWeight.Bold
                 )
             }
             Box(
@@ -303,10 +310,12 @@ private fun CurrentExerciseCard(
 @Composable
 private fun TrainingTimer(
     totalSeconds: Int,
+    isStarted: Boolean,
+    onStart: () -> Unit,
     onFinish: () -> Unit
 ) {
     var timeLeft by remember { mutableStateOf(totalSeconds) }
-    var isRunning by remember { mutableStateOf(true) }
+    var isRunning by remember { mutableStateOf(isStarted) }
 
     LaunchedEffect(isRunning, totalSeconds) {
         if (isRunning) {
@@ -373,11 +382,18 @@ private fun TrainingTimer(
             .height(48.dp)
             .clip(RoundedCornerShape(12.dp))
             .background(if (isRunning) TileBgDark else Accent)
-            .clickable { isRunning = !isRunning },
+            .clickable { 
+                if (!isStarted) {
+                    onStart()
+                    isRunning = true
+                } else {
+                    isRunning = !isRunning 
+                }
+            },
         contentAlignment = Alignment.Center
     ) {
         Text(
-            text = if (isRunning) "ПАУЗА" else "ПРОДОЛЖИТЬ",
+            text = if (isRunning) "ПАУЗА" else if (!isStarted) "ЗАПУСТИТЬ ТАЙМЕР" else "ПРОДОЛЖИТЬ",
             color = if (isRunning) Color.White else Color(0xFF121212),
             fontSize = 14.sp,
             fontWeight = FontWeight.Bold
