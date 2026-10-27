@@ -12,9 +12,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.lodkin.dartstrainer.data.SettingsStorage
 import com.lodkin.dartstrainer.data.aroundclock.AroundClockTarget
 import com.lodkin.dartstrainer.data.training.DartsNorms
 import com.lodkin.dartstrainer.data.training.TrainingRepository
@@ -38,6 +40,7 @@ fun TrainingProgressScreen(
     repository: TrainingRepository,
     onBack: () -> Unit
 ) {
+    val context = LocalContext.current
     var analysis by remember { mutableStateOf<TrainingStatsAnalyzer.TrainingAnalysis?>(null) }
     var loading by remember { mutableStateOf(true) }
 
@@ -45,7 +48,9 @@ fun TrainingProgressScreen(
     var showCheckouts by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
-        analysis = TrainingStatsAnalyzer.analyze(repository)
+        analysis = withContext(Dispatchers.IO) {
+            TrainingStatsAnalyzer.analyze(repository)
+        }
         checkoutsMap = withContext(Dispatchers.IO) {
             repository.getAllCheckouts()
         }
@@ -130,7 +135,12 @@ fun TrainingProgressScreen(
                 Spacer(Modifier.height(16.dp))
             }
 
-            FinalLevelBlock(a)
+            // Определяем, что показывать: стартовый уровень или расчетный
+            val savedStartLevel = SettingsStorage.getStartLevel(context)
+            val isStartLevel = a.dataPointsCount == 0
+            val displayLevel = if (isStartLevel) savedStartLevel else a.level
+
+            FinalLevelBlock(level = displayLevel, isStartLevel = isStartLevel, potential = a.potential)
             Spacer(Modifier.height(16.dp))
 
             if (a.gamesLagBehind || a.exercisesLagBehind) {
@@ -312,6 +322,70 @@ fun TrainingProgressScreen(
     }
 }
 
+@Composable
+private fun FinalLevelBlock(level: Int, isStartLevel: Boolean, potential: Int) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(TileBg)
+            .padding(16.dp)
+    ) {
+        Text(
+            "ТВОЙ УРОВЕНЬ",
+            color = Accent,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Bold,
+            letterSpacing = 2.sp
+        )
+        Spacer(Modifier.height(10.dp))
+
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                "$level",
+                color = GoldAccent,
+                fontSize = 42.sp,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(Modifier.width(12.dp))
+            Column {
+                Text(
+                    DartsNorms.getLevelName(level),
+                    color = Color.White,
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Medium
+                )
+                if (isStartLevel) {
+                    Text(
+                        "(стартовый уровень)",
+                        color = Color.White.copy(alpha = 0.5f),
+                        fontSize = 12.sp
+                    )
+                }
+            }
+        }
+
+        Spacer(Modifier.height(10.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(
+                "Потенциал",
+                color = Color.White.copy(alpha = 0.6f),
+                fontSize = 13.sp
+            )
+            Text(
+                "$potential",
+                color = Accent,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
+    }
+}
+
 /**
  * Блок «Худшие сектора/удвоения/утроения».
  */
@@ -441,61 +515,6 @@ private fun sectorName(sector: Int, target: AroundClockTarget): String {
         AroundClockTarget.SINGLE -> "Сектор $sector"
         AroundClockTarget.DOUBLE -> "Удвоение D$sector"
         AroundClockTarget.TRIPLE -> "Утроение T$sector"
-    }
-}
-
-@Composable
-private fun FinalLevelBlock(a: TrainingStatsAnalyzer.TrainingAnalysis) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .background(TileBg)
-            .padding(16.dp)
-    ) {
-        Text(
-            "ТВОЙ УРОВЕНЬ",
-            color = Accent,
-            fontSize = 12.sp,
-            fontWeight = FontWeight.Bold,
-            letterSpacing = 2.sp
-        )
-        Spacer(Modifier.height(10.dp))
-
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                "${a.level}",
-                color = GoldAccent,
-                fontSize = 42.sp,
-                fontWeight = FontWeight.Bold
-            )
-            Spacer(Modifier.width(12.dp))
-            Text(
-                DartsNorms.getLevelName(a.level),
-                color = Color.White,
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Medium
-            )
-        }
-
-        Spacer(Modifier.height(10.dp))
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Text(
-                "Потенциал",
-                color = Color.White.copy(alpha = 0.6f),
-                fontSize = 13.sp
-            )
-            Text(
-                "${a.potential}",
-                color = Accent,
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Bold
-            )
-        }
     }
 }
 
