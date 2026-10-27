@@ -5,29 +5,6 @@ import kotlin.math.roundToInt
 
 /**
  * Генератор программы тренировки на день.
- *
- * Правила (согласованы с автором):
- *   1. Максимум 1 тяжёлое упражнение за тренировку (кроме вводного режима).
- *   2. Первые 3 тренировки — вводный режим без тяжёлых упражнений.
- *   3. Первые 5 тренировок — сортировка по возрастанию тяжести.
- *   4. Учитывается слабое место (первое упражнение — на слабое).
- *   5. Учитывается реальный темп игрока (avgMinutesByExercise).
- *   6. Свободный режим (ignoreHardLimit = true) — все 8 упражнений, без ограничений.
- *   7. Точечная работа (targeted_practice): если есть проблемные сектора и
- *      её ещё не было в этом периоде — ставится первым упражнением.
- *
- * Шкала тяжести (от лёгкого к тяжёлому, 1 = самое лёгкое):
- *   1 — Крикет
- *   2 — 501
- *   3 — Кругосветка: Сектора
- *   4 — Набор очков
- *   5 — Точечная работа (targeted_practice)
- *   6 — Сектор 20
- *   7 — Большой раунд
- *   8 — Кругосветка: Удвоения
- *   9 — Кругосветка: Утроения
- *
- * Порог «тяжёлое»: difficulty >= 7.
  */
 object TrainingPlanner {
 
@@ -75,13 +52,8 @@ object TrainingPlanner {
         val focusHint: String? = null
     )
 
-    /** Пороговое количество тренировок для «вводного режима». */
     private const val INTRO_TRAININGS_COUNT = 5
-
-    /** Пороговое количество тренировок, до которого запрещены тяжёлые. */
     private const val INTRO_NO_HARD_COUNT = 3
-
-    /** Порог, с которого упражнение считается тяжёлым. */
     private const val HARD_DIFFICULTY = 7
 
     /**
@@ -93,6 +65,7 @@ object TrainingPlanner {
         "aroundclock_sectors" -> 3
         "scoreset" -> 4
         "targeted_practice" -> 5
+        "problem_sectors" -> 5 // Добавили
         "sector20" -> 6
         "biground" -> 7
         "aroundclock_doubles" -> 8
@@ -100,9 +73,6 @@ object TrainingPlanner {
         else -> 5
     }
 
-    /**
-     * Сколько секунд отдыха после упражнения.
-     */
     fun restSecondsAfter(id: String): Int {
         val d = difficultyOf(id)
         return when {
@@ -113,7 +83,7 @@ object TrainingPlanner {
     }
 
     // ─────────────────────────────────────────────
-    // ГЛАВНАЯ ФУНКЦИЯ
+    // ГЛАВНАЯ ФУНКЦИЯ (тренировка по времени)
     // ─────────────────────────────────────────────
 
     fun buildPlan(
@@ -130,7 +100,6 @@ object TrainingPlanner {
         val blocks = mutableListOf<TrainingBlock>()
         var remaining = minutes
 
-        // ── РАЗМИНКА (НОВАЯ ЛОГИКА) ──
         val warmupExercises = getWarmupBlockItems()
         warmupExercises.forEach { ex ->
             blocks.add(
@@ -209,9 +178,6 @@ object TrainingPlanner {
     // ДИНАМИЧЕСКИЙ ВЫБОР УПРАЖНЕНИЙ ОСНОВНОЙ ЧАСТИ
     // ─────────────────────────────────────────────
 
-    /**
-     * Подобрать упражнения основной части на день.
-     */
     fun buildDynamicMainExerciseIds(
         analysis: TrainingStatsAnalyzer.TrainingAnalysis,
         budgetMinutes: Int,
@@ -223,61 +189,30 @@ object TrainingPlanner {
         val isIntroductory = !ignoreHardLimit && completedTrainingCount < INTRO_TRAININGS_COUNT
         val noHardAllowed = !ignoreHardLimit && completedTrainingCount < INTRO_NO_HARD_COUNT
 
-        // Порядок предпочтения по слабому месту
+        // Порядок предпочтения по слабому месту (ДОБАВИЛИ problem_sectors)
         val preferenceOrder: List<String> = when (analysis.weakestType) {
             WeaknessType.DOUBLES -> listOf(
-                "aroundclock_doubles",
-                "game501",
-                "biground",
-                "sector20",
-                "scoreset",
-                "aroundclock_sectors",
-                "aroundclock_trebles",
-                "cricket"
+                "aroundclock_doubles", "game501", "biground", "sector20", "scoreset",
+                "aroundclock_sectors", "aroundclock_trebles", "cricket", "problem_sectors"
             )
             WeaknessType.SCORE -> listOf(
-                "sector20",
-                "game501",
-                "scoreset",
-                "biground",
-                "aroundclock_doubles",
-                "aroundclock_sectors",
-                "aroundclock_trebles",
-                "cricket"
+                "sector20", "game501", "scoreset", "biground", "aroundclock_doubles",
+                "aroundclock_sectors", "aroundclock_trebles", "cricket", "problem_sectors"
             )
             WeaknessType.ACCURACY -> listOf(
-                "aroundclock_sectors",
-                "cricket",
-                "biground",
-                "sector20",
-                "aroundclock_trebles",
-                "scoreset",
-                "aroundclock_doubles",
-                "game501"
+                "aroundclock_sectors", "cricket", "biground", "sector20", "aroundclock_trebles",
+                "scoreset", "aroundclock_doubles", "game501", "problem_sectors"
             )
             WeaknessType.TREBLES -> listOf(
-                "aroundclock_trebles",
-                "cricket",
-                "biground",
-                "aroundclock_sectors",
-                "sector20",
-                "scoreset",
-                "aroundclock_doubles",
-                "game501"
+                "aroundclock_trebles", "cricket", "biground", "aroundclock_sectors", "sector20",
+                "scoreset", "aroundclock_doubles", "game501", "problem_sectors"
             )
             null -> listOf(
-                "aroundclock_doubles",
-                "sector20",
-                "aroundclock_sectors",
-                "scoreset",
-                "biground",
-                "aroundclock_trebles",
-                "game501",
-                "cricket"
+                "aroundclock_doubles", "sector20", "aroundclock_sectors", "scoreset", "biground",
+                "aroundclock_trebles", "game501", "cricket", "problem_sectors"
             )
         }
 
-        // ── Порядок упражнений ──
         val orderedIds: List<String> = if (isIntroductory) {
             val games = listOf("game501", "cricket")
             val others = preferenceOrder.filter { it !in games }
@@ -287,7 +222,6 @@ object TrainingPlanner {
             preferenceOrder
         }
 
-        // ── Максимально допустимая тяжесть ──
         val maxAllowedDifficulty: Int = when {
             ignoreHardLimit -> 9
             completedTrainingCount < 2 -> 3
@@ -305,6 +239,7 @@ object TrainingPlanner {
             "game501" -> 18
             "cricket" -> 12
             "targeted_practice" -> 15
+            "problem_sectors" -> 15 // Добавили
             else -> 10
         }
 
@@ -314,14 +249,12 @@ object TrainingPlanner {
             return value.coerceAtLeast(3)
         }
 
-        // ── Набор с правилами ──
         var remaining = budgetMinutes
         val result = mutableListOf<PlannedDynamicExercise>()
         var hardCount = 0
 
-        // 1. Точечная работа (если есть цели и её ещё не было в этом периоде)
+        // 1. Точечная работа
         if (analysis.targetPracticeGoals.isNotEmpty() && !analysis.hasTargetedPracticeThisPeriod) {
-            // Примерно 2 минуты на каждую цель (15 дротиков = 5 подходов)
             val tpMinutes = (analysis.targetPracticeGoals.size * 2).coerceIn(5, 15)
             if (tpMinutes <= remaining) {
                 result.add(PlannedDynamicExercise("targeted_practice", tpMinutes))
@@ -329,14 +262,11 @@ object TrainingPlanner {
             }
         }
 
-        // 2. Остальные упражнения по плану
+        // 2. Остальные упражнения
         for (id in orderedIds) {
             val diff = difficultyOf(id)
-
-            // Фильтр по максимально допустимой тяжести (вводный режим)
             if (diff > maxAllowedDifficulty) continue
 
-            // Правило: максимум 1 тяжёлое (кроме вводного и свободного)
             val isHard = diff >= HARD_DIFFICULTY
             if (isHard && noHardAllowed) continue
             if (isHard && hardCount >= 1 && !ignoreHardLimit) continue
@@ -353,9 +283,6 @@ object TrainingPlanner {
         return result
     }
 
-    /**
-     * Формирует подсказку-фокус для упражнения на основе худших секторов.
-     */
     private fun buildFocusHint(id: String, analysis: TrainingStatsAnalyzer.TrainingAnalysis): String? {
         return when (id) {
             "aroundclock_doubles" -> {
@@ -442,16 +369,11 @@ object TrainingPlanner {
 
     private fun buildGameDescription(focus: WeaknessType?): String {
         return when (focus) {
-            WeaknessType.DOUBLES ->
-                "Рекомендуем 501 — партия упирается в дабл, это закрепит тренировку."
-            WeaknessType.SCORE ->
-                "Рекомендуем Крикет — утроения T15–T20 и Bull подтянут набор."
-            WeaknessType.ACCURACY ->
-                "Рекомендуем 501 — точность выхода на дабл решает исход партии."
-            WeaknessType.TREBLES ->
-                "Рекомендуем Крикет — работа на утроения."
-            null ->
-                "Выбирай любую из 6 игр — просто играй в удовольствие."
+            WeaknessType.DOUBLES -> "Рекомендуем 501 — партия упирается в дабл, это закрепит тренировку."
+            WeaknessType.SCORE -> "Рекомендуем Крикет — утроения T15–T20 и Bull подтянут набор."
+            WeaknessType.ACCURACY -> "Рекомендуем 501 — точность выхода на дабл решает исход партии."
+            WeaknessType.TREBLES -> "Рекомендуем Крикет — работа на утроения."
+            null -> "Выбирай любую из 6 игр — просто играй в удовольствие."
         }
     }
 
@@ -462,7 +384,6 @@ object TrainingPlanner {
     private fun buildControlPlan(minutes: Int): TrainingPlan {
         val blocks = mutableListOf<TrainingBlock>()
 
-        // Разминка (используем новую логику)
         val warmupExercises = getWarmupBlockItems()
         warmupExercises.forEach { ex ->
             blocks.add(
