@@ -13,9 +13,11 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -59,6 +61,7 @@ import com.lodkin.dartstrainer.data.training.BlockType
 import com.lodkin.dartstrainer.data.training.DartsNorms
 import com.lodkin.dartstrainer.data.training.ExerciseResult
 import com.lodkin.dartstrainer.data.training.InventoryStorage
+import com.lodkin.dartstrainer.data.training.LevelCalculator
 import com.lodkin.dartstrainer.data.training.NormativesStateStorage
 import com.lodkin.dartstrainer.data.training.ProblemSectorsStorage
 import com.lodkin.dartstrainer.data.training.TrainingBlocksStorage
@@ -80,9 +83,12 @@ import com.lodkin.dartstrainer.ui.*
 import com.lodkin.dartstrainer.ui.about.AboutScreen
 import com.lodkin.dartstrainer.ui.online.OnlineLobbyScreen
 import com.lodkin.dartstrainer.ui.training.*
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.util.Locale
+import kotlin.math.roundToInt
 import kotlin.random.Random
 
 private const val TRAINING_AUTO_OK_SECONDS = 3
@@ -234,6 +240,7 @@ fun DartsTrainerApp() {
     var showExitTrainingDialog by remember { mutableStateOf(false) }
     var showBullDraw by remember { mutableStateOf(false) }
     var bullDrawExerciseId by remember { mutableStateOf<String?>(null) }
+    var examResultMessage by remember { mutableStateOf<String?>(null) } // НОВЫЙ СТЕЙТ ДЛЯ СООБЩЕНИЯ
 
     // ── СТЕЙТЫ НОРМАТИВОВ ──
     var normativesAvailable by remember { mutableStateOf(false) }
@@ -389,8 +396,7 @@ fun DartsTrainerApp() {
 
     fun startNewNormatives() {
         scope.launch {
-            val analysis = TrainingStatsAnalyzer.analyze(trainingRepository)
-            val startLvl = analysis.level.coerceAtLeast(1)
+            val startLvl = SettingsStorage.getStartLevel(context)
             normativesStartLevel = startLvl
 
             val session = TrainingSession(
@@ -417,21 +423,66 @@ fun DartsTrainerApp() {
 
     fun evaluateAndFinishNormatives() {
         scope.launch {
-            val analysis = TrainingStatsAnalyzer.analyze(trainingRepository)
-            val newLvl = analysis.level; val startLvl = normativesStartLevel
-            normativesNewLevel = if (newLvl > startLvl) newLvl else startLvl
+            // 1. Получаем последние результаты по 5 дисциплинам
+            val res501 = withContext(Dispatchers.IO) { trainingRepository.getLatestExerciseResults("game501", 1) }.firstOrNull()
+            val resCricket = withContext(Dispatchers.IO) { trainingRepository.getLatestExerciseResults("cricket", 1) }.firstOrNull()
+            val resS20 = withContext(Dispatchers.IO) { trainingRepository.getLatestExerciseResults("sector20", 1) }.firstOrNull()
+            val resBR = withContext(Dispatchers.IO) { trainingRepository.getLatestExerciseResults("biground", 1) }.firstOrNull()
+            val resSS = withContext(Dispatchers.IO) { trainingRepository.getLatestExerciseResults("scoreset", 1) }.firstOrNull()
 
-            if (newLvl > startLvl) {
-                // СОХРАНЯЕМ НОВЫЙ УРОВЕНЬ
-                SettingsStorage.setStartLevel(context, newLvl)
-                
-                trainingRepository.clearStatisticsAfterNormatives()
-                TrainingStateStorage.clear(context); NormativesStateStorage.clear(context)
-                ProblemSectorsStorage.clear(context) // Очищаем пройденные сектора при экзамене
+            // 2. Извлекаем значения
+            val ppr = res501?.let { parseDetails(it.detailsJson)["ppr"]?.toFloatOrNull() } ?: 0f
+            val mpr = resCricket?.let { parseDetails(it.detailsJson)["mpr"]?.toFloatOrNull() } ?: 0f
+            val s20 = resS20?.score ?: 0
+            val br = resBR?.score ?: 0
+            val ss = resSS?.score ?: 0
+
+            // 3. Считаем уровень по НОВОЙ формуле
+            val newLvl = LevelCalculator.calculateExamLevel(ppr, mpr, s20, br, ss)
+            val currentLvl = SettingsStorage.getStartLevel(context)
+            val failedStreak = SettingsStorage.getFailedExamsStreak(context)
+            
+            var finalLvl = currentLvl
+            var message = ""
+            var newStreak = failedStreak
+
+            // 4. Логика повышения / подтверждения / понижения
+            if (newLvl > currentLvl) {
+                finalLvl = newLvl
+                newStreak = 0
+                message = "🏆 Отличная работа! Ты сдал экзамен на уровень ${DartsNorms.getLevelName(newLvl)}. Твой новый уровень: $newLvl."
+            } else if (newLvl == currentLvl) {
+                newStreak = 0
+                message = "✅ Экзамен сдан! Ты подтвердил свой уровень: ${DartsNorms.getLevelName(currentLvl)}."
             } else {
-                NormativesStateStorage.clear(context)
+                // Сдали хуже
+                newStreak += 1
+                if (newStreak >= 2) {
+                    finalLvl = (currentLvl - 1).coerceAtLeast(1)
+                    newStreak = 0
+                    message = "⚠️ Это уже второй экзамен подряд ниже твоего уровня. Увы, но мы вынуждены понизить твой уровень до ${DartsNorms.getLevelName(finalLvl)}. Не расстраивайся, ты обязательно вернёшь его обратно!"
+                } else {
+                    message = "Экзамен сдан ниже твоего текущего уровня. Но мы знаем, что дартс — игра дисперсии. Мы оставляем твой уровень прежним. Но если следующий экзамен будет тоже ниже, мы будем вынуждены понизить его на 1."
+                }
             }
-            isTrainingActive = false; trainingSessionId = 0L; normativesActive = false; isNormativesExercise = false; screen = "normatives"
+
+            // 5. Сохраняем уровень и стрик
+            SettingsStorage.setStartLevel(context, finalLvl)
+            SettingsStorage.setFailedExamsStreak(context, newStreak)
+
+            // 6. ВСЕГДА обнуляем статистику (начинаем новый период)
+            trainingRepository.clearStatisticsAfterNormatives()
+            TrainingStateStorage.clear(context)
+            NormativesStateStorage.clear(context)
+            ProblemSectorsStorage.clear(context)
+
+            isTrainingActive = false
+            trainingSessionId = 0L
+            normativesActive = false
+            isNormativesExercise = false
+            normativesNewLevel = finalLvl
+            examResultMessage = message // Показываем диалог с текстом
+            screen = "normatives"
         }
     }
 
@@ -505,6 +556,7 @@ fun DartsTrainerApp() {
         normativesCricketPlayerWins = 0; normativesCricketBotWins = 0; normativesCricketCurrentLeg = 0; normativesNewLevel = null
         isNormativesExercise = false; currentWeakness = null; currentLevel = 1; currentTargetGoals = emptyList()
         isResumingFromStats = false
+        examResultMessage = null
     }
 
     fun activePhases(): List<TrainingBlockPhase> {
@@ -602,7 +654,7 @@ fun DartsTrainerApp() {
                 SettingsStorage.setTrainingsPerWeek(context, result.trainingsPerWeek)
                 SettingsStorage.setTrainingMode(context, result.trainingMode)
                 SettingsStorage.setStartMode(context, result.startMode)
-                SettingsStorage.setStartLevel(context, result.startLevel) // СОХРАНЯЕМ УРОВЕНЬ
+                SettingsStorage.setStartLevel(context, result.startLevel)
                 SettingsStorage.setOnboardingDone(context)
                 onboardingDone = true
                 stage = "main"
@@ -637,7 +689,6 @@ fun DartsTrainerApp() {
                     onOnlineClick = { screen = "online_lobby" }
                 )
 
-                // ЭКРАН ОНЛАЙН-ЛОББИ
                 "online_lobby" -> {
                     OnlineLobbyScreen(
                         onBack = { screen = "main" },
@@ -708,7 +759,6 @@ fun DartsTrainerApp() {
                 
                 "discipline_stats" -> DisciplineStatsScreen(repository = trainingRepository, disciplineId = selectedDiscipline ?: "game501", onBack = { screen = "detailed_stats" })
 
-                // --- СТАТИСТИКА ---
                 "stats_menu", "stats_cricket", "stats_501", "sector_stats", "aroundclock_stats", "biground_stats", "scoreset_stats" -> {
                     StatsRoutes(
                         screen = screen, onScreenChange = { screen = it },
@@ -720,7 +770,6 @@ fun DartsTrainerApp() {
                     )
                 }
 
-                // --- ИГРЫ ---
                 "game_select", "cricket_setup", "cricket_game", "cricket_stats", "game501_setup", "game501_game", "game501_stats",
                 "sector_setup", "sector_game", "aroundclock_setup", "aroundclock_game", "biground_setup", "biground_game", "scoreset_setup", "scoreset_game" -> {
                     GameRoutes(
@@ -749,7 +798,6 @@ fun DartsTrainerApp() {
                     )
                 }
 
-                // --- ТРЕНИРОВКА ---
                 "training", "training_settings", "training_progress", "training_warmup", "training_block", "training_exercise",
                 "training_summary", "training_free_next", "training_free_summary", "normatives", "normatives_exercise" -> {
                     TrainingRoutes(
@@ -911,7 +959,6 @@ fun DartsTrainerApp() {
             }
         }
 
-        // Оверлеи (таймер и отдых)
         if (isTrainingActive && screen in TRAINING_SCREENS && !showRestTimer && screen != "training_free_summary" && !normativesActive) {
             TrainingTimerOverlay(
                 secondsLeft = if (isFreeTraining) trainingElapsedSeconds else (trainingMinutes * 60 - trainingElapsedSeconds),
@@ -920,6 +967,21 @@ fun DartsTrainerApp() {
         }
         if (showRestTimer) {
             RestTimerOverlay(totalSeconds = restTimerSeconds, nextExerciseTitle = restNextTitle, onSkip = { showRestTimer = false; val step = pendingNextStep; pendingNextStep = null; restNextTitle = null; step?.invoke() })
+        }
+        
+        // Показ результата экзамена
+        if (examResultMessage != null) {
+            AlertDialog(
+                onDismissRequest = { examResultMessage = null },
+                containerColor = TileBgDark,
+                confirmButton = {
+                    TextButton(onClick = { examResultMessage = null }) {
+                        Text("ОК", color = Accent, fontWeight = FontWeight.Bold)
+                    }
+                },
+                title = { Text("Результат экзамена", color = GoldAccent, fontSize = 20.sp, fontWeight = FontWeight.Bold) },
+                text = { Text(examResultMessage!!, color = Color.White, fontSize = 15.sp, lineHeight = 22.sp) }
+            )
         }
     }
 
@@ -987,4 +1049,15 @@ fun DartsTrainerApp() {
             }
         }, onNormativesResumeRestart = { NormativesStateStorage.clear(context); showResumeNormativesDialog = false; pendingNormativesResume = null }
     )
+}
+
+// ─────────────────────────────────────────────
+// ВСПОМОГАТЕЛЬНАЯ ФУНКЦИЯ ДЛЯ ПАРСИНГА detailsJson
+// ─────────────────────────────────────────────
+private fun parseDetails(s: String): Map<String, String> {
+    if (s.isBlank()) return emptyMap()
+    return s.split(";").mapNotNull { entry ->
+        val parts = entry.split("=", limit = 2)
+        if (parts.size == 2) parts[0].trim() to parts[1].trim() else null
+    }.toMap()
 }
