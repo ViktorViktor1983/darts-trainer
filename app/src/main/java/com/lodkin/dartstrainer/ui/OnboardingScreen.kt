@@ -20,6 +20,7 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.lodkin.dartstrainer.data.training.DartsNorms
 import com.lodkin.dartstrainer.theme.Accent
 import com.lodkin.dartstrainer.theme.GoldAccent
 import com.lodkin.dartstrainer.theme.TileBg
@@ -30,7 +31,8 @@ data class OnboardingResult(
     val trainingMinutes: Int,
     val trainingsPerWeek: Int,
     val trainingMode: String,
-    val startMode: String
+    val startMode: String, // Оставляем для совместимости
+    val startLevel: Int
 )
 
 @Composable
@@ -40,7 +42,7 @@ fun OnboardingScreen(onFinish: (OnboardingResult) -> Unit) {
     var trainingMinutes by remember { mutableStateOf(60) }
     var trainingsPerWeek by remember { mutableStateOf(3) }
     var trainingMode by remember { mutableStateOf("flexible") }
-    var startMode by remember { mutableStateOf("start") }
+    var startLevel by remember { mutableStateOf(7) } // По умолчанию 7 (Разрядник)
 
     Column(
         modifier = Modifier
@@ -64,7 +66,6 @@ fun OnboardingScreen(onFinish: (OnboardingResult) -> Unit) {
             modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)
         )
 
-        // Область с прокруткой + подсказка
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -88,12 +89,11 @@ fun OnboardingScreen(onFinish: (OnboardingResult) -> Unit) {
                     2 -> StepTime(trainingMinutes) { trainingMinutes = it }
                     3 -> StepWeek(trainingsPerWeek) { trainingsPerWeek = it }
                     4 -> StepMode(trainingMode) { trainingMode = it }
-                    5 -> StepStart(startMode) { startMode = it }
+                    5 -> StepStart(startLevel) { startLevel = it }
                 }
                 Spacer(Modifier.height(20.dp))
             }
 
-            // Подсказка «прокрутите вниз» — исчезает, когда доскроллили
             if (!atBottom) {
                 Box(
                     modifier = Modifier
@@ -106,7 +106,7 @@ fun OnboardingScreen(onFinish: (OnboardingResult) -> Unit) {
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        "↓  Листайте, чтобы увидеть все варианты",
+                        "↓  Листайте, чтобы увидеть все уровни",
                         color = Color(0xFF121212),
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Bold
@@ -155,7 +155,8 @@ fun OnboardingScreen(onFinish: (OnboardingResult) -> Unit) {
                                     trainingMinutes = trainingMinutes,
                                     trainingsPerWeek = trainingsPerWeek,
                                     trainingMode = trainingMode,
-                                    startMode = startMode
+                                    startMode = "self", // Принудительно ставим "self"
+                                    startLevel = startLevel
                                 )
                             )
                         }
@@ -366,49 +367,52 @@ private fun StepMode(current: String, onChange: (String) -> Unit) {
 }
 
 @Composable
-private fun StepStart(current: String, onChange: (String) -> Unit) {
+private fun StepStart(startLevel: Int, onLevelChange: (Int) -> Unit) {
     Text(
-        "Как определить уровень?",
+        "Выберите свой уровень",
         fontSize = 22.sp,
         fontWeight = FontWeight.Bold,
         color = Color.White,
         modifier = Modifier.padding(bottom = 8.dp)
     )
     Text(
-        "Можно не проходить тест — уровень уточнится сам за 3–5 тренировок.",
+        "Программа будет подбирать упражнения и ботов, опираясь на этот уровень. Позже он может измениться, когда наберется достаточно статистики.",
         fontSize = 14.sp,
         color = Accent,
+        lineHeight = 18.sp,
         modifier = Modifier.padding(bottom = 16.dp)
     )
 
-    ModeCard(
-        title = "Быстрая проверка",
-        description = "15–20 минут упражнений — первое приближение к уровню.",
-        pros = "Программа сразу ближе к вам",
-        cons = "Результат одной тренировки неточен",
-        selected = current == "test",
-        onClick = { onChange("test") }
-    )
-    Spacer(Modifier.height(12.dp))
-
-    ModeCard(
-        title = "Стартовая программа (рекомендуется)",
-        description = "Начинаете со стартовой. Уровень определится сам за 3–5 тренировок.",
-        pros = "Мягкое начало, без стресса",
-        cons = "Первые тренировки легковатые",
-        selected = current == "start",
-        onClick = { onChange("start") }
-    )
-    Spacer(Modifier.height(12.dp))
-
-    ModeCard(
-        title = "Оценить себя",
-        description = "Скажете свой уровень сами: новичок, любитель, разрядник, профи.",
-        pros = "Мгновенно",
-        cons = "Самооценка может быть неточной",
-        selected = current == "self",
-        onClick = { onChange("self") }
-    )
+    Column {
+        DartsNorms.levels.chunked(2).forEach { row ->
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                row.forEach { norm ->
+                    val isSel = startLevel == norm.level
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(vertical = 4.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(if (isSel) Accent else TileBgDark)
+                            .clickable { onLevelChange(norm.level) }
+                            .padding(vertical = 12.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                "${norm.level}. ${norm.name}",
+                                color = if (isSel) Color(0xFF121212) else Color.White,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 14.sp,
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                    }
+                }
+                if (row.size == 1) Spacer(Modifier.weight(1f))
+            }
+        }
+    }
 }
 
 @Composable
