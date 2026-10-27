@@ -11,6 +11,7 @@ object SettingsStorage {
     private const val KEY_TRAININGS_PER_WEEK = "trainings_per_week"
     private const val KEY_TRAINING_MODE = "training_mode"
     private const val KEY_START_MODE = "start_mode"
+    private const val KEY_START_LEVEL = "start_level" // НОВОЕ ПОЛЕ
 
     // Анкета пройдена или нет
     fun isOnboardingDone(context: Context): Boolean =
@@ -65,10 +66,20 @@ object SettingsStorage {
     // Способ определения уровня: "test", "start", "self"
     fun getStartMode(context: Context): String =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .getString(KEY_START_MODE, "start") ?: "start"
+            .getString(KEY_START_MODE, "self") ?: "self"
 
     fun setStartMode(context: Context, mode: String) {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .edit().putString(KEY_START_MODE, mode).apply()
+    }
+
+    // НОВОЕ: Сохранение и загрузка выбранного стартового уровня (1-16)
+    fun getStartLevel(context: Context): Int =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .getInt(KEY_START_LEVEL, 7) // По умолчанию 7
+
+    fun setStartLevel(context: Context, level: Int) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .edit().putInt(KEY_START_LEVEL, level).apply()
     }
 }
