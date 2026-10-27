@@ -91,6 +91,7 @@ fun TrainingBlockScreen(
                     CurrentExerciseCard(
                         exercise = exercise,
                         showTimer = showTimer,
+                        onStart = onStartCurrent,
                         onFinish = onSkipCurrent,
                         onBack = onBack
                     )
@@ -162,6 +163,7 @@ fun TrainingBlockScreen(
 private fun CurrentExerciseCard(
     exercise: PlannedExercise,
     showTimer: Boolean,
+    onStart: () -> Unit,
     onFinish: () -> Unit,
     onBack: () -> Unit
 ) {
@@ -169,14 +171,12 @@ private fun CurrentExerciseCard(
     var previewTimeLeft by remember { mutableStateOf(5) }
     var timerStarted by remember { mutableStateOf(false) }
 
-    // Определяем время для таймера
     val totalSeconds = when {
         exercise.id.startsWith("warm_darts") -> 2 * 60
         exercise.id.startsWith("warm_") -> 40
         else -> exercise.minutes * 60
     }
 
-    // Логика превью (5 секунд)
     LaunchedEffect(Unit) {
         if (!showTimer) return@LaunchedEffect
         previewTimeLeft = 5
@@ -277,7 +277,7 @@ private fun CurrentExerciseCard(
                     .height(48.dp)
                     .clip(RoundedCornerShape(12.dp))
                     .background(Accent)
-                    .clickable { onStartCurrent() }, // Здесь вызов запуска игры, но для показателя "Начать" используем onStartCurrent
+                    .clickable { onStart() },
                 contentAlignment = Alignment.Center
             ) {
                 Text(
