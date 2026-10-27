@@ -86,120 +86,71 @@ fun TrainingBlockScreen(
                 val isPast = index < currentIndex
                 val isFuture = index > currentIndex
 
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(if (isCurrent) Accent.copy(alpha = 0.15f) else TileBg)
-                        .padding(16.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
+                // Если упражнение текущее, показываем превью (5 секунд) и затем таймер
+                if (isCurrent) {
+                    CurrentExerciseCard(
+                        exercise = exercise,
+                        onFinish = onSkipCurrent,
+                        onBack = onBack
+                    )
+                } else {
+                    // Обычная карточка для прошлых/будущих упражнений
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(TileBg)
+                            .padding(16.dp)
                     ) {
-                        // Номер упражнения
-                        Box(
-                            modifier = Modifier
-                                .size(28.dp)
-                                .clip(RoundedCornerShape(14.dp))
-                                .background(if (isCurrent) Accent else TileBgDark),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                "${index + 1}",
-                                color = if (isCurrent) Color(0xFF121212) else Color.White,
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                        Spacer(Modifier.width(12.dp))
-                        
-                        // Название и время
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                exercise.title,
-                                color = if (isPast) Color.White.copy(alpha = 0.5f) else Color.White,
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Text(
-                                "~${exercise.minutes} мин",
-                                color = Color.White.copy(alpha = 0.5f),
-                                fontSize = 12.sp
-                            )
-                        }
-                        
-                        // Статус
-                        if (isPast) {
-                            Text("✅", fontSize = 20.sp)
-                        } else if (isCurrent) {
-                            Text("▶", color = Accent, fontSize = 20.sp)
-                        }
-                    }
-
-                    if (isCurrent) {
-                        Spacer(Modifier.height(12.dp))
-                        Text(
-                            exercise.whyImportant,
-                            color = Color.White.copy(alpha = 0.7f),
-                            fontSize = 13.sp,
-                            lineHeight = 18.sp
-                        )
-                        Spacer(Modifier.height(16.dp))
-                        
-                        // Круговой таймер
-                        TrainingTimer(
-                            totalMinutes = exercise.minutes,
-                            onFinish = onSkipCurrent
-                        )
-
-                        Spacer(Modifier.height(16.dp))
-                        
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
                             Box(
                                 modifier = Modifier
-                                    .weight(1f)
-                                    .height(48.dp)
-                                    .clip(RoundedCornerShape(12.dp))
-                                    .background(Accent)
-                                    .clickable { onStartCurrent() },
+                                    .size(28.dp)
+                                    .clip(RoundedCornerShape(14.dp))
+                                    .background(TileBgDark),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Text(
-                                    "НАЧАТЬ",
-                                    color = Color(0xFF121212),
-                                    fontSize = 15.sp,
+                                    "${index + 1}",
+                                    color = Color.White,
+                                    fontSize = 14.sp,
                                     fontWeight = FontWeight.Bold
                                 )
                             }
-                            Box(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .height(48.dp)
-                                    .clip(RoundedCornerShape(12.dp))
-                                    .background(TileBgDark)
-                                    .clickable { onSkipCurrent() },
-                                contentAlignment = Alignment.Center
-                            ) {
+                            Spacer(Modifier.width(12.dp))
+                            
+                            Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    "ПРОПУСТИТЬ",
-                                    color = Color.White.copy(alpha = 0.7f),
-                                    fontSize = 14.sp,
-                                    fontWeight = FontWeight.Medium
+                                    exercise.title,
+                                    color = if (isPast) Color.White.copy(alpha = 0.5f) else Color.White,
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    "~${exercise.minutes} мин",
+                                    color = Color.White.copy(alpha = 0.5f),
+                                    fontSize = 12.sp
                                 )
                             }
+                            
+                            if (isPast) {
+                                Text("✅", fontSize = 20.sp)
+                            } else if (isFuture) {
+                                Text("▶", color = Accent, fontSize = 20.sp)
+                            }
                         }
-                    } else if (isFuture) {
-                        Spacer(Modifier.height(8.dp))
-                        Text(
-                            exercise.whyImportant,
-                            color = Color.White.copy(alpha = 0.4f),
-                            fontSize = 12.sp,
-                            lineHeight = 16.sp
-                        )
+                        if (isFuture) {
+                            Spacer(Modifier.height(8.dp))
+                            Text(
+                                exercise.whyImportant,
+                                color = Color.White.copy(alpha = 0.4f),
+                                fontSize = 12.sp,
+                                lineHeight = 16.sp
+                            )
+                        }
                     }
                 }
             }
@@ -208,16 +159,156 @@ fun TrainingBlockScreen(
 }
 
 @Composable
+private fun CurrentExerciseCard(
+    exercise: PlannedExercise,
+    onFinish: () -> Unit,
+    onBack: () -> Unit
+) {
+    var showPreview by remember { mutableStateOf(true) }
+    var previewTimeLeft by remember { mutableStateOf(5) }
+
+    // Определяем время для таймера (40 сек для мышц, 2 мин для дротиков)
+    val totalSeconds = if (exercise.id.startsWith("warm_darts")) {
+        2 * 60
+    } else {
+        40
+    }
+
+    // Логика превью (5 секунд)
+    LaunchedEffect(Unit) {
+        previewTimeLeft = 5
+        while (previewTimeLeft > 0) {
+            delay(1000L)
+            previewTimeLeft--
+        }
+        showPreview = false
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(Accent.copy(alpha = 0.15f))
+            .padding(16.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(28.dp)
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(Accent),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    "1", // Индекс не передается, но визуально он текущий
+                    color = Color(0xFF121212),
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+            Spacer(Modifier.width(12.dp))
+            Text(
+                exercise.title,
+                color = Color.White,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
+
+        Spacer(Modifier.height(12.dp))
+
+        Text(
+            exercise.whyImportant,
+            color = Color.White.copy(alpha = 0.7f),
+            fontSize = 13.sp,
+            lineHeight = 18.sp
+        )
+
+        Spacer(Modifier.height(16.dp))
+
+        if (showPreview) {
+            Box(
+                modifier = Modifier.fillMaxWidth().height(120.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        "ПРИГОТОВЬСЯ",
+                        color = Accent,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 2.sp
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        "$previewTimeLeft",
+                        color = Color.White,
+                        fontSize = 48.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+        } else {
+            TrainingTimer(
+                totalSeconds = totalSeconds,
+                onFinish = onFinish
+            )
+        }
+
+        Spacer(Modifier.height(16.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .height(48.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(TileBgDark)
+                    .clickable { onBack() },
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    "НАЗАД",
+                    color = Color.White.copy(alpha = 0.7f),
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Medium
+                )
+            }
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .height(48.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(TileBgDark)
+                    .clickable { onFinish() },
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    "ПРОПУСТИТЬ",
+                    color = Color.White.copy(alpha = 0.7f),
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Medium
+                )
+            }
+        }
+    }
+}
+
+@Composable
 private fun TrainingTimer(
-    totalMinutes: Int,
+    totalSeconds: Int,
     onFinish: () -> Unit
 ) {
-    var timeLeft by remember { mutableStateOf(totalMinutes * 60) }
-    var isRunning by remember { mutableStateOf(false) }
-    val totalSeconds = totalMinutes * 60
+    var timeLeft by remember { mutableStateOf(totalSeconds) }
+    var isRunning by remember { mutableStateOf(true) }
 
-    // Эффект для отсчета времени
-    LaunchedEffect(isRunning) {
+    LaunchedEffect(isRunning, totalSeconds) {
         if (isRunning) {
             while (timeLeft > 0) {
                 delay(1000L)
@@ -225,12 +316,6 @@ private fun TrainingTimer(
             }
             onFinish()
         }
-    }
-
-    // Сброс таймера при смене упражнения
-    LaunchedEffect(totalMinutes) {
-        timeLeft = totalMinutes * 60
-        isRunning = false
     }
 
     val progress = if (totalSeconds > 0) timeLeft.toFloat() / totalSeconds else 0f
@@ -253,7 +338,6 @@ private fun TrainingTimer(
             val strokeWidth = 8.dp.toPx()
             val diameter = size.minDimension - strokeWidth
             
-            // Фон (темный круг)
             drawArc(
                 color = Color.White.copy(alpha = 0.1f),
                 startAngle = -90f,
@@ -264,7 +348,6 @@ private fun TrainingTimer(
                 style = Stroke(width = strokeWidth, cap = StrokeCap.Round)
             )
             
-            // Прогресс (голубая дуга)
             drawArc(
                 color = Accent,
                 startAngle = -90f,
@@ -284,7 +367,6 @@ private fun TrainingTimer(
         )
     }
     
-    // Кнопка старт/пауза
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -295,7 +377,7 @@ private fun TrainingTimer(
         contentAlignment = Alignment.Center
     ) {
         Text(
-            text = if (isRunning) "ПАУЗА" else "ЗАПУСТИТЬ ТАЙМЕР",
+            text = if (isRunning) "ПАУЗА" else "ПРОДОЛЖИТЬ",
             color = if (isRunning) Color.White else Color(0xFF121212),
             fontSize = 14.sp,
             fontWeight = FontWeight.Bold
