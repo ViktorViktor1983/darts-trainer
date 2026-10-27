@@ -213,7 +213,8 @@ internal fun getDefaultMainExercises(): List<PlannedExercise> = listOf(
     PlannedExercise("scoreset", "Набор очков", 6, "Учит стабильно набирать максимум за 3 дротика."),
     PlannedExercise("biground", "Большой раунд", 12, "Тренирует переход по всей мишени."),
     PlannedExercise("game501", "501", 18, "Главная игра — учит считать и закрывать."),
-    PlannedExercise("cricket", "Крикет", 12, "Тренирует утроения и стратегию.")
+    PlannedExercise("cricket", "Крикет", 12, "Тренирует утроения и стратегию."),
+    PlannedExercise("problem_sectors", "Проблемные сектора", 15, "Отработка ваших слабых мест без влияния на статистику.")
 )
 
 // ─────────────────────────────────────────────
@@ -343,8 +344,7 @@ private val WARMUP_DARTS = listOf(
 internal fun getWarmupBlockItems(): List<PlannedExercise> {
     val result = mutableListOf<PlannedExercise>()
     
-    // Берем случайное по одному из каждой группы
-    result.add(WARMUP_NECK.random().copy(minutes = 1)) // 1 минута = 60 сек, но мы изменим логику в UI
+    result.add(WARMUP_NECK.random().copy(minutes = 1))
     result.add(WARMUP_SHOULDERS.random().copy(minutes = 1))
     result.add(WARMUP_WRISTS.random().copy(minutes = 1))
     result.add(WARMUP_LEGS.random().copy(minutes = 1))
