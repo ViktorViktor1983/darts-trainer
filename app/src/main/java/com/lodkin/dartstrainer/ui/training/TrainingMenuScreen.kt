@@ -14,6 +14,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -23,25 +24,21 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.lodkin.dartstrainer.data.SettingsStorage
 import com.lodkin.dartstrainer.data.training.DartsNorms
-import com.lodkin.dartstrainer.data.training.PotentialSnapshot
 import com.lodkin.dartstrainer.data.training.TrainingBlocksStorage
 import com.lodkin.dartstrainer.data.training.TrainingRepository
+import com.lodkin.dartstrainer.data.training.TrainingStatsAnalyzer
 import com.lodkin.dartstrainer.theme.Accent
 import com.lodkin.dartstrainer.theme.GoldAccent
 import com.lodkin.dartstrainer.theme.TileBg
 import com.lodkin.dartstrainer.theme.TileBgDark
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
-/**
- * Главный экран тренировки.
- *
- * @param normativesAvailable — true, если доступна сдача нормативов
- *   (после 10+ тренировок или если есть незавершённые нормативы).
- * @param onStartNormatives — колбэк запуска нормативов.
- */
 @Composable
 fun TrainingMenuScreen(
     playerName: String,
@@ -57,10 +54,12 @@ fun TrainingMenuScreen(
 ) {
     val context = LocalContext.current
 
-    var snapshot by remember { mutableStateOf<PotentialSnapshot?>(null) }
+    var analysis by remember { mutableStateOf<TrainingStatsAnalyzer.TrainingAnalysis?>(null) }
     var loading by remember { mutableStateOf(true) }
+    var showExamDialog by remember { mutableStateOf(false) }
 
     val defaultMinutes = remember { SettingsStorage.getTrainingMinutes(context) }
+    val playerLevel = remember { SettingsStorage.getStartLevel(context) }
 
     var showTimeDialog by remember { mutableStateOf(false) }
     var selectedMinutes by remember { mutableStateOf(defaultMinutes) }
@@ -69,7 +68,7 @@ fun TrainingMenuScreen(
         TrainingBlocksStorage.isWarmupEnabled(context)
         TrainingBlocksStorage.isPsychologyEnabled(context)
         TrainingBlocksStorage.isStrengthEnabled(context)
-        snapshot = repository.getLastPotential()
+        analysis = withContext(Dispatchers.IO) { TrainingStatsAnalyzer.analyze(repository) }
         loading = false
     }
 
@@ -83,6 +82,14 @@ fun TrainingMenuScreen(
                 showTimeDialog = false
             },
             onCancel = { showTimeDialog = false }
+        )
+    }
+
+    if (showExamDialog && analysis != null) {
+        ExamProgressDialog(
+            overallProgress = analysis!!.overallProgress,
+            exercises = analysis!!.exercisesProgress,
+            onDismiss = { showExamDialog = false }
         )
     }
 
@@ -150,11 +157,59 @@ fun TrainingMenuScreen(
             return@Column
         }
 
-        val snap = snapshot
-        if (snap == null) {
-            WelcomeNoTrainingCard(playerName)
-        } else {
-            LevelCard(playerName, snap)
+        // ── КАРТОЧКА УРОВНЯ ──
+        LevelCard(playerName, playerLevel)
+
+        Spacer(Modifier.height(12.dp))
+
+        // ── ПЛАШКА ПРОГРЕССА ДО ЭКЗАМЕНА ──
+        val a = analysis
+        if (a != null) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(TileBg)
+                    .clickable { showExamDialog = true }
+                    .padding(14.dp)
+            ) {
+                Column {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = if (a.isReadyForNormatives) "Пора сдавать экзамен!" else "Прогресс до экзамена",
+                            color = if (a.isReadyForNormatives) GoldAccent else Color.White,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = "${(a.overallProgress * 100).toInt()}%",
+                            color = GoldAccent,
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(10.dp)
+                            .clip(RoundedCornerShape(5.dp))
+                            .background(Color.Black.copy(alpha = 0.3f))
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth(a.overallProgress)
+                                .fillMaxHeight()
+                                .clip(RoundedCornerShape(5.dp))
+                                .background(if (a.isReadyForNormatives) GoldAccent else Accent)
+                        )
+                    }
+                }
+            }
         }
 
         Spacer(Modifier.height(16.dp))
@@ -253,6 +308,145 @@ fun TrainingMenuScreen(
 }
 
 // ─────────────────────────────────────────────
+// КАРТОЧКА УРОВНЯ
+// ─────────────────────────────────────────────
+
+@Composable
+private fun LevelCard(playerName: String, level: Int) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(TileBg)
+            .padding(16.dp)
+    ) {
+        Text(
+            "Привет, $playerName!",
+            color = Color.White,
+            fontSize = 16.sp,
+            fontWeight = FontWeight.Medium
+        )
+        Spacer(Modifier.height(12.dp))
+
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                "Уровень $level",
+                color = GoldAccent,
+                fontSize = 28.sp,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(Modifier.width(10.dp))
+            Text(
+                DartsNorms.getLevelName(level),
+                color = Color.White,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Medium
+            )
+        }
+    }
+}
+
+// ─────────────────────────────────────────────
+// ДИАЛОГ ПРОГРЕССА ДО ЭКЗАМЕНА
+// ─────────────────────────────────────────────
+
+@Composable
+private fun ExamProgressDialog(
+    overallProgress: Float,
+    exercises: List<TrainingStatsAnalyzer.ExerciseProgress>,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = TileBgDark,
+        title = {
+            Text(
+                "Прогресс до экзамена",
+                color = GoldAccent,
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Bold
+            )
+        },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("Общий прогресс", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                    Text("${(overallProgress * 100).toInt()}%", color = GoldAccent, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                }
+                Spacer(Modifier.height(6.dp))
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(10.dp)
+                        .clip(RoundedCornerShape(5.dp))
+                        .background(Color.Black.copy(alpha = 0.3f))
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth(overallProgress)
+                            .fillMaxHeight()
+                            .clip(RoundedCornerShape(5.dp))
+                            .background(if (overallProgress >= 1f) GoldAccent else Accent)
+                    )
+                }
+
+                Spacer(Modifier.height(20.dp))
+                Text("ДЕТАЛИ ПО УПРАЖНЕНИЯМ", color = Accent, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+                Spacer(Modifier.height(10.dp))
+
+                exercises.forEach { ex ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(ex.title, color = Color.White.copy(alpha = 0.9f), fontSize = 13.sp, modifier = Modifier.weight(1f))
+                        Text(
+                            "${(ex.percent * 100).toInt()}%",
+                            color = if (ex.percent >= 1f) GoldAccent else Accent,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.width(40.dp),
+                            textAlign = TextAlign.End
+                        )
+                    }
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(6.dp)
+                            .clip(RoundedCornerShape(3.dp))
+                            .background(Color.Black.copy(alpha = 0.3f))
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth(ex.percent)
+                                .fillMaxHeight()
+                                .clip(RoundedCornerShape(3.dp))
+                                .background(if (ex.percent >= 1f) GoldAccent else Accent)
+                        )
+                    }
+                    Spacer(Modifier.height(8.dp))
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("ЗАКРЫТЬ", color = Accent, fontWeight = FontWeight.Bold)
+            }
+        }
+    )
+}
+
+// ─────────────────────────────────────────────
 // Плашка «Пора сдать нормативы»
 // ─────────────────────────────────────────────
 
@@ -288,9 +482,10 @@ private fun NormativesCallCard(onClick: () -> Unit) {
     }
 }
 
-/**
- * Кнопка «Свободная тренировка» с яркой пульсацией.
- */
+// ─────────────────────────────────────────────
+// Кнопка «Свободная тренировка»
+// ─────────────────────────────────────────────
+
 @Composable
 private fun FreeTrainingButton(onClick: () -> Unit) {
     val infiniteTransition = rememberInfiniteTransition(label = "free_pulse")
@@ -449,88 +644,4 @@ private fun saveSessionPrefs(context: android.content.Context, minutes: Int) {
         .edit()
         .putInt("session_minutes", minutes)
         .apply()
-}
-
-@Composable
-private fun LevelCard(playerName: String, snap: PotentialSnapshot) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .background(TileBg)
-            .padding(16.dp)
-    ) {
-        Text(
-            "Привет, $playerName!",
-            color = Color.White,
-            fontSize = 16.sp,
-            fontWeight = FontWeight.Medium
-        )
-        Spacer(Modifier.height(12.dp))
-
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                "Уровень ${snap.level}",
-                color = GoldAccent,
-                fontSize = 28.sp,
-                fontWeight = FontWeight.Bold
-            )
-            Spacer(Modifier.width(10.dp))
-            Text(
-                DartsNorms.getLevelName(snap.level),
-                color = Color.White,
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Medium
-            )
-        }
-
-        Spacer(Modifier.height(10.dp))
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Text(
-                "Потенциал",
-                color = Color.White.copy(alpha = 0.6f),
-                fontSize = 12.sp
-            )
-            Text(
-                "${snap.potential}",
-                color = Accent,
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Bold
-            )
-        }
-    }
-}
-
-@Composable
-private fun WelcomeNoTrainingCard(playerName: String) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .background(TileBg)
-            .padding(20.dp)
-    ) {
-        Text(
-            "Привет, $playerName!",
-            color = Color.White,
-            fontSize = 18.sp,
-            fontWeight = FontWeight.Bold
-        )
-        Spacer(Modifier.height(10.dp))
-        Text(
-            "Уровень пока не определён. Пройди первую тренировку — и я начну подбирать программу под тебя.",
-            color = Color.White.copy(alpha = 0.85f),
-            fontSize = 14.sp
-        )
-        Spacer(Modifier.height(10.dp))
-        Text(
-            "Каждые 10 тренировок — сдача нормативов для подтверждения уровня.",
-            color = Accent,
-            fontSize = 13.sp
-        )
-    }
 }
