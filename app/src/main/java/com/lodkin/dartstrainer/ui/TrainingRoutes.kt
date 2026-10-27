@@ -186,9 +186,13 @@ fun TrainingRoutes(
                 "STRENGTH" -> strengthExercises
                 else -> mainExercises
             }
+            // Показываем таймер только для разминки, психологии и силовых
+            val showTimer = trainingPhase == "WARMUP" || trainingPhase == "PSYCHOLOGY" || trainingPhase == "STRENGTH"
+            
             TrainingBlockScreen(
                 exercises = list,
                 currentIndex = currentExerciseIndex,
+                showTimer = showTimer,
                 onStartCurrent = {
                     val current = list.getOrNull(currentExerciseIndex)
                     if (current != null) onStartCurrentExercise(current)
