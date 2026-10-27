@@ -31,7 +31,7 @@ data class OnboardingResult(
     val trainingMinutes: Int,
     val trainingsPerWeek: Int,
     val trainingMode: String,
-    val startMode: String, // Оставляем для совместимости
+    val startMode: String,
     val startLevel: Int
 )
 
@@ -155,7 +155,7 @@ fun OnboardingScreen(onFinish: (OnboardingResult) -> Unit) {
                                     trainingMinutes = trainingMinutes,
                                     trainingsPerWeek = trainingsPerWeek,
                                     trainingMode = trainingMode,
-                                    startMode = "self", // Принудительно ставим "self"
+                                    startMode = "self",
                                     startLevel = startLevel
                                 )
                             )
@@ -375,19 +375,34 @@ private fun StepStart(startLevel: Int, onLevelChange: (Int) -> Unit) {
         color = Color.White,
         modifier = Modifier.padding(bottom = 8.dp)
     )
+    
+    Spacer(Modifier.height(8.dp))
+    
     Text(
-        "Программа будет подбирать упражнения и ботов, опираясь на этот уровень. Позже он может измениться, когда наберется достаточно статистики.",
-        fontSize = 14.sp,
+        "Ваш средний набор в игре 501 (PPR):",
+        fontSize = 16.sp,
+        fontWeight = FontWeight.Bold,
+        color = GoldAccent,
+        modifier = Modifier.padding(bottom = 4.dp)
+    )
+    
+    Text(
+        "Это ваши очки в среднем за 3 дротика. Выберите уровень, который соответствует вашему среднему набору:",
+        fontSize = 13.sp,
         color = Accent,
         lineHeight = 18.sp,
         modifier = Modifier.padding(bottom = 16.dp)
     )
+
+    // Фиксированные пороги PPR для каждого уровня (из DartsNorms)
+    val pprThresholds = listOf(22, 28, 33, 38, 43, 49, 52, 55, 61, 66, 71, 80, 87, 93, 99, 104)
 
     Column {
         DartsNorms.levels.chunked(2).forEach { row ->
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 row.forEach { norm ->
                     val isSel = startLevel == norm.level
+                    val ppr = pprThresholds.getOrNull(norm.level - 1) ?: 0
                     Box(
                         modifier = Modifier
                             .weight(1f)
@@ -404,6 +419,13 @@ private fun StepStart(startLevel: Int, onLevelChange: (Int) -> Unit) {
                                 color = if (isSel) Color(0xFF121212) else Color.White,
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 14.sp,
+                                textAlign = TextAlign.Center
+                            )
+                            Spacer(Modifier.height(2.dp))
+                            Text(
+                                "ср. PPR $ppr+",
+                                color = if (isSel) Color(0xFF121212).copy(alpha = 0.7f) else Color.White.copy(alpha = 0.6f),
+                                fontSize = 12.sp,
                                 textAlign = TextAlign.Center
                             )
                         }
