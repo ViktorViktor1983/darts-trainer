@@ -61,7 +61,7 @@ import com.lodkin.dartstrainer.data.training.BlockType
 import com.lodkin.dartstrainer.data.training.DartsNorms
 import com.lodkin.dartstrainer.data.training.ExerciseResult
 import com.lodkin.dartstrainer.data.training.InventoryStorage
-import com.lodkin.dartstrainer.data.training.LevelCalculator
+import com.lodkin.dartstrainer.data.training.LevelCalculator // ДОБАВЛЕН ИМПОРТ
 import com.lodkin.dartstrainer.data.training.NormativesStateStorage
 import com.lodkin.dartstrainer.data.training.ProblemSectorsStorage
 import com.lodkin.dartstrainer.data.training.TrainingBlocksStorage
@@ -79,6 +79,7 @@ import com.lodkin.dartstrainer.theme.Accent
 import com.lodkin.dartstrainer.theme.DarkBg
 import com.lodkin.dartstrainer.theme.GoldAccent
 import com.lodkin.dartstrainer.theme.TileBg
+import com.lodkin.dartstrainer.theme.TileBgDark // ДОБАВЛЕН ИМПОРТ
 import com.lodkin.dartstrainer.ui.*
 import com.lodkin.dartstrainer.ui.about.AboutScreen
 import com.lodkin.dartstrainer.ui.online.OnlineLobbyScreen
@@ -240,7 +241,7 @@ fun DartsTrainerApp() {
     var showExitTrainingDialog by remember { mutableStateOf(false) }
     var showBullDraw by remember { mutableStateOf(false) }
     var bullDrawExerciseId by remember { mutableStateOf<String?>(null) }
-    var examResultMessage by remember { mutableStateOf<String?>(null) } // НОВЫЙ СТЕЙТ ДЛЯ СООБЩЕНИЯ
+    var examResultMessage by remember { mutableStateOf<String?>(null) }
 
     // ── СТЕЙТЫ НОРМАТИВОВ ──
     var normativesAvailable by remember { mutableStateOf(false) }
@@ -481,7 +482,7 @@ fun DartsTrainerApp() {
             normativesActive = false
             isNormativesExercise = false
             normativesNewLevel = finalLvl
-            examResultMessage = message // Показываем диалог с текстом
+            examResultMessage = message
             screen = "normatives"
         }
     }
