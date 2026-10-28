@@ -3,6 +3,7 @@ package com.lodkin.dartstrainer
 import android.content.Context
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -642,6 +643,59 @@ fun DartsTrainerApp() {
     }
 
     if (stage == "loading") LaunchedEffect(Unit) { delay(3000); stage = "main" }
+
+    // ────────────────────────────────────────────────────────
+    // ПЕРЕХВАТ СИСТЕМНОЙ КНОПКИ "НАЗАД"
+    // ────────────────────────────────────────────────────────
+    BackHandler(enabled = stage != "welcome" && (stage != "main" || screen != "main")) {
+        when {
+            stage == "loading" -> { /* Ждем загрузки, ничего не делаем */ }
+            stage == "onboarding" -> stage = "welcome"
+            stage == "main" -> {
+                when {
+                    // 1. Сначала закрываем открытые окна, если они есть
+                    showRestTimer -> {
+                        showRestTimer = false
+                        val step = pendingNextStep
+                        pendingNextStep = null
+                        restNextTitle = null
+                        step?.invoke()
+                    }
+                    showBullDraw -> {
+                        showBullDraw = false
+                        bullDrawExerciseId = null
+                        if (pendingOnlineGameParams != null) {
+                            pendingOnlineGameParams = null
+                            screen = "online_lobby"
+                        } else {
+                            screen = PARENT_SCREEN[screen] ?: "main"
+                        }
+                    }
+                    showExitTrainingDialog -> showExitTrainingDialog = false
+                    showResumeDialog -> showResumeDialog = false
+                    showResumeNormativesDialog -> showResumeNormativesDialog = false
+                    showFreeNewRoundDialog -> showFreeNewRoundDialog = false
+                    showTimeUpDialog -> showTimeUpDialog = false
+                    examResultMessage != null -> examResultMessage = null
+                    
+                    // 2. Если мы на экране тренировки, имитируем кнопку выхода
+                    isTrainingActive && screen in TRAINING_SCREENS -> {
+                        showExitTrainingDialog = true
+                    }
+                    
+                    // 3. Иначе переходим на родительский экран
+                    else -> {
+                        val parent = PARENT_SCREEN[screen]
+                        if (parent != null) {
+                            screen = parent
+                        } else {
+                            screen = "main"
+                        }
+                    }
+                }
+            }
+        }
+    }
 
     // ────────────────────────────────────────────────────────
     // UI И НАВИГ
