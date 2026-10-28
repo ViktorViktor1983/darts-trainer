@@ -647,51 +647,63 @@ fun DartsTrainerApp() {
     // ────────────────────────────────────────────────────────
     // ПЕРЕХВАТ СИСТЕМНОЙ КНОПКИ "НАЗАД"
     // ────────────────────────────────────────────────────────
-    BackHandler(enabled = stage != "welcome" && (stage != "main" || screen != "main")) {
-        when {
-            stage == "loading" -> { /* Ждем загрузки, ничего не делаем */ }
-            stage == "onboarding" -> stage = "welcome"
-            stage == "main" -> {
-                when {
-                    // 1. Сначала закрываем открытые окна, если они есть
-                    showRestTimer -> {
-                        showRestTimer = false
-                        val step = pendingNextStep
-                        pendingNextStep = null
-                        restNextTitle = null
-                        step?.invoke()
+    val activity = context as? android.app.Activity
+    
+    // enabled = true всегда, чтобы мы сами решали, когда закрыть приложение
+    BackHandler(enabled = true) {
+        if (stage == "welcome") {
+            activity?.finish() // Закрываем приложение на экране приветствия
+            return@BackHandler
+        }
+        if (stage == "loading") {
+            return@BackHandler // Ждем загрузки
+        }
+        if (stage == "onboarding") {
+            stage = "welcome"
+            return@BackHandler
+        }
+        
+        if (stage == "main") {
+            when {
+                // 1. Сначала закрываем открытые окна (диалоги), если они есть
+                showRestTimer -> {
+                    showRestTimer = false
+                    val step = pendingNextStep
+                    pendingNextStep = null
+                    restNextTitle = null
+                    step?.invoke()
+                }
+                showBullDraw -> {
+                    showBullDraw = false
+                    bullDrawExerciseId = null
+                    if (pendingOnlineGameParams != null) {
+                        pendingOnlineGameParams = null
+                        screen = "online_lobby"
+                    } else {
+                        screen = PARENT_SCREEN[screen] ?: "main"
                     }
-                    showBullDraw -> {
-                        showBullDraw = false
-                        bullDrawExerciseId = null
-                        if (pendingOnlineGameParams != null) {
-                            pendingOnlineGameParams = null
-                            screen = "online_lobby"
-                        } else {
-                            screen = PARENT_SCREEN[screen] ?: "main"
-                        }
-                    }
-                    showExitTrainingDialog -> showExitTrainingDialog = false
-                    showResumeDialog -> showResumeDialog = false
-                    showResumeNormativesDialog -> showResumeNormativesDialog = false
-                    showFreeNewRoundDialog -> showFreeNewRoundDialog = false
-                    showTimeUpDialog -> showTimeUpDialog = false
-                    examResultMessage != null -> examResultMessage = null
-                    
-                    // 2. Если мы на экране тренировки, имитируем кнопку выхода
-                    isTrainingActive && screen in TRAINING_SCREENS -> {
-                        showExitTrainingDialog = true
-                    }
-                    
-                    // 3. Иначе переходим на родительский экран
-                    else -> {
-                        val parent = PARENT_SCREEN[screen]
-                        if (parent != null) {
-                            screen = parent
-                        } else {
-                            screen = "main"
-                        }
-                    }
+                }
+                showExitTrainingDialog -> showExitTrainingDialog = false
+                showResumeDialog -> showResumeDialog = false
+                showResumeNormativesDialog -> showResumeNormativesDialog = false
+                showFreeNewRoundDialog -> showFreeNewRoundDialog = false
+                showTimeUpDialog -> showTimeUpDialog = false
+                examResultMessage != null -> examResultMessage = null
+                
+                // 2. Если мы на экране тренировки, вызываем окно выхода
+                isTrainingActive && screen in TRAINING_SCREENS -> {
+                    showExitTrainingDialog = true
+                }
+                
+                // 3. Если мы на любом другом экране, идем на родительский
+                screen != "main" -> {
+                    val parent = PARENT_SCREEN[screen]
+                    screen = parent ?: "main"
+                }
+                
+                // 4. Если мы на Главном экране и все окна закрыты — закрываем приложение
+                else -> {
+                    activity?.finish()
                 }
             }
         }
