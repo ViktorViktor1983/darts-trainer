@@ -176,7 +176,8 @@ fun OnlineLobbyScreen(
     if (showNicknameDialog) {
         var input by remember { mutableStateOf(nickname) }
         AlertDialog(
-            onDismissRequest = { if (nickname.isNotBlank()) showNicknameDialog = false },
+            // Разрешаем закрыть окно кликом мимо него
+            onDismissRequest = { showNicknameDialog = false },
             confirmButton = {
                 TextButton(onClick = { 
                     val trimmed = input.trim().replace(" ", "_")
@@ -184,8 +185,9 @@ fun OnlineLobbyScreen(
                 }) { Text("Сохранить", color = Accent) }
             },
             dismissButton = {
-                if (nickname.isNotBlank()) {
-                    TextButton(onClick = { showNicknameDialog = false }) { Text("Отмена", color = Color.White.copy(alpha = 0.6f)) }
+                // Кнопка "Отмена" теперь показывается всегда, чтобы можно было передумать
+                TextButton(onClick = { showNicknameDialog = false }) { 
+                    Text("Отмена", color = Color.White.copy(alpha = 0.6f)) 
                 }
             },
             title = { Text("Ваш никнейм в онлайне", color = Color.White) },
