@@ -1,59 +1,76 @@
 package com.lodkin.dartstrainer.data.training
 
 import kotlin.math.ceil
+import kotlin.math.roundToInt
 
 /**
  * Расчёт уровня, потенциала и трендов игрока.
- *
- * ЛОГИКА УРОВНЯ (два независимых комплекса):
- *
- *   Комплекс 1 — 501:
- *     Даёт PPR. Уровень определяется по таблице ботов 501.
- *
- *   Комплекс 2 — упражнения:
- *     Даёт 4 чистых параметра: набор очков, точность в сектор,
- *     удвоения, утроения. Уровень = среднее 4 уровней, округление ВВЕРХ.
- *
- *   ИТОГОВЫЙ УРОВЕНЬ = МАКСИМУМ из двух комплексов.
- *
- *   Расхождение между комплексами — сигнал психологии:
- *     • 501 ниже упражнений → «в игре давит давление».
- *     • Упражнения ниже 501 → «в упражнениях не выкладываешься».
- *
- * Уровень пересчитывается ПОСЛЕ экзамена (раз в 10 тренировок).
- * Внутри цикла — только тренды и корректировка плана.
  */
 object LevelCalculator {
 
-    /**
-     * Результат расчёта уровня.
-     */
-    data class LevelResult(
-        val level: Int,                 // Итоговый уровень (1..16)
-        val potential: Int,             // Потенциал — уровень по лучшему параметру
-        val weakestType: WeaknessType?, // Что тянет вниз
-        val levelByScore: Int,          // Уровень по набору очков (0 = нет данных)
-        val levelByAccuracy: Int,       // Уровень по точности в сектор
-        val levelByDoubles: Int,        // Уровень по удвоениям
-        val levelByTrebles: Int,        // Уровень по утроениям
-        val levelByPpr: Int             // Уровень по 501 (PPR), 0 = нет данных
-    )
+    // ─────────────────────────────────────────────
+    // ЛОГИКА ЭКЗАМЕНА (5 ДИСЦИПЛИН)
+    // ─────────────────────────────────────────────
 
     /**
-     * Рассчитать уровень по комплексу «упражнения» (4 параметра).
-     *
-     * @param avgScore     средний результат по набору очков (Сектор 20 / Набор очков)
-     * @param avgAccuracy  средний результат по Большому раунду (точность в сектор)
-     * @param avgDoubles   средний процент попадания в удвоения
-     * @param avgTrebles   средний процент попадания в утроения
+     * Рассчитать уровень ИСКЛЮЧИТЕЛЬНО по результатам экзамена (5 дисциплин).
+     * 
+     * @param ppr Средний PPR в 501 за экзамен
+     * @param mpr Средний MPR в Крикете за экзамен
+     * @param score20 Очки в Секторе 20
+     * @param scoreBR Очки в Большом раунде
+     * @param scoreSS Очки в Наборе очков
+     * @return Итоговый уровень (1..16)
      */
+    fun calculateExamLevel(
+        ppr: Float,
+        mpr: Float,
+        score20: Int,
+        scoreBR: Int,
+        scoreSS: Int
+    ): Int {
+        // 1. Уровни по играм
+        val lvl501 = if (ppr > 0f) DartsNorms.levelByPpr(ppr) else 1
+        val lvlCricket = if (mpr > 0f) DartsNorms.levelByMpr(mpr) else 1
+        
+        // 2. Уровни по нормативам
+        val lvlS20 = if (score20 > 0) DartsNorms.levelBySector20(score20) else 1
+        val lvlBR = if (scoreBR > 0) DartsNorms.levelByBigRound(scoreBR) else 1
+        val lvlSS = if (scoreSS > 0) DartsNorms.levelByScoreSet(scoreSS) else 1
+
+        // 3. Средний уровень по играм (округляем по правилам математики)
+        val avgGames = ((lvl501 + lvlCricket) / 2.0).roundToInt()
+
+        // 4. Средний уровень по нормативам (округляем по правилам математики)
+        val avgNorms = ((lvlS20 + lvlBR + lvlSS) / 3.0).roundToInt()
+
+        // 5. Итоговый уровень (округляем по правилам математики)
+        val finalLevel = ((avgGames + avgNorms) / 2.0).roundToInt()
+
+        return finalLevel.coerceIn(1, DartsNorms.totalLevels())
+    }
+
+    // ─────────────────────────────────────────────
+    // СТАРАЯ ЛОГИКА (ДЛЯ ТРЕНИРОВОК)
+    // ─────────────────────────────────────────────
+
+    data class LevelResult(
+        val level: Int,
+        val potential: Int,
+        val weakestType: WeaknessType?,
+        val levelByScore: Int,
+        val levelByAccuracy: Int,
+        val levelByDoubles: Int,
+        val levelByTrebles: Int,
+        val levelByPpr: Int
+    )
+
     fun calculateExerciseLevel(
         avgScore: Int?,
         avgAccuracy: Int?,
         avgDoubles: Float?,
         avgTrebles: Float?
     ): LevelResult {
-
         val levelByScore = avgScore?.let { DartsNorms.levelBySector20(it) } ?: 0
         val levelByAccuracy = avgAccuracy?.let { DartsNorms.levelByBigRound(it) } ?: 0
         val levelByDoubles = avgDoubles?.let { DartsNorms.levelByDoubles(it) } ?: 0
@@ -73,15 +90,12 @@ object LevelCalculator {
             )
         }
 
-        // Среднее, округление ВВЕРХ
         val sum = validLevels.sum()
         val avg = sum.toDouble() / validLevels.size
         val finalLevel = ceil(avg).toInt().coerceIn(1, DartsNorms.totalLevels())
 
-        // Потенциал = максимум
         val potential = validLevels.maxOrNull() ?: finalLevel
 
-        // Слабый параметр = минимальный
         val minLevel = validLevels.minOrNull() ?: finalLevel
         val weakestType = when {
             levelByScore > 0 && levelByScore == minLevel -> WeaknessType.SCORE
@@ -103,12 +117,6 @@ object LevelCalculator {
         )
     }
 
-    /**
-     * Рассчитать ИТОГОВЫЙ уровень: максимум из двух комплексов.
-     *
-     * @param exerciseResult результат по 4 параметрам (комплекс «упражнения»)
-     * @param pprLevel       уровень по 501 (PPR) из таблицы ботов. 0 = нет данных.
-     */
     fun calculateFinalLevel(
         exerciseResult: LevelResult,
         pprLevel: Int
@@ -122,39 +130,24 @@ object LevelCalculator {
         )
     }
 
-    /**
-     * Определить, расходятся ли комплексы. Если да — вернуть тип расхождения.
-     */
     fun detectDiscrepancy(exerciseResult: LevelResult, pprLevel: Int): Discrepancy {
         if (pprLevel == 0) return Discrepancy.NONE
         val diff = pprLevel - exerciseResult.level
         return when {
-            diff <= -2 -> Discrepancy.PPR_LOWER      // 501 хуже упражнений — давление
-            diff >= 2 -> Discrepancy.PPR_HIGHER       // 501 лучше упражнений — расслаблен
+            diff <= -2 -> Discrepancy.PPR_LOWER
+            diff >= 2 -> Discrepancy.PPR_HIGHER
             else -> Discrepancy.NONE
         }
     }
 
     enum class Discrepancy {
-        NONE,         // Расхождения нет
-        PPR_LOWER,    // 501 хуже упражнений → в игре давит
-        PPR_HIGHER    // 501 лучше упражнений → в упражнениях не выкладывается
+        NONE, PPR_LOWER, PPR_HIGHER
     }
-
-    // ─────────────────────────────────────────────
-    // ТРЕНДЫ
-    // ─────────────────────────────────────────────
 
     enum class Trend {
-        RISING,     // Растёт
-        FALLING,    // Падает
-        STABLE      // Стоит на месте
+        RISING, FALLING, STABLE
     }
 
-    /**
-     * Определить тренд по значениям (берём 3 последних).
-     * Если значений меньше 3 — считаем STABLE.
-     */
     fun detectTrend(values: List<Float>): Trend {
         if (values.size < 3) return Trend.STABLE
         val last3 = values.takeLast(3)
@@ -171,31 +164,16 @@ object LevelCalculator {
     // СООБЩЕНИЯ
     // ─────────────────────────────────────────────
 
-    /**
-     * Мягкий намёк, что параметр просел.
-     * Игроку не показываем цифры — только мягкое сообщение.
-     */
     fun buildDeclineHint(weak: WeaknessType): String {
         return when (weak) {
-            WeaknessType.DOUBLES ->
-                "Сегодня у нас даблы. В последнее время они у тебя немного подсели — но ничего, мы их быстренько подтянем."
-            WeaknessType.SCORE ->
-                "Сегодня фокус на набор очков. В последнее время он немного просел — подтянем, и ты снова будешь набирать легко."
-            WeaknessType.ACCURACY ->
-                "Сегодня работаем над точностью в сектор. Она немного подсела — но это дело наживное, быстро вернём форму."
-            WeaknessType.TREBLES ->
-                "Сегодня тренируем утроения. В последнее время они немного подсели — но ничего, подтянем."
+            WeaknessType.DOUBLES -> "Сегодня у нас даблы. В последнее время они у тебя немного подсели — но ничего, мы их быстренько подтянем."
+            WeaknessType.SCORE -> "Сегодня фокус на набор очков. В последнее время он немного просел — подтянем, и ты снова будешь набирать легко."
+            WeaknessType.ACCURACY -> "Сегодня работаем над точностью в сектор. Она немного подсела — но это дело наживное, быстро вернём форму."
+            WeaknessType.TREBLES -> "Сегодня тренируем утроения. В последнее время они немного подсели — но ничего, подтянем."
         }
     }
 
-    /**
-     * Мотивация при росте параметра.
-     */
-    fun buildGrowthHint(
-        playerName: String,
-        weak: WeaknessType,
-        sessionsToNextLevel: Int
-    ): String {
+    fun buildGrowthHint(playerName: String, weak: WeaknessType, sessionsToNextLevel: Int): String {
         val paramName = when (weak) {
             WeaknessType.DOUBLES -> "удвоения"
             WeaknessType.SCORE -> "набор очков"
@@ -206,23 +184,11 @@ object LevelCalculator {
                 "Если продолжишь в том же темпе — через $sessionsToNextLevel тренировок выйдешь на новый уровень."
     }
 
-    /**
-     * Простая похвала за хорошую игру.
-     */
     fun buildPraise(playerName: String, value: Float): String {
         return "$playerName, сегодня отличный результат — $value. Так держать!"
     }
 
-    /**
-     * Сообщение после экзамена.
-     */
-    fun buildExamMessage(
-        playerName: String,
-        oldLevel: Int,
-        newLevel: Int,
-        potential: Int,
-        weakestType: WeaknessType?
-    ): String {
+    fun buildExamMessage(playerName: String, oldLevel: Int, newLevel: Int, potential: Int, weakestType: WeaknessType?): String {
         val oldName = DartsNorms.getLevelName(oldLevel)
         val newName = DartsNorms.getLevelName(newLevel)
 
@@ -248,17 +214,12 @@ object LevelCalculator {
         }
     }
 
-    /**
-     * Сообщение о расхождении комплексов (психология).
-     */
     fun buildDiscrepancyMessage(playerName: String, discrepancy: Discrepancy): String {
         return when (discrepancy) {
-            Discrepancy.PPR_LOWER ->
-                "$playerName, в тренировке ты показываешь высокий уровень, а в игре 501 — ниже. " +
-                        "Это не про технику — это про давление. Поработаем над психологией."
-            Discrepancy.PPR_HIGHER ->
-                "$playerName, в игре 501 ты раскрываешься лучше, чем в упражнениях. " +
-                        "Похоже, упражнения тебе даются скучнее — попробуем сделать их интереснее."
+            Discrepancy.PPR_LOWER -> "$playerName, в тренировке ты показываешь высокий уровень, а в игре 501 — ниже. " +
+                    "Это не про технику — это про давление. Поработаем над психологией."
+            Discrepancy.PPR_HIGHER -> "$playerName, в игре 501 ты раскрываешься лучше, чем в упражнениях. " +
+                    "Похоже, упражнения тебе даются скучнее — попробуем сделать их интереснее."
             Discrepancy.NONE -> ""
         }
     }
