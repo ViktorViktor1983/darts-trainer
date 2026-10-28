@@ -220,15 +220,6 @@ fun TrainingSettingsScreen(
             }
 
             Spacer(Modifier.height(24.dp))
-
-            Text(
-                "Скоро появятся: настройка сложности ботов, выбор приоритетных упражнений, " +
-                        "режим «только основная часть».",
-                color = Color.White.copy(alpha = 0.4f),
-                fontSize = 11.sp
-            )
-
-            Spacer(Modifier.height(24.dp))
         }
     }
 
