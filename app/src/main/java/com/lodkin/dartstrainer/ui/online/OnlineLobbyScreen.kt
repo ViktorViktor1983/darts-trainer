@@ -34,7 +34,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 // Состояния окна поиска
-private enum class SearchPhase { NONE, SETUP, SEARCHING, RESULT }
+private enum class SearchPhase { NONE, SETUP, SEARCHING, RESULT, FOUND }
 
 @Composable
 fun OnlineLobbyScreen(
@@ -46,7 +46,6 @@ fun OnlineLobbyScreen(
     val scope = rememberCoroutineScope()
     val prefs = remember { context.getSharedPreferences("online_prefs", android.content.Context.MODE_PRIVATE) }
 
-    // Основные настройки профиля
     var nickname by remember { mutableStateOf(prefs.getString("nickname", "") ?: "") }
     var selectedLevel by remember { mutableStateOf(prefs.getInt("level", 1)) }
     var is501 by remember { mutableStateOf(prefs.getBoolean("is501", true)) }
@@ -54,17 +53,15 @@ fun OnlineLobbyScreen(
     var sets by remember { mutableStateOf(prefs.getInt("sets", 1)) }
     var saveToTraining by remember { mutableStateOf(prefs.getBoolean("save_to_training", false)) }
 
-    // Состояния диалогов
     var showNicknameDialog by remember { mutableStateOf(nickname.isBlank()) }
     var showLevelDialog by remember { mutableStateOf(false) }
     var showFriendDialog by remember { mutableStateOf(false) }
     
-    // Состояния поиска
     var searchPhase by remember { mutableStateOf(SearchPhase.NONE) }
     var searchLevels by remember { mutableStateOf<Set<Int>>(emptySet()) }
     var searchTimeSeconds by remember { mutableStateOf(60) }
+    var foundOpponent by remember { mutableStateOf<String?>(null) }
 
-    // Сохранение настроек
     LaunchedEffect(nickname, selectedLevel, is501, legs, sets, saveToTraining) {
         prefs.edit()
             .putString("nickname", nickname)
@@ -77,10 +74,7 @@ fun OnlineLobbyScreen(
     }
 
     Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(DarkBg)
-            .padding(16.dp)
+        modifier = Modifier.fillMaxSize().background(DarkBg).padding(16.dp)
     ) {
         // Шапка
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -186,11 +180,7 @@ fun OnlineLobbyScreen(
                     if (trimmed.isNotBlank()) { nickname = trimmed; showNicknameDialog = false } 
                 }) { Text("Сохранить", color = Accent) }
             },
-            dismissButton = {
-                TextButton(onClick = { showNicknameDialog = false }) { 
-                    Text("Отмена", color = Color.White.copy(alpha = 0.6f)) 
-                }
-            },
+            dismissButton = { TextButton(onClick = { showNicknameDialog = false }) { Text("Отмена", color = Color.White.copy(alpha = 0.6f)) } },
             title = { Text("Ваш никнейм в онлайне", color = Color.White) },
             text = {
                 Column {
@@ -261,11 +251,7 @@ fun OnlineLobbyScreen(
 
         Dialog(onDismissRequest = { if (!isConnecting) searchPhase = SearchPhase.NONE }) {
             Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(24.dp))
-                    .background(TileBgDark)
-                    .padding(20.dp)
+                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp)).background(TileBgDark).padding(20.dp)
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text("Настройка поиска", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
@@ -274,19 +260,15 @@ fun OnlineLobbyScreen(
                     Text("Выберите уровни для поиска (можно несколько):", color = Color.White.copy(alpha = 0.7f), fontSize = 13.sp, modifier = Modifier.fillMaxWidth())
                     Spacer(Modifier.height(8.dp))
                     
-                    // Сетка уровней 4x4
                     val levels = 1..16
                     levels.chunked(4).forEach { row ->
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             row.forEach { lvl ->
                                 val isSelected = searchLevels.contains(lvl)
                                 Box(
-                                    modifier = Modifier.weight(1f)
-                                        .clip(RoundedCornerShape(8.dp))
+                                    modifier = Modifier.weight(1f).clip(RoundedCornerShape(8.dp))
                                         .background(if (isSelected) Accent else TileBg)
-                                        .clickable(enabled = !isConnecting) {
-                                            searchLevels = if (isSelected) searchLevels - lvl else searchLevels + lvl
-                                        }
+                                        .clickable(enabled = !isConnecting) { searchLevels = if (isSelected) searchLevels - lvl else searchLevels + lvl }
                                         .padding(vertical = 8.dp),
                                     contentAlignment = Alignment.Center
                                 ) {
@@ -302,7 +284,6 @@ fun OnlineLobbyScreen(
 
                     Spacer(Modifier.height(16.dp))
 
-                    // Выбор времени
                     var showTimeMenu by remember { mutableStateOf(false) }
                     Box(modifier = Modifier.fillMaxWidth()) {
                         Row(
@@ -325,7 +306,6 @@ fun OnlineLobbyScreen(
 
                     Spacer(Modifier.height(24.dp))
 
-                    // Кнопки действий
                     Box(
                         modifier = Modifier.fillMaxWidth().height(50.dp).clip(RoundedCornerShape(12.dp))
                             .background(if (searchLevels.isNotEmpty() && !isConnecting) Accent else TileBg)
@@ -333,15 +313,9 @@ fun OnlineLobbyScreen(
                                 scope.launch {
                                     isConnecting = true
                                     connectionError = false
-                                    // Отправляем данные на сервер
                                     val success = OnlineNetworkManager.registerPlayer(nickname, selectedLevel)
                                     isConnecting = false
-                                    
-                                    if (success) {
-                                        searchPhase = SearchPhase.SEARCHING
-                                    } else {
-                                        connectionError = true
-                                    }
+                                    if (success) searchPhase = SearchPhase.SEARCHING else connectionError = true
                                 }
                             },
                         contentAlignment = Alignment.Center
@@ -360,10 +334,7 @@ fun OnlineLobbyScreen(
                     
                     Spacer(Modifier.height(8.dp))
                     
-                    TextButton(onClick = { 
-                        searchPhase = SearchPhase.NONE
-                        onPlayBot(is501, selectedLevel, legs, sets, nickname, saveToTraining)
-                    }, enabled = !isConnecting, modifier = Modifier.fillMaxWidth()) {
+                    TextButton(onClick = { searchPhase = SearchPhase.NONE; onPlayBot(is501, selectedLevel, legs, sets, nickname, saveToTraining) }, enabled = !isConnecting, modifier = Modifier.fillMaxWidth()) {
                         Text("Играть с ботом", color = Color.White.copy(alpha = 0.6f), fontSize = 14.sp)
                     }
                 }
@@ -374,9 +345,14 @@ fun OnlineLobbyScreen(
     // ── ОКНО 2: ПРОЦЕСС ПОИСКА ──
     if (searchPhase == SearchPhase.SEARCHING) {
         SearchingDialog(
+            myNickname = nickname,
             timeSeconds = searchTimeSeconds,
             onTimeUp = { searchPhase = SearchPhase.RESULT },
-            onCancel = { searchPhase = SearchPhase.NONE }
+            onCancel = { searchPhase = SearchPhase.NONE },
+            onOpponentFound = { name ->
+                foundOpponent = name
+                searchPhase = SearchPhase.FOUND
+            }
         )
     }
 
@@ -391,37 +367,47 @@ fun OnlineLobbyScreen(
                     Text("За отведенное время никто не откликнулся. Что будем делать?", color = Color.White.copy(alpha = 0.7f), fontSize = 14.sp)
                     Spacer(Modifier.height(20.dp))
                     
-                    // Расширить поиск
-                    Box(
-                        modifier = Modifier.fillMaxWidth().height(48.dp).clip(RoundedCornerShape(10.dp))
-                            .background(Accent).clickable { searchPhase = SearchPhase.SETUP },
-                        contentAlignment = Alignment.Center
-                    ) {
+                    Box(modifier = Modifier.fillMaxWidth().height(48.dp).clip(RoundedCornerShape(10.dp)).background(Accent).clickable { searchPhase = SearchPhase.SETUP }, contentAlignment = Alignment.Center) {
                         Text("Расширить параметры", color = DarkBg, fontSize = 15.sp, fontWeight = FontWeight.Bold)
                     }
                     Spacer(Modifier.height(8.dp))
                     
-                    // Повторить
-                    Box(
-                        modifier = Modifier.fillMaxWidth().height(48.dp).clip(RoundedCornerShape(10.dp))
-                            .background(TileBg).clickable { searchPhase = SearchPhase.SEARCHING },
-                        contentAlignment = Alignment.Center
-                    ) {
+                    Box(modifier = Modifier.fillMaxWidth().height(48.dp).clip(RoundedCornerShape(10.dp)).background(TileBg).clickable { searchPhase = SearchPhase.SEARCHING }, contentAlignment = Alignment.Center) {
                         Text("Искать еще раз", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold)
                     }
                     Spacer(Modifier.height(8.dp))
 
-                    // Бот
-                    Box(
-                        modifier = Modifier.fillMaxWidth().height(48.dp).clip(RoundedCornerShape(10.dp))
-                            .background(GoldAccent.copy(alpha = 0.2f)).clickable { 
-                                searchPhase = SearchPhase.NONE
-                                onPlayBot(is501, selectedLevel, legs, sets, nickname, saveToTraining)
-                            },
-                        contentAlignment = Alignment.Center
-                    ) {
+                    Box(modifier = Modifier.fillMaxWidth().height(48.dp).clip(RoundedCornerShape(10.dp)).background(GoldAccent.copy(alpha = 0.2f)).clickable { searchPhase = SearchPhase.NONE; onPlayBot(is501, selectedLevel, legs, sets, nickname, saveToTraining) }, contentAlignment = Alignment.Center) {
                         Text("Играть с ботом", color = GoldAccent, fontSize = 15.sp, fontWeight = FontWeight.Bold)
                     }
+                }
+            }
+        )
+    }
+
+    // ── ОКНО 4: СОПЕРНИК НАЙДЕН ──
+    if (searchPhase == SearchPhase.FOUND && foundOpponent != null) {
+        AlertDialog(
+            onDismissRequest = { },
+            confirmButton = {
+                TextButton(onClick = {
+                    val opponentName = foundOpponent!!
+                    searchPhase = SearchPhase.NONE
+                    foundOpponent = null
+                    // Пока запускаем игру с ботом, но называем бота ником найденного соперника
+                    onPlayBot(is501, selectedLevel, legs, sets, opponentName, saveToTraining)
+                }) { Text("В БОЙ!", color = GoldAccent, fontWeight = FontWeight.Bold, fontSize = 18.sp) }
+            },
+            dismissButton = {
+                TextButton(onClick = { searchPhase = SearchPhase.NONE; foundOpponent = null }) { Text("Отмена", color = Color.White.copy(alpha = 0.6f)) }
+            },
+            title = { Text("Соперник найден!", color = Accent, fontSize = 22.sp, fontWeight = FontWeight.Bold) },
+            text = {
+                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
+                    Text("Игрок:", color = Color.White.copy(alpha = 0.7f), fontSize = 14.sp)
+                    Text(foundOpponent!!, color = GoldAccent, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.height(12.dp))
+                    Text("готов с вами сыграть.", color = Color.White, fontSize = 14.sp)
                 }
             }
         )
@@ -429,61 +415,62 @@ fun OnlineLobbyScreen(
 }
 
 // ─────────────────────────────────────────────
-// АНИМИРОВАННОЕ ОКНО ПОИСКА
+// АНИМИРОВАННОЕ ОКНО ПОИСКА С ЗАПРОСАМИ
 // ─────────────────────────────────────────────
 @Composable
 private fun SearchingDialog(
+    myNickname: String,
     timeSeconds: Int,
     onTimeUp: () -> Unit,
-    onCancel: () -> Unit
+    onCancel: () -> Unit,
+    onOpponentFound: (String) -> Unit
 ) {
     var secondsLeft by remember { mutableStateOf(timeSeconds) }
+    var statusText by remember { mutableStateOf("Ищем соперника...") }
 
     val infiniteTransition = rememberInfiniteTransition(label = "searchAnimation")
     val angle by infiniteTransition.animateFloat(
         initialValue = 0f,
         targetValue = 360f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(2000, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
+        animationSpec = infiniteRepeatable(animation = tween(2000, easing = LinearEasing), repeatMode = RepeatMode.Restart),
         label = "angle"
     )
 
     LaunchedEffect(Unit) {
-        while (secondsLeft > 0) {
+        var found = false
+        while (secondsLeft > 0 && !found) {
             delay(1000L)
             secondsLeft -= 1
+            
+            // Каждые 3 секунды опрашиваем сервер
+            if (secondsLeft % 3 == 0) {
+                statusText = "Проверяем сервер..."
+                val opponent = OnlineNetworkManager.findOpponent(myNickname)
+                if (opponent != null) {
+                    found = true
+                    onOpponentFound(opponent)
+                    break
+                }
+                statusText = "Ищем соперника..."
+            }
         }
-        onTimeUp()
+        if (!found && secondsLeft <= 0) {
+            onTimeUp()
+        }
     }
 
-    Dialog(
-        onDismissRequest = { },
-        properties = DialogProperties(dismissOnBackPress = false, dismissOnClickOutside = false)
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(24.dp))
-                .background(TileBgDark)
-                .padding(24.dp)
-        ) {
+    Dialog(onDismissRequest = { }, properties = DialogProperties(dismissOnBackPress = false, dismissOnClickOutside = false)) {
+        Box(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp)).background(TileBgDark).padding(24.dp)) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Box(modifier = Modifier.size(140.dp), contentAlignment = Alignment.Center) {
                     Text(text = "🌐", fontSize = 64.sp, modifier = Modifier.size(70.dp), textAlign = TextAlign.Center)
                     Box(modifier = Modifier.fillMaxSize().rotate(angle)) {
-                        Icon(
-                            imageVector = Icons.Default.Search,
-                            contentDescription = null,
-                            tint = GoldAccent,
-                            modifier = Modifier.align(Alignment.TopCenter).size(36.dp)
-                        )
+                        Icon(imageVector = Icons.Default.Search, contentDescription = null, tint = GoldAccent, modifier = Modifier.align(Alignment.TopCenter).size(36.dp))
                     }
                 }
 
                 Spacer(Modifier.height(20.dp))
-                Text("Ищем соперника...", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                Text(statusText, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.height(8.dp))
                 Text("Осталось: $secondsLeft сек", color = GoldAccent, fontSize = 16.sp, fontWeight = FontWeight.Medium)
 
@@ -523,22 +510,10 @@ private fun NumberPicker(label: String, value: Int, onValueChange: (Int) -> Unit
 
 private fun getPprRange(level: Int): String {
     return when (level) {
-        1 -> "22-26"
-        2 -> "28-32"
-        3 -> "33-37"
-        4 -> "38-42"
-        5 -> "43-47"
-        6 -> "48-52"
-        7 -> "53-57"
-        8 -> "58-62"
-        9 -> "63-67"
-        10 -> "68-72"
-        11 -> "73-77"
-        12 -> "78-82"
-        13 -> "83-87"
-        14 -> "88-92"
-        15 -> "93-97"
-        16 -> "98+"
+        1 -> "22-26"; 2 -> "28-32"; 3 -> "33-37"; 4 -> "38-42"
+        5 -> "43-47"; 6 -> "48-52"; 7 -> "53-57"; 8 -> "58-62"
+        9 -> "63-67"; 10 -> "68-72"; 11 -> "73-77"; 12 -> "78-82"
+        13 -> "83-87"; 14 -> "88-92"; 15 -> "93-97"; 16 -> "98+"
         else -> "?"
     }
 }
