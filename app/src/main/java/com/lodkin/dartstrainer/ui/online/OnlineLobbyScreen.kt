@@ -23,6 +23,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import com.lodkin.dartstrainer.data.online.OnlineNetworkManager
 import com.lodkin.dartstrainer.data.training.DartsNorms
 import com.lodkin.dartstrainer.theme.Accent
 import com.lodkin.dartstrainer.theme.DarkBg
@@ -30,6 +31,7 @@ import com.lodkin.dartstrainer.theme.GoldAccent
 import com.lodkin.dartstrainer.theme.TileBg
 import com.lodkin.dartstrainer.theme.TileBgDark
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 // Состояния окна поиска
 private enum class SearchPhase { NONE, SETUP, SEARCHING, RESULT }
@@ -41,6 +43,7 @@ fun OnlineLobbyScreen(
     onPlayBot: (is501: Boolean, level: Int, legs: Int, sets: Int, nickname: String, saveToTraining: Boolean) -> Unit
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val prefs = remember { context.getSharedPreferences("online_prefs", android.content.Context.MODE_PRIVATE) }
 
     // Основные настройки профиля
@@ -176,7 +179,6 @@ fun OnlineLobbyScreen(
     if (showNicknameDialog) {
         var input by remember { mutableStateOf(nickname) }
         AlertDialog(
-            // Разрешаем закрыть окно кликом мимо него
             onDismissRequest = { showNicknameDialog = false },
             confirmButton = {
                 TextButton(onClick = { 
@@ -185,7 +187,6 @@ fun OnlineLobbyScreen(
                 }) { Text("Сохранить", color = Accent) }
             },
             dismissButton = {
-                // Кнопка "Отмена" теперь показывается всегда, чтобы можно было передумать
                 TextButton(onClick = { showNicknameDialog = false }) { 
                     Text("Отмена", color = Color.White.copy(alpha = 0.6f)) 
                 }
@@ -255,7 +256,10 @@ fun OnlineLobbyScreen(
 
     // ── ОКНО 1: НАСТРОЙКА ПОИСКА ──
     if (searchPhase == SearchPhase.SETUP) {
-        Dialog(onDismissRequest = { searchPhase = SearchPhase.NONE }) {
+        var isConnecting by remember { mutableStateOf(false) }
+        var connectionError by remember { mutableStateOf(false) }
+
+        Dialog(onDismissRequest = { if (!isConnecting) searchPhase = SearchPhase.NONE }) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -280,7 +284,7 @@ fun OnlineLobbyScreen(
                                     modifier = Modifier.weight(1f)
                                         .clip(RoundedCornerShape(8.dp))
                                         .background(if (isSelected) Accent else TileBg)
-                                        .clickable {
+                                        .clickable(enabled = !isConnecting) {
                                             searchLevels = if (isSelected) searchLevels - lvl else searchLevels + lvl
                                         }
                                         .padding(vertical = 8.dp),
@@ -303,7 +307,7 @@ fun OnlineLobbyScreen(
                     Box(modifier = Modifier.fillMaxWidth()) {
                         Row(
                             modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(TileBg)
-                                .clickable { showTimeMenu = true }.padding(horizontal = 12.dp, vertical = 12.dp),
+                                .clickable(enabled = !isConnecting) { showTimeMenu = true }.padding(horizontal = 12.dp, vertical = 12.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text("Время поиска:", color = Color.White, fontSize = 14.sp, modifier = Modifier.weight(1f))
@@ -324,11 +328,34 @@ fun OnlineLobbyScreen(
                     // Кнопки действий
                     Box(
                         modifier = Modifier.fillMaxWidth().height(50.dp).clip(RoundedCornerShape(12.dp))
-                            .background(if (searchLevels.isNotEmpty()) Accent else TileBg)
-                            .clickable(enabled = searchLevels.isNotEmpty()) { searchPhase = SearchPhase.SEARCHING },
+                            .background(if (searchLevels.isNotEmpty() && !isConnecting) Accent else TileBg)
+                            .clickable(enabled = searchLevels.isNotEmpty() && !isConnecting) {
+                                scope.launch {
+                                    isConnecting = true
+                                    connectionError = false
+                                    // Отправляем данные на сервер
+                                    val success = OnlineNetworkManager.registerPlayer(nickname, selectedLevel)
+                                    isConnecting = false
+                                    
+                                    if (success) {
+                                        searchPhase = SearchPhase.SEARCHING
+                                    } else {
+                                        connectionError = true
+                                    }
+                                }
+                            },
                         contentAlignment = Alignment.Center
                     ) {
-                        Text("НАЧАТЬ ПОИСК", color = if (searchLevels.isNotEmpty()) DarkBg else Color.White.copy(alpha = 0.5f), fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                        if (isConnecting) {
+                            CircularProgressIndicator(color = DarkBg, modifier = Modifier.size(24.dp))
+                        } else {
+                            Text("НАЧАТЬ ПОИСК", color = if (searchLevels.isNotEmpty()) DarkBg else Color.White.copy(alpha = 0.5f), fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+
+                    if (connectionError) {
+                        Spacer(Modifier.height(8.dp))
+                        Text("Ошибка соединения с сервером.\nПроверьте интернет.", color = Color.Red, fontSize = 12.sp, textAlign = TextAlign.Center)
                     }
                     
                     Spacer(Modifier.height(8.dp))
@@ -336,7 +363,7 @@ fun OnlineLobbyScreen(
                     TextButton(onClick = { 
                         searchPhase = SearchPhase.NONE
                         onPlayBot(is501, selectedLevel, legs, sets, nickname, saveToTraining)
-                    }, modifier = Modifier.fillMaxWidth()) {
+                    }, enabled = !isConnecting, modifier = Modifier.fillMaxWidth()) {
                         Text("Играть с ботом", color = Color.White.copy(alpha = 0.6f), fontSize = 14.sp)
                     }
                 }
