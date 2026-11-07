@@ -45,8 +45,8 @@ object OnlineNetworkManager {
         }
     }
 
-    // Отправка приглашения
-    suspend fun sendInvite(fromUser: String, toUser: String): Boolean = withContext(Dispatchers.IO) {
+    // Отправка приглашения. Возвращает ID приглашения (или null при ошибке)
+    suspend fun sendInvite(fromUser: String, toUser: String): String? = withContext(Dispatchers.IO) {
         try {
             val jsonBody = JSONObject().apply {
                 put("from_user", fromUser)
@@ -59,15 +59,45 @@ object OnlineNetworkManager {
                 .post(jsonBody.toRequestBody(JSON))
                 .build()
 
-            client.newCall(request).execute().use { response -> response.isSuccessful }
+            client.newCall(request).execute().use { response ->
+                if (response.isSuccessful) {
+                    val body = response.body?.string()
+                    if (body != null) {
+                        return@withContext JSONObject(body).optString("id")
+                    }
+                }
+                null
+            }
         } catch (e: Exception) {
-            false
+            null
         }
     }
 
-    // Проверка, есть ли входящее приглашение для меня
+    // Поиск случайного соперника (кроме себя)
+    suspend fun findOpponent(myNickname: String): String? = withContext(Dispatchers.IO) {
+        try {
+            val url = "$PLAYERS_URL?filter=(nickname!='$myNickname')"
+            val request = Request.Builder().url(url).get().build()
+
+            client.newCall(request).execute().use { response ->
+                if (response.isSuccessful) {
+                    val body = response.body?.string() ?: return@withContext null
+                    val items = JSONObject(body).optJSONArray("items")
+                    if (items != null && items.length() > 0) {
+                        return@withContext items.getJSONObject(0).optString("nickname")
+                    }
+                }
+            }
+            null
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    // Проверка входящего приглашения для меня
     suspend fun checkIncomingInvite(myNickname: String): OnlineInvite? = withContext(Dispatchers.IO) {
         try {
+            // Ищем приглашение, где я получатель и статус "pending"
             val url = "$INVITES_URL?filter=(to_user='$myNickname'%26%26status='pending')"
             val request = Request.Builder().url(url).get().build()
 
@@ -87,7 +117,7 @@ object OnlineNetworkManager {
         }
     }
 
-    // Принять приглашение (изменить статус на accepted)
+    // Принять приглашение
     suspend fun acceptInvite(inviteId: String): Boolean = withContext(Dispatchers.IO) {
         try {
             val jsonBody = JSONObject().apply { put("status", "accepted") }.toString()
@@ -102,7 +132,7 @@ object OnlineNetworkManager {
         }
     }
 
-    // Проверить, принял ли соперник наше приглашение
+    // Проверить, принял ли соперник мое приглашение
     suspend fun checkMyInviteStatus(inviteId: String): String? = withContext(Dispatchers.IO) {
         try {
             val request = Request.Builder().url("$INVITES_URL/$inviteId").get().build()
