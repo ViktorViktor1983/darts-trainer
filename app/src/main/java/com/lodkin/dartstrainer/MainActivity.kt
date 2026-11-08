@@ -112,6 +112,15 @@ private enum class TrainingBlockPhase {
     WARMUP, MAIN, PSYCHOLOGY, STRENGTH, FINISHED
 }
 
+data class OnlineGameParams(
+    val is501: Boolean,
+    val level: Int,
+    val legs: Int,
+    val sets: Int,
+    val nickname: String,
+    val saveToTraining: Boolean
+)
+
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -529,7 +538,6 @@ fun DartsTrainerApp() {
         while (true) {
             delay(1000L)
             trainingElapsedSeconds += 1
-            // Показываем окно ровно за 5 минут (300 секунд) до конца
             if (!isFreeTraining && !normativesActive && trainingElapsedSeconds == trainingMinutes * 60 - 300) {
                 showTimeUpDialog = true
             }
@@ -589,10 +597,7 @@ fun DartsTrainerApp() {
                         onPlayBot = { is501, level, legs, sets, nickname, saveToTraining ->
                             val params = OnlineGameParams(is501, level, legs, sets, nickname, saveToTraining)
                             bullDrawExerciseId = if (is501) "game501" else "cricket"
-                            // Временно сохраняем параметры в стейт, чтобы использовать в диалоге Bull
-                            // Для простоты вызовем старт сразу, но в реальности тут нужен розыгрыш.
-                            // Пока используем заглушку, как в тренировке.
-                            startOnlineBotGame(params, 0) 
+                            startOnlineBotGame(params, 0)
                         }
                     )
                 }
@@ -607,9 +612,15 @@ fun DartsTrainerApp() {
                         screen = screen, onScreenChange = { screen = it },
                         onResumeGame501 = { entity -> Game501Serializer.fromJson(entity.stateBlob)?.let { game501 = it; game501ExistingId = entity.id; screen = "game501_game" } },
                         onResumeCricket = { entity -> CricketSerializer.fromJson(entity.stateBlob)?.let { cricketGame = it; cricketExistingId = entity.id; screen = "cricket_game" } },
-                        cricketRepository = cricketRepository, game501Repository = game501Repository, sectorRepository = sectorRepository,
-                        aroundClockRepository = aroundClockRepository, bigRoundRepository = bigRoundRepository, scoreSetRepository = scoreSetRepository,
-                        freePlayRecordsRepository = freePlayRecordsRepository, statsMenuKey = statsMenuKey, onStatsMenuKeyChange = { statsMenuKey = it }
+                        cricketRepository = cricketRepository, 
+                        game501Repository = game501Repository, 
+                        sectorRepository = sectorRepository,
+                        aroundClockRepository = aroundClockRepository, 
+                        bigRoundRepository = bigRoundRepository, 
+                        scoreSetRepository = scoreSetRepository,
+                        freePlayRecordsRepository = freePlayRecordsRepository, 
+                        statsMenuKey = statsMenuKey, 
+                        onStatsMenuKeyChange = { statsMenuKey = it }
                     )
                 }
 
