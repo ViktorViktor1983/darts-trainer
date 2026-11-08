@@ -1,9 +1,7 @@
 package com.lodkin.dartstrainer
 
-import android.content.Context
 import android.os.Bundle
 import androidx.activity.ComponentActivity
-import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -14,11 +12,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -62,9 +58,7 @@ import com.lodkin.dartstrainer.data.training.BlockType
 import com.lodkin.dartstrainer.data.training.DartsNorms
 import com.lodkin.dartstrainer.data.training.ExerciseResult
 import com.lodkin.dartstrainer.data.training.InventoryStorage
-import com.lodkin.dartstrainer.data.training.LevelCalculator // ДОБАВЛЕН ИМПОРТ
 import com.lodkin.dartstrainer.data.training.NormativesStateStorage
-import com.lodkin.dartstrainer.data.training.ProblemSectorsStorage
 import com.lodkin.dartstrainer.data.training.TrainingBlocksStorage
 import com.lodkin.dartstrainer.data.training.TrainingBotLevelStorage
 import com.lodkin.dartstrainer.data.training.TrainingDatabase
@@ -74,23 +68,18 @@ import com.lodkin.dartstrainer.data.training.TrainingRepository
 import com.lodkin.dartstrainer.data.training.TrainingSession
 import com.lodkin.dartstrainer.data.training.TrainingStateStorage
 import com.lodkin.dartstrainer.data.training.TrainingStatsAnalyzer
-import com.lodkin.dartstrainer.data.training.TrainingUnfinishedStorage
 import com.lodkin.dartstrainer.data.training.WeaknessType
 import com.lodkin.dartstrainer.theme.Accent
 import com.lodkin.dartstrainer.theme.DarkBg
 import com.lodkin.dartstrainer.theme.GoldAccent
 import com.lodkin.dartstrainer.theme.TileBg
-import com.lodkin.dartstrainer.theme.TileBgDark // ДОБАВЛЕН ИМПОРТ
 import com.lodkin.dartstrainer.ui.*
 import com.lodkin.dartstrainer.ui.about.AboutScreen
 import com.lodkin.dartstrainer.ui.online.OnlineLobbyScreen
 import com.lodkin.dartstrainer.ui.training.*
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import java.util.Locale
-import kotlin.math.roundToInt
 import kotlin.random.Random
 
 private const val TRAINING_AUTO_OK_SECONDS = 3
@@ -122,15 +111,6 @@ private val TRAINING_SCREENS: Set<String> = setOf(
 private enum class TrainingBlockPhase {
     WARMUP, MAIN, PSYCHOLOGY, STRENGTH, FINISHED
 }
-
-data class OnlineGameParams(
-    val is501: Boolean,
-    val level: Int,
-    val legs: Int,
-    val sets: Int,
-    val nickname: String,
-    val saveToTraining: Boolean
-)
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -183,7 +163,7 @@ fun DartsTrainerApp() {
 
     // ── СТЕЙТЫ ТРЕНИРОВКИ ──
     var trainingMinutes by remember {
-        mutableStateOf(context.getSharedPreferences("training_prefs", Context.MODE_PRIVATE).getInt("session_minutes", SettingsStorage.getTrainingMinutes(context)))
+        mutableStateOf(context.getSharedPreferences("training_prefs", android.content.Context.MODE_PRIVATE).getInt("session_minutes", SettingsStorage.getTrainingMinutes(context)))
     }
     var trainingSessionId by remember { mutableStateOf(0L) }
     var isTrainingActive by remember { mutableStateOf(false) }
@@ -206,29 +186,19 @@ fun DartsTrainerApp() {
     var isTraining501 by remember { mutableStateOf(false) }
     var isTrainingCricket by remember { mutableStateOf(false) }
     var isOnlineGame by remember { mutableStateOf(false) }
-    var isResumingFromStats by remember { mutableStateOf(false) } 
-
-    // ── СТЕЙТЫ ОНЛАЙНА ──
-    var pendingOnlineGameParams by remember { mutableStateOf<OnlineGameParams?>(null) }
 
     // ── СТЕЙТЫ СВОБОДНОЙ ТРЕНИРОВКИ ──
-    val prefs = context.getSharedPreferences("free_training_prefs", Context.MODE_PRIVATE)
     var isFreeTraining by remember { mutableStateOf(false) }
     var isSingleExercisePlay by remember { mutableStateOf(false) }
     var isSetupForTraining by remember { mutableStateOf(false) }
-    
-    var freeNoRepeat by remember { mutableStateOf(prefs.getBoolean("free_no_repeat", false)) }
-    var freeChooseMyself by remember { mutableStateOf(prefs.getBoolean("free_choose_myself", false)) }
-    
+    var freeNoRepeat by remember { mutableStateOf(false) }
+    var freeChooseMyself by remember { mutableStateOf(false) }
     var freeCompletedIds by remember { mutableStateOf<Set<String>>(emptySet()) }
     var freeSkippedIds by remember { mutableStateOf<Set<String>>(emptySet()) }
     var freeCurrentId by remember { mutableStateOf<String?>(null) }
     var freeRouletteKey by remember { mutableStateOf(0) }
     var freeExercisesCompleted by remember { mutableStateOf(0) }
     var showFreeNewRoundDialog by remember { mutableStateOf(false) }
-
-    fun saveFreeNoRepeat(value: Boolean) { prefs.edit().putBoolean("free_no_repeat", value).apply(); freeNoRepeat = value }
-    fun saveFreeChooseMyself(value: Boolean) { prefs.edit().putBoolean("free_choose_myself", value).apply(); freeChooseMyself = value }
 
     // ── СТЕЙТЫ ОТДЫХА ──
     var showRestTimer by remember { mutableStateOf(false) }
@@ -242,7 +212,6 @@ fun DartsTrainerApp() {
     var showExitTrainingDialog by remember { mutableStateOf(false) }
     var showBullDraw by remember { mutableStateOf(false) }
     var bullDrawExerciseId by remember { mutableStateOf<String?>(null) }
-    var examResultMessage by remember { mutableStateOf<String?>(null) }
 
     // ── СТЕЙТЫ НОРМАТИВОВ ──
     var normativesAvailable by remember { mutableStateOf(false) }
@@ -262,25 +231,12 @@ fun DartsTrainerApp() {
     var pendingNormativesResume by remember { mutableStateOf<NormativesStateStorage.Snapshot?>(null) }
     var isNormativesExercise by remember { mutableStateOf(false) }
 
-    // Сброс флагов при смене режима
+    // Сброс флагов онлайна при возврате в лобби
     LaunchedEffect(screen) {
         if (screen == "online_lobby") {
             isOnlineGame = false
             isTraining501 = false
             isTrainingCricket = false
-            isResumingFromStats = false
-        }
-        if (screen == "main" || screen == "game_select") {
-            isTraining501 = false
-            isTrainingCricket = false
-            isResumingFromStats = false
-            isOnlineGame = false
-        }
-        if (screen == "training") {
-            isTraining501 = false
-            isTrainingCricket = false
-            isResumingFromStats = false
-            isOnlineGame = false
         }
     }
 
@@ -398,7 +354,8 @@ fun DartsTrainerApp() {
 
     fun startNewNormatives() {
         scope.launch {
-            val startLvl = SettingsStorage.getStartLevel(context)
+            val analysis = TrainingStatsAnalyzer.analyze(trainingRepository)
+            val startLvl = analysis.level.coerceAtLeast(1)
             normativesStartLevel = startLvl
 
             val session = TrainingSession(
@@ -425,66 +382,17 @@ fun DartsTrainerApp() {
 
     fun evaluateAndFinishNormatives() {
         scope.launch {
-            // 1. Получаем последние результаты по 5 дисциплинам
-            val res501 = withContext(Dispatchers.IO) { trainingRepository.getLatestExerciseResults("game501", 1) }.firstOrNull()
-            val resCricket = withContext(Dispatchers.IO) { trainingRepository.getLatestExerciseResults("cricket", 1) }.firstOrNull()
-            val resS20 = withContext(Dispatchers.IO) { trainingRepository.getLatestExerciseResults("sector20", 1) }.firstOrNull()
-            val resBR = withContext(Dispatchers.IO) { trainingRepository.getLatestExerciseResults("biground", 1) }.firstOrNull()
-            val resSS = withContext(Dispatchers.IO) { trainingRepository.getLatestExerciseResults("scoreset", 1) }.firstOrNull()
+            val analysis = TrainingStatsAnalyzer.analyze(trainingRepository)
+            val newLvl = analysis.level; val startLvl = normativesStartLevel
+            normativesNewLevel = if (newLvl > startLvl) newLvl else startLvl
 
-            // 2. Извлекаем значения
-            val ppr = res501?.let { parseDetails(it.detailsJson)["ppr"]?.toFloatOrNull() } ?: 0f
-            val mpr = resCricket?.let { parseDetails(it.detailsJson)["mpr"]?.toFloatOrNull() } ?: 0f
-            val s20 = resS20?.score ?: 0
-            val br = resBR?.score ?: 0
-            val ss = resSS?.score ?: 0
-
-            // 3. Считаем уровень по НОВОЙ формуле
-            val newLvl = LevelCalculator.calculateExamLevel(ppr, mpr, s20, br, ss)
-            val currentLvl = SettingsStorage.getStartLevel(context)
-            val failedStreak = SettingsStorage.getFailedExamsStreak(context)
-            
-            var finalLvl = currentLvl
-            var message = ""
-            var newStreak = failedStreak
-
-            // 4. Логика повышения / подтверждения / понижения
-            if (newLvl > currentLvl) {
-                finalLvl = newLvl
-                newStreak = 0
-                message = "🏆 Отличная работа! Ты сдал экзамен на уровень ${DartsNorms.getLevelName(newLvl)}. Твой новый уровень: $newLvl."
-            } else if (newLvl == currentLvl) {
-                newStreak = 0
-                message = "✅ Экзамен сдан! Ты подтвердил свой уровень: ${DartsNorms.getLevelName(currentLvl)}."
+            if (newLvl > startLvl) {
+                trainingRepository.clearStatisticsAfterNormatives()
+                TrainingStateStorage.clear(context); NormativesStateStorage.clear(context)
             } else {
-                // Сдали хуже
-                newStreak += 1
-                if (newStreak >= 2) {
-                    finalLvl = (currentLvl - 1).coerceAtLeast(1)
-                    newStreak = 0
-                    message = "⚠️ Это уже второй экзамен подряд ниже твоего уровня. Увы, но мы вынуждены понизить твой уровень до ${DartsNorms.getLevelName(finalLvl)}. Не расстраивайся, ты обязательно вернёшь его обратно!"
-                } else {
-                    message = "Экзамен сдан ниже твоего текущего уровня. Но мы знаем, что дартс — игра дисперсии. Мы оставляем твой уровень прежним. Но если следующий экзамен будет тоже ниже, мы будем вынуждены понизить его на 1."
-                }
+                NormativesStateStorage.clear(context)
             }
-
-            // 5. Сохраняем уровень и стрик
-            SettingsStorage.setStartLevel(context, finalLvl)
-            SettingsStorage.setFailedExamsStreak(context, newStreak)
-
-            // 6. ВСЕГДА обнуляем статистику (начинаем новый период)
-            trainingRepository.clearStatisticsAfterNormatives()
-            TrainingStateStorage.clear(context)
-            NormativesStateStorage.clear(context)
-            ProblemSectorsStorage.clear(context)
-
-            isTrainingActive = false
-            trainingSessionId = 0L
-            normativesActive = false
-            isNormativesExercise = false
-            normativesNewLevel = finalLvl
-            examResultMessage = message
-            screen = "normatives"
+            isTrainingActive = false; trainingSessionId = 0L; normativesActive = false; isNormativesExercise = false; screen = "normatives"
         }
     }
 
@@ -551,14 +459,12 @@ fun DartsTrainerApp() {
         currentExerciseIndex = 0; exerciseStatuses = emptyMap(); exerciseStartMillis = 0L
         isTraining501 = false; isTrainingCricket = false; showRestTimer = false; restNextTitle = null; pendingNextStep = null
         showExitTrainingDialog = false; isFreeTraining = false; isSingleExercisePlay = false; isSetupForTraining = false
-        freeCompletedIds = emptySet(); freeSkippedIds = emptySet(); freeCurrentId = null
+        freeNoRepeat = false; freeChooseMyself = false; freeCompletedIds = emptySet(); freeSkippedIds = emptySet(); freeCurrentId = null
         freeRouletteKey = 0; freeExercisesCompleted = 0; showFreeNewRoundDialog = false; showBullDraw = false; bullDrawExerciseId = null
         normativesActive = false; normativesCompletedSteps = emptySet(); normatives501Levels = emptyList()
         normatives501PlayerWins = 0; normatives501BotWins = 0; normatives501CurrentLeg = 0; normativesCricketLevels = emptyList()
         normativesCricketPlayerWins = 0; normativesCricketBotWins = 0; normativesCricketCurrentLeg = 0; normativesNewLevel = null
         isNormativesExercise = false; currentWeakness = null; currentLevel = 1; currentTargetGoals = emptyList()
-        isResumingFromStats = false
-        examResultMessage = null
     }
 
     fun activePhases(): List<TrainingBlockPhase> {
@@ -636,95 +542,22 @@ fun DartsTrainerApp() {
 
     LaunchedEffect(isTrainingActive, screen) {
         if (!isTrainingActive || screen !in TRAINING_SCREENS) return@LaunchedEffect
-        while (true) {
-            delay(30_000L)
-            if (!isFreeTraining && !normativesActive) saveCurrentTrainingState()
-        }
+        while (true) { delay(30_000L); if (!isFreeTraining && !normativesActive) saveCurrentTrainingState() }
     }
 
     if (stage == "loading") LaunchedEffect(Unit) { delay(3000); stage = "main" }
 
     // ────────────────────────────────────────────────────────
-    // ПЕРЕХВАТ СИСТЕМНОЙ КНОПКИ "НАЗАД"
-    // ────────────────────────────────────────────────────────
-    val activity = context as? android.app.Activity
-    
-    // enabled = true всегда, чтобы мы сами решали, когда закрыть приложение
-    BackHandler(enabled = true) {
-        if (stage == "welcome") {
-            activity?.finish() // Закрываем приложение на экране приветствия
-            return@BackHandler
-        }
-        if (stage == "loading") {
-            return@BackHandler // Ждем загрузки
-        }
-        if (stage == "onboarding") {
-            stage = "welcome"
-            return@BackHandler
-        }
-        
-        if (stage == "main") {
-            when {
-                // 1. Сначала закрываем открытые окна (диалоги), если они есть
-                showRestTimer -> {
-                    showRestTimer = false
-                    val step = pendingNextStep
-                    pendingNextStep = null
-                    restNextTitle = null
-                    step?.invoke()
-                }
-                showBullDraw -> {
-                    showBullDraw = false
-                    bullDrawExerciseId = null
-                    if (pendingOnlineGameParams != null) {
-                        pendingOnlineGameParams = null
-                        screen = "online_lobby"
-                    } else {
-                        screen = PARENT_SCREEN[screen] ?: "main"
-                    }
-                }
-                showExitTrainingDialog -> showExitTrainingDialog = false
-                showResumeDialog -> showResumeDialog = false
-                showResumeNormativesDialog -> showResumeNormativesDialog = false
-                showFreeNewRoundDialog -> showFreeNewRoundDialog = false
-                showTimeUpDialog -> showTimeUpDialog = false
-                examResultMessage != null -> examResultMessage = null
-                
-                // 2. Если мы на экране тренировки, вызываем окно выхода
-                isTrainingActive && screen in TRAINING_SCREENS -> {
-                    showExitTrainingDialog = true
-                }
-                
-                // 3. Если мы на любом другом экране, идем на родительский
-                screen != "main" -> {
-                    val parent = PARENT_SCREEN[screen]
-                    screen = parent ?: "main"
-                }
-                
-                // 4. Если мы на Главном экране и все окна закрыты — закрываем приложение
-                else -> {
-                    activity?.finish()
-                }
-            }
-        }
-    }
-
-    // ────────────────────────────────────────────────────────
-    // UI И НАВИГ
+    // UI И НАВИГАЦИЯ
     // ────────────────────────────────────────────────────────
     Box(modifier = Modifier.fillMaxSize()) {
         when (stage) {
             "welcome" -> WelcomeScreen(onStart = { stage = "onboarding" })
             "onboarding" -> OnboardingScreen(onFinish = { result ->
-                SettingsStorage.setPlayerName(context, result.name)
-                SettingsStorage.setTrainingMinutes(context, result.trainingMinutes)
-                SettingsStorage.setTrainingsPerWeek(context, result.trainingsPerWeek)
-                SettingsStorage.setTrainingMode(context, result.trainingMode)
-                SettingsStorage.setStartMode(context, result.startMode)
-                SettingsStorage.setStartLevel(context, result.startLevel)
-                SettingsStorage.setOnboardingDone(context)
-                onboardingDone = true
-                stage = "main"
+                SettingsStorage.setPlayerName(context, result.name); SettingsStorage.setTrainingMinutes(context, result.trainingMinutes)
+                SettingsStorage.setTrainingsPerWeek(context, result.trainingsPerWeek); SettingsStorage.setTrainingMode(context, result.trainingMode)
+                SettingsStorage.setStartMode(context, result.startMode); SettingsStorage.setOnboardingDone(context)
+                onboardingDone = true; stage = "main"
             })
             "loading" -> LoadingScreen()
 
@@ -744,88 +577,31 @@ fun DartsTrainerApp() {
                         scope.launch { normativesAvailable = TrainingStatsAnalyzer.analyze(trainingRepository).isReadyForNormatives }
                         screen = "training"
                     },
-                    onFreePlay = { 
-                        isTraining501 = false
-                        isTrainingCricket = false
-                        isResumingFromStats = false
-                        isOnlineGame = false
-                        screen = "game_select" 
-                    }, 
-                    onStatsClick = { statsMenuKey++; screen = "stats_menu" },
+                    onFreePlay = { screen = "game_select" }, onStatsClick = { statsMenuKey++; screen = "stats_menu" },
                     onSettingsClick = { screen = "settings" }, onOpenDetailedStats = { screen = "detailed_stats" },
                     onOnlineClick = { screen = "online_lobby" }
                 )
 
+                // ЭКРАН ОНЛАЙН-ЛОББИ
                 "online_lobby" -> {
                     OnlineLobbyScreen(
                         onBack = { screen = "main" },
-                        onPlayFriend = {
-                            // TODO: Здесь будет логика приглашения друга
-                        },
                         onPlayBot = { is501, level, legs, sets, nickname, saveToTraining ->
-                            pendingOnlineGameParams = OnlineGameParams(is501, level, legs, sets, nickname, saveToTraining)
+                            val params = OnlineGameParams(is501, level, legs, sets, nickname, saveToTraining)
                             bullDrawExerciseId = if (is501) "game501" else "cricket"
-                            showBullDraw = true
+                            // Временно сохраняем параметры в стейт, чтобы использовать в диалоге Bull
+                            // Для простоты вызовем старт сразу, но в реальности тут нужен розыгрыш.
+                            // Пока используем заглушку, как в тренировке.
+                            startOnlineBotGame(params, 0) 
                         }
                     )
                 }
 
-                "detailed_stats" -> DetailedStatsScreen(
-                    repository = trainingRepository,
-                    game501Repository = game501Repository,
-                    cricketRepository = cricketRepository,
-                    onBack = { screen = "main" },
-                    onOpenDiscipline = { selectedDiscipline = it; screen = "discipline_stats" },
-                    onResumeGame501 = { entity -> 
-                        Game501Serializer.fromJson(entity.stateBlob)?.let { 
-                            game501 = it
-                            game501ExistingId = entity.id
-                            isTraining501 = true 
-                            isResumingFromStats = true 
-                            scope.launch {
-                                val session = TrainingSession(
-                                    dateMillis = System.currentTimeMillis(),
-                                    plannedMinutes = 0,
-                                    actualMinutes = 0,
-                                    levelAtStart = currentLevel,
-                                    mode = TrainingMode.FLEXIBLE,
-                                    focus = null,
-                                    isControl = false,
-                                    isCompleted = false
-                                )
-                                trainingSessionId = trainingRepository.insertSession(session)
-                                isTrainingActive = true
-                                screen = "game501_game"
-                            }
-                        } 
-                    },
-                    onResumeCricket = { entity -> 
-                        CricketSerializer.fromJson(entity.stateBlob)?.let { 
-                            cricketGame = it
-                            cricketExistingId = entity.id
-                            isTrainingCricket = true
-                            isResumingFromStats = true 
-                            scope.launch {
-                                val session = TrainingSession(
-                                    dateMillis = System.currentTimeMillis(),
-                                    plannedMinutes = 0,
-                                    actualMinutes = 0,
-                                    levelAtStart = currentLevel,
-                                    mode = TrainingMode.FLEXIBLE,
-                                    focus = null,
-                                    isControl = false,
-                                    isCompleted = false
-                                )
-                                trainingSessionId = trainingRepository.insertSession(session)
-                                isTrainingActive = true
-                                screen = "cricket_game"
-                            }
-                        } 
-                    }
-                )
+                "detailed_stats" -> DetailedStatsScreen(repository = trainingRepository, onBack = { screen = "main" }, onOpenDiscipline = { selectedDiscipline = it; screen = "discipline_stats" })
                 
                 "discipline_stats" -> DisciplineStatsScreen(repository = trainingRepository, disciplineId = selectedDiscipline ?: "game501", onBack = { screen = "detailed_stats" })
 
+                // --- СТАТИСТИКА ---
                 "stats_menu", "stats_cricket", "stats_501", "sector_stats", "aroundclock_stats", "biground_stats", "scoreset_stats" -> {
                     StatsRoutes(
                         screen = screen, onScreenChange = { screen = it },
@@ -837,6 +613,7 @@ fun DartsTrainerApp() {
                     )
                 }
 
+                // --- ИГРЫ ---
                 "game_select", "cricket_setup", "cricket_game", "cricket_stats", "game501_setup", "game501_game", "game501_stats",
                 "sector_setup", "sector_game", "aroundclock_setup", "aroundclock_game", "biground_setup", "biground_game", "scoreset_setup", "scoreset_game" -> {
                     GameRoutes(
@@ -850,21 +627,16 @@ fun DartsTrainerApp() {
                         aroundClockOrder = aroundClockOrder, onAroundClockOrderChange = { aroundClockOrder = it }, aroundClockHits = aroundClockHits, onAroundClockHitsChange = { aroundClockHits = it },
                         bigRoundCategory = bigRoundCategory, onBigRoundCategoryChange = { bigRoundCategory = it },
                         sessionStartTime = sessionStartTime, sessionForm = sessionForm, isTraining501 = isTraining501, isTrainingCricket = isTrainingCricket,
-                        isOnlineGame = isOnlineGame, isResumingFromStats = isResumingFromStats, 
+                        isOnlineGame = isOnlineGame,
                         trainingSessionId = trainingSessionId, exerciseStartMillis = exerciseStartMillis, isNormativesExercise = isNormativesExercise,
                         onTrainingGameFinished = { playerWon, isGame501 ->
-                            if (isGame501) {
-                                TrainingUnfinishedStorage.removeUnfinished501(context, game501ExistingId)
-                            } else {
-                                TrainingUnfinishedStorage.removeUnfinishedCricket(context, cricketExistingId)
-                            }
-                            
                             isTraining501 = false; isTrainingCricket = false; game501 = null; game501ExistingId = 0L; cricketGame = null; cricketExistingId = 0L
                             if (isNormativesExercise) afterNormativesLeg(playerWon, isGame501) else finishCurrentMainExercise()
                         }
                     )
                 }
 
+                // --- ТРЕНИРОВКА ---
                 "training", "training_settings", "training_progress", "training_warmup", "training_block", "training_exercise",
                 "training_summary", "training_free_next", "training_free_summary", "normatives", "normatives_exercise" -> {
                     TrainingRoutes(
@@ -873,22 +645,18 @@ fun DartsTrainerApp() {
                         scoreSetRepository = scoreSetRepository, bigRoundRepository = bigRoundRepository, playerName = SettingsStorage.getPlayerName(context),
                         context = context, scope = scope, trainingMinutes = trainingMinutes, isTrainingActive = isTrainingActive,
                         trainingElapsedSeconds = trainingElapsedSeconds, trainingPaused = trainingPaused, onTogglePause = { trainingPaused = !trainingPaused },
-                        currentPhase = currentPhase.name, 
-                        mainExercises = mainExercises, psychologyExercises = psychologyExercises, strengthExercises = strengthExercises,
+                        currentPhase = currentPhase.name, mainExercises = mainExercises, psychologyExercises = psychologyExercises, strengthExercises = strengthExercises,
                         currentExerciseIndex = currentExerciseIndex, onCurrentExerciseIndexChange = { currentExerciseIndex = it }, exerciseStatuses = exerciseStatuses,
                         onExerciseStatusesChange = { exerciseStatuses = it }, currentWeakness = currentWeakness, currentLevel = currentLevel, currentTargetGoals = currentTargetGoals,
                         isFreeTraining = isFreeTraining, isSingleExercisePlay = isSingleExercisePlay, isSetupForTraining = isSetupForTraining, onIsSetupForTrainingChange = { isSetupForTraining = it },
-                        freeNoRepeat = freeNoRepeat, onToggleNoRepeat = { saveFreeNoRepeat(it) }, 
-                        freeChooseMyself = freeChooseMyself, onToggleChooseMyself = { saveFreeChooseMyself(it) },
+                        freeNoRepeat = freeNoRepeat, onToggleNoRepeat = { freeNoRepeat = it }, freeChooseMyself = freeChooseMyself, onToggleChooseMyself = { freeChooseMyself = it },
                         freeCompletedIds = freeCompletedIds, onFreeCompletedIdsChange = { freeCompletedIds = it }, freeSkippedIds = freeSkippedIds, onFreeSkippedIdsChange = { freeSkippedIds = it },
                         freeCurrentId = freeCurrentId, onFreeCurrentIdChange = { freeCurrentId = it }, freeRouletteKey = freeRouletteKey, freeExercisesCompleted = freeExercisesCompleted,
                         onFreeExercisesCompletedChange = { freeExercisesCompleted = it }, showFreeNewRoundDialog = showFreeNewRoundDialog, onShowFreeNewRoundDialogChange = { showFreeNewRoundDialog = it },
                         onPickNextFreeExercise = { pickNextFreeExercise() },
                         onFreePlayAction = { launchExercise(it ?: "") }, onFreePlayDirect = { id, isFriend ->
                             if (isFriend && (id == "game501" || id == "cricket")) {
-                                isSetupForTraining = true; 
-                                if (id == "game501") isTraining501 = true else isTrainingCricket = true
-                                scope.launch { screen = if (id == "game501") "game501_setup" else "cricket_setup" }
+                                isSetupForTraining = true; scope.launch { screen = if (id == "game501") "game501_setup" else "cricket_setup" }
                             } else { freeCurrentId = id; launchExercise(id) }
                         }, onFreeSkip = { id -> if (id != null) freeSkippedIds = freeSkippedIds + id; freeCurrentId = null }, onFreeFinish = { screen = "training_free_summary" },
                         showRestTimer = showRestTimer, restTimerSeconds = restTimerSeconds, restNextTitle = restNextTitle,
@@ -927,7 +695,7 @@ fun DartsTrainerApp() {
                         onBackFromNormativesExercise = { isNormativesExercise = false; sectorToPlay = null; bigRoundCategory = null; screen = "normatives" },
                         onStartTrainingClick = {
                             autoOpenTimeDialog = false
-                            trainingMinutes = context.getSharedPreferences("training_prefs", Context.MODE_PRIVATE).getInt("session_minutes", SettingsStorage.getTrainingMinutes(context))
+                            trainingMinutes = context.getSharedPreferences("training_prefs", android.content.Context.MODE_PRIVATE).getInt("session_minutes", SettingsStorage.getTrainingMinutes(context))
                             scope.launch {
                                 val analysis = TrainingStatsAnalyzer.analyze(trainingRepository)
                                 val completedCount = trainingRepository.getCompletedSessionCount()
@@ -982,7 +750,7 @@ fun DartsTrainerApp() {
                                 mainExercises = dynamicIds.mapNotNull { d -> baseMap[d.id]?.copy(minutes = d.minutes) }.ifEmpty { getDefaultMainExercises() }
                                 psychologyExercises = emptyList(); strengthExercises = emptyList()
                                 currentPhase = TrainingBlockPhase.MAIN; currentExerciseIndex = 0; exerciseStatuses = emptyMap()
-                                isTrainingActive = true; isFreeTraining = true; 
+                                isTrainingActive = true; isFreeTraining = true; freeNoRepeat = false; freeChooseMyself = false
                                 freeCompletedIds = emptySet(); freeSkippedIds = emptySet(); freeCurrentId = null; freeRouletteKey = 0; freeExercisesCompleted = 0
                                 screen = "training_free_next"
                             }
@@ -1026,6 +794,7 @@ fun DartsTrainerApp() {
             }
         }
 
+        // Оверлеи (таймер и отдых)
         if (isTrainingActive && screen in TRAINING_SCREENS && !showRestTimer && screen != "training_free_summary" && !normativesActive) {
             TrainingTimerOverlay(
                 secondsLeft = if (isFreeTraining) trainingElapsedSeconds else (trainingMinutes * 60 - trainingElapsedSeconds),
@@ -1035,54 +804,17 @@ fun DartsTrainerApp() {
         if (showRestTimer) {
             RestTimerOverlay(totalSeconds = restTimerSeconds, nextExerciseTitle = restNextTitle, onSkip = { showRestTimer = false; val step = pendingNextStep; pendingNextStep = null; restNextTitle = null; step?.invoke() })
         }
-        
-        // Показ результата экзамена
-        if (examResultMessage != null) {
-            AlertDialog(
-                onDismissRequest = { examResultMessage = null },
-                containerColor = TileBgDark,
-                confirmButton = {
-                    TextButton(onClick = { examResultMessage = null }) {
-                        Text("ОК", color = Accent, fontWeight = FontWeight.Bold)
-                    }
-                },
-                title = { Text("Результат экзамена", color = GoldAccent, fontSize = 20.sp, fontWeight = FontWeight.Bold) },
-                text = { Text(examResultMessage!!, color = Color.White, fontSize = 15.sp, lineHeight = 22.sp) }
-            )
-        }
     }
 
     // ────────────────────────────────────────────────────────
     // ДИАЛОГИ
     // ────────────────────────────────────────────────────────
-    val onlineParams = pendingOnlineGameParams
     val botLvlForBull = if (bullDrawExerciseId == "game501") TrainingBotLevelStorage.getLevel501(context, currentLevel) else TrainingBotLevelStorage.getLevelCricket(context, currentLevel)
-    val effectiveBotLevel = onlineParams?.level ?: botLvlForBull
-    val effectiveBotName = botNameFor(effectiveBotLevel)
-
     DialogsRoutes(
         context = context, showBullDraw = showBullDraw, bullDrawExerciseId = bullDrawExerciseId, playerName = SettingsStorage.getPlayerName(context).ifBlank { "Игрок" },
-        botName = effectiveBotName, botLevel = effectiveBotLevel,
-        onBullWinnerChosen = { winner ->
-            showBullDraw = false
-            if (onlineParams != null) {
-                startOnlineBotGame(onlineParams, winner)
-                pendingOnlineGameParams = null
-            } else {
-                startTrainingGame(bullDrawExerciseId ?: "", winner)
-            }
-            bullDrawExerciseId = null
-        },
-        onBullCancel = {
-            showBullDraw = false
-            if (onlineParams != null) {
-                startOnlineBotGame(onlineParams, 0)
-                pendingOnlineGameParams = null
-            } else {
-                startTrainingGame(bullDrawExerciseId ?: "", 0)
-            }
-            bullDrawExerciseId = null
-        },
+        botName = botNameFor(botLvlForBull), botLevel = botLvlForBull,
+        onBullWinnerChosen = { showBullDraw = false; startTrainingGame(bullDrawExerciseId ?: "", it); bullDrawExerciseId = null },
+        onBullCancel = { showBullDraw = false; startTrainingGame(bullDrawExerciseId ?: "", 0); bullDrawExerciseId = null },
         showExitTrainingDialog = showExitTrainingDialog, onExitFinish = { showExitTrainingDialog = false; resetTrainingState(); TrainingStateStorage.clear(context); screen = "main" },
         onExitPostpone = { showExitTrainingDialog = false; saveCurrentTrainingState(); screen = "main" },
         showTimeUpDialog = showTimeUpDialog, trainingMinutes = trainingMinutes,
@@ -1116,15 +848,4 @@ fun DartsTrainerApp() {
             }
         }, onNormativesResumeRestart = { NormativesStateStorage.clear(context); showResumeNormativesDialog = false; pendingNormativesResume = null }
     )
-}
-
-// ─────────────────────────────────────────────
-// ВСПОМОГАТЕЛЬНАЯ ФУНКЦИЯ ДЛЯ ПАРСИНГА detailsJson
-// ─────────────────────────────────────────────
-private fun parseDetails(s: String): Map<String, String> {
-    if (s.isBlank()) return emptyMap()
-    return s.split(";").mapNotNull { entry ->
-        val parts = entry.split("=", limit = 2)
-        if (parts.size == 2) parts[0].trim() to parts[1].trim() else null
-    }.toMap()
 }
