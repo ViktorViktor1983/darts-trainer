@@ -759,9 +759,6 @@ fun DartsTrainerApp() {
                 "online_lobby" -> {
                     OnlineLobbyScreen(
                         onBack = { screen = "main" },
-                        onPlayFriend = {
-                            // TODO: Здесь будет логика приглашения друга
-                        },
                         onPlayBot = { is501, level, legs, sets, nickname, saveToTraining ->
                             pendingOnlineGameParams = OnlineGameParams(is501, level, legs, sets, nickname, saveToTraining)
                             bullDrawExerciseId = if (is501) "game501" else "cricket"
