@@ -33,13 +33,13 @@ import com.lodkin.dartstrainer.theme.TileBg
 import com.lodkin.dartstrainer.theme.TileBgDark
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import java.util.UUID
 
 private enum class SearchPhase { NONE, SETUP, SEARCHING, RESULT }
 
 @Composable
 fun OnlineLobbyScreen(
     onBack: () -> Unit,
-    onPlayFriend: () -> Unit,
     onPlayBot: (is501: Boolean, level: Int, legs: Int, sets: Int, nickname: String, saveToTraining: Boolean) -> Unit
 ) {
     val context = LocalContext.current
@@ -59,11 +59,13 @@ fun OnlineLobbyScreen(
     
     var searchPhase by remember { mutableStateOf(SearchPhase.NONE) }
     var searchLevels by remember { mutableStateOf<Set<Int>>(emptySet()) }
-    var searchTimeSeconds by remember { mutableStateOf(60) }
     
-    var currentInviteId by remember { mutableStateOf<String?>(null) }
-    var targetOpponent by remember { mutableStateOf<String?>(null) }
+    // Для поиска (свой или друга)
+    var currentMatchId by remember { mutableStateOf<String?>(null) }
+    var isFriendSearch by remember { mutableStateOf(false) } // Флаг: ищем друга или рандом
+    var targetOpponent by remember { mutableStateOf<String?>(null) } // Для отображения в окне ожидания
     var incomingInvite by remember { mutableStateOf<OnlineInvite?>(null) }
+    var showExpiredDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(nickname, selectedLevel, is501, legs, sets, saveToTraining) {
         prefs.edit()
@@ -76,6 +78,7 @@ fun OnlineLobbyScreen(
             .apply()
     }
 
+    // Слушаем входящие приглашения
     LaunchedEffect(nickname, searchPhase) {
         if (nickname.isBlank() || searchPhase != SearchPhase.NONE) return@LaunchedEffect
         while (true) {
@@ -88,17 +91,18 @@ fun OnlineLobbyScreen(
         }
     }
 
-    LaunchedEffect(currentInviteId) {
-        val id = currentInviteId ?: return@LaunchedEffect
+    // Слушаем, принял ли кто-то наш матч
+    LaunchedEffect(currentMatchId) {
+        val mId = currentMatchId ?: return@LaunchedEffect
         while (true) {
             delay(2000L)
-            val status = OnlineNetworkManager.checkMyInviteStatus(id)
-            if (status == "accepted") {
-                currentInviteId = null
-                val opp = targetOpponent
+            val acceptedBy = OnlineNetworkManager.checkIfMatchAccepted(mId)
+            if (acceptedBy != null) {
+                // Кто-то принял!
+                currentMatchId = null
                 targetOpponent = null
                 searchPhase = SearchPhase.NONE
-                if (opp != null) onPlayBot(is501, selectedLevel, legs, sets, opp, saveToTraining)
+                onPlayBot(is501, selectedLevel, legs, sets, acceptedBy, saveToTraining)
                 break
             }
         }
@@ -138,7 +142,7 @@ fun OnlineLobbyScreen(
                 Column {
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Box(modifier = Modifier.weight(1f).clip(RoundedCornerShape(8.dp)).background(if (is501) Accent else TileBg).clickable { is501 = true }.padding(vertical = 12.dp), contentAlignment = Alignment.Center) { Text("501", color = if (is501) DarkBg else Color.White, fontWeight = FontWeight.Bold) }
-                        Box(modifier = Modifier.weight(1f).clip(RoundedCornerShape(8.dp)).background(if (is501 == false) Accent else TileBg).clickable { is501 = false }.padding(vertical = 12.dp), contentAlignment = Alignment.Center) { Text("Крикет", color = if (is501 == false) DarkBg else Color.White, fontWeight = FontWeight.Bold) }
+                        Box(modifier = Modifier.weight(1f).clip(RoundedCornerShape(8.dp)).background(if (!is501) Accent else TileBg).clickable { is501 = false }.padding(vertical = 12.dp), contentAlignment = Alignment.Center) { Text("Крикет", color = if (!is501) DarkBg else Color.White, fontWeight = FontWeight.Bold) }
                     }
                     Spacer(Modifier.height(16.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -188,20 +192,70 @@ fun OnlineLobbyScreen(
         )
     }
 
+    // Диалог "Играть с другом"
     if (showFriendDialog) {
         var friendInput by remember { mutableStateOf("") }
+        var isConnecting by remember { mutableStateOf(false) }
+        var errorMsg by remember { mutableStateOf("") }
+
         AlertDialog(
-            onDismissRequest = { showFriendDialog = false }, confirmButton = { TextButton(onClick = { showFriendDialog = false; onPlayFriend() }) { Text("Пригласить", color = Accent) } }, dismissButton = { TextButton(onClick = { showFriendDialog = false }) { Text("Отмена", color = Color.White.copy(alpha = 0.6f)) } }, title = { Text("Играть с другом", color = Color.White) },
-            text = { Column { Text("Введите никнейм друга, чтобы отправить ему приглашение.", color = Color.White.copy(alpha = 0.7f), fontSize = 13.sp); Spacer(Modifier.height(8.dp)); OutlinedTextField(value = friendInput, onValueChange = { friendInput = it }, singleLine = true, placeholder = { Text("Никнейм друга", color = TileBg) }, colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Color.White, unfocusedTextColor = Color.White, focusedBorderColor = Accent, unfocusedBorderColor = TileBg, cursorColor = Accent)) } }
+            onDismissRequest = { if (!isConnecting) showFriendDialog = false },
+            confirmButton = {
+                TextButton(
+                    enabled = friendInput.isNotBlank() && !isConnecting,
+                    onClick = {
+                        scope.launch {
+                            isConnecting = true
+                            errorMsg = ""
+                            val regError = OnlineNetworkManager.registerPlayer(nickname, selectedLevel)
+                            if (regError != null) { errorMsg = regError; isConnecting = false; return@launch }
+                            
+                            val mId = OnlineNetworkManager.sendSingleInvite(nickname, friendInput.trim())
+                            isConnecting = false
+                            
+                            if (mId != null) {
+                                currentMatchId = mId
+                                isFriendSearch = true
+                                targetOpponent = friendInput.trim()
+                                showFriendDialog = false
+                                searchPhase = SearchPhase.SEARCHING
+                            } else {
+                                errorMsg = "Игрок не найден или ошибка сети"
+                            }
+                        }
+                    }
+                ) { 
+                    if (isConnecting) CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Accent) 
+                    else Text("Пригласить", color = Accent) 
+                }
+            },
+            dismissButton = { TextButton(onClick = { showFriendDialog = false }, enabled = !isConnecting) { Text("Отмена", color = Color.White.copy(alpha = 0.6f)) } },
+            title = { Text("Играть с другом", color = Color.White) },
+            text = {
+                Column {
+                    Text("Введите никнейм друга, чтобы отправить ему приглашение.", color = Color.White.copy(alpha = 0.7f), fontSize = 13.sp)
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = friendInput, onValueChange = { friendInput = it },
+                        singleLine = true, placeholder = { Text("Никнейм друга", color = TileBg) },
+                        colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Color.White, unfocusedTextColor = Color.White, focusedBorderColor = Accent, unfocusedBorderColor = TileBg, cursorColor = Accent)
+                    )
+                    if (errorMsg.isNotBlank()) {
+                        Spacer(Modifier.height(8.dp))
+                        Text(errorMsg, color = Color.Red, fontSize = 12.sp)
+                    }
+                }
+            }
         )
     }
 
+    // Окно настройки поиска (Рандом)
     if (searchPhase == SearchPhase.SETUP) {
         var isConnecting by remember { mutableStateOf(false) }
         var connectionError by remember { mutableStateOf(false) }
         var errorMsg by remember { mutableStateOf("") }
 
-        Dialog(onDismissRequest = { if (isConnecting == false) searchPhase = SearchPhase.NONE }) {
+        Dialog(onDismissRequest = { if (!isConnecting) searchPhase = SearchPhase.NONE }) {
             Box(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp)).background(TileBgDark).padding(20.dp)) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text("Настройка поиска", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
@@ -215,7 +269,7 @@ fun OnlineLobbyScreen(
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             row.forEach { lvl ->
                                 val isSelected = searchLevels.contains(lvl)
-                                Box(modifier = Modifier.weight(1f).clip(RoundedCornerShape(8.dp)).background(if (isSelected) Accent else TileBg).clickable(enabled = isConnecting == false) { searchLevels = if (isSelected) searchLevels - lvl else searchLevels + lvl }.padding(vertical = 8.dp), contentAlignment = Alignment.Center) {
+                                Box(modifier = Modifier.weight(1f).clip(RoundedCornerShape(8.dp)).background(if (isSelected) Accent else TileBg).clickable(enabled = !isConnecting) { searchLevels = if (isSelected) searchLevels - lvl else searchLevels + lvl }.padding(vertical = 8.dp), contentAlignment = Alignment.Center) {
                                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                         Text(DartsNorms.getLevelName(lvl).take(8), color = if (isSelected) DarkBg else Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                                         Text(getPprRange(lvl), color = if (isSelected) DarkBg.copy(alpha = 0.7f) else Color.White.copy(alpha = 0.5f), fontSize = 9.sp)
@@ -229,44 +283,44 @@ fun OnlineLobbyScreen(
                     Spacer(Modifier.height(24.dp))
 
                     Box(
-                        modifier = Modifier.fillMaxWidth().height(50.dp).clip(RoundedCornerShape(12.dp)).background(if (searchLevels.isNotEmpty() && isConnecting == false) Accent else TileBg)
-                            .clickable(enabled = searchLevels.isNotEmpty() && isConnecting == false) {
+                        modifier = Modifier.fillMaxWidth().height(50.dp).clip(RoundedCornerShape(12.dp)).background(if (searchLevels.isNotEmpty() && !isConnecting) Accent else TileBg)
+                            .clickable(enabled = searchLevels.isNotEmpty() && !isConnecting) {
                                 scope.launch {
                                     isConnecting = true
                                     connectionError = false
                                     errorMsg = ""
                                     
                                     val regError = OnlineNetworkManager.registerPlayer(nickname, selectedLevel)
-                                    if (regError != null) {
-                                        isConnecting = false; connectionError = true; errorMsg = regError; return@launch
-                                    }
+                                    if (regError != null) { isConnecting = false; connectionError = true; errorMsg = regError; return@launch }
                                     
-                                    val opponent = OnlineNetworkManager.findOpponent(nickname)
-                                    if (opponent == null) {
-                                        isConnecting = false; connectionError = true; errorMsg = "Никого не найдено"; return@launch
-                                    }
+                                    // Ищем всех подходящих
+                                    val opponents = OnlineNetworkManager.findMatchingOpponents(nickname, searchLevels.toList())
+                                    if (opponents.isEmpty()) { isConnecting = false; connectionError = true; errorMsg = "Никого не найдено"; return@launch }
                                     
-                                    val invId = OnlineNetworkManager.sendInvite(nickname, opponent)
+                                    // Создаем ID матча и рассылаем
+                                    val mId = UUID.randomUUID().toString()
+                                    val success = OnlineNetworkManager.sendBroadcastInvites(nickname, opponents, mId)
                                     isConnecting = false
                                     
-                                    if (invId != null) {
-                                        currentInviteId = invId
-                                        targetOpponent = opponent
+                                    if (success) {
+                                        currentMatchId = mId
+                                        isFriendSearch = false
+                                        targetOpponent = "Все игроки (${opponents.size})"
                                         searchPhase = SearchPhase.SEARCHING
                                     } else {
-                                        connectionError = true; errorMsg = "Ошибка отправки приглашения"
+                                        connectionError = true; errorMsg = "Ошибка отправки приглашений"
                                     }
                                 }
                             },
                         contentAlignment = Alignment.Center
                     ) {
-                        if (isConnecting) { CircularProgressIndicator(color = DarkBg, modifier = Modifier.size(24.dp)) } else { Text("НАЙТИ И ПРИГЛАСИТЬ", color = if (searchLevels.isNotEmpty()) DarkBg else Color.White.copy(alpha = 0.5f), fontSize = 16.sp, fontWeight = FontWeight.Bold) }
+                        if (isConnecting) { CircularProgressIndicator(color = DarkBg, modifier = Modifier.size(24.dp)) } else { Text("НАЙТИ И ПРИГЛАСИТЬ ВСЕХ", color = if (searchLevels.isNotEmpty()) DarkBg else Color.White.copy(alpha = 0.5f), fontSize = 16.sp, fontWeight = FontWeight.Bold) }
                     }
 
                     if (connectionError) { Spacer(Modifier.height(8.dp)); Text(errorMsg, color = Color.Red, fontSize = 12.sp, textAlign = TextAlign.Center) }
                     
                     Spacer(Modifier.height(8.dp))
-                    TextButton(onClick = { searchPhase = SearchPhase.NONE; onPlayBot(is501, selectedLevel, legs, sets, nickname, saveToTraining) }, enabled = isConnecting == false) { Text("Играть с ботом", color = Color.White.copy(alpha = 0.6f), fontSize = 14.sp) }
+                    TextButton(onClick = { searchPhase = SearchPhase.NONE; onPlayBot(is501, selectedLevel, legs, sets, nickname, saveToTraining) }, enabled = !isConnecting) { Text("Играть с ботом", color = Color.White.copy(alpha = 0.6f), fontSize = 14.sp) }
                 }
             }
         }
@@ -276,20 +330,17 @@ fun OnlineLobbyScreen(
         val oppName = targetOpponent ?: ""
         WaitingForAcceptDialog(
             opponentName = oppName,
+            isFriend = isFriendSearch,
             timeSeconds = 30,
             onTimeout = { 
-                val id = currentInviteId
-                if (id != null) { scope.launch { OnlineNetworkManager.deleteInvite(id) } }
-                currentInviteId = null
-                targetOpponent = null
-                searchPhase = SearchPhase.RESULT 
+                val mId = currentMatchId
+                if (mId != null) { scope.launch { OnlineNetworkManager.cancelMatchSearch(mId) } }
+                currentMatchId = null; targetOpponent = null; searchPhase = SearchPhase.RESULT 
             },
             onCancel = { 
-                val id = currentInviteId
-                if (id != null) { scope.launch { OnlineNetworkManager.deleteInvite(id) } }
-                currentInviteId = null
-                targetOpponent = null
-                searchPhase = SearchPhase.NONE 
+                val mId = currentMatchId
+                if (mId != null) { scope.launch { OnlineNetworkManager.cancelMatchSearch(mId) } }
+                currentMatchId = null; targetOpponent = null; searchPhase = SearchPhase.NONE 
             }
         )
     }
@@ -309,9 +360,16 @@ fun OnlineLobbyScreen(
                 confirmButton = {
                     TextButton(onClick = {
                         scope.launch { 
-                            OnlineNetworkManager.acceptInvite(inv.id)
-                            incomingInvite = null
-                            onPlayBot(is501, selectedLevel, legs, sets, inv.fromUser, saveToTraining) 
+                            // Пытаемся принять
+                            val success = OnlineNetworkManager.acceptInvite(inv.id, inv.matchId)
+                            if (success) {
+                                incomingInvite = null
+                                onPlayBot(is501, selectedLevel, legs, sets, inv.fromUser, saveToTraining)
+                            } else {
+                                // Если не удалось (уже удалено), показываем "Устарело"
+                                incomingInvite = null
+                                showExpiredDialog = true
+                            }
                         }
                     }) { Text("ПРИНЯТЬ", color = GoldAccent, fontWeight = FontWeight.Bold, fontSize = 18.sp) }
                 },
@@ -333,10 +391,19 @@ fun OnlineLobbyScreen(
             )
         }
     }
+
+    if (showExpiredDialog) {
+        AlertDialog(
+            onDismissRequest = { showExpiredDialog = false },
+            confirmButton = { TextButton(onClick = { showExpiredDialog = false }) { Text("OK", color = Accent) } },
+            title = { Text("Устарело", color = Color.White, fontWeight = FontWeight.Bold) },
+            text = { Text("Это приглашение больше недействительно. Скорее всего, игрок уже нашел другого соперника.", color = Color.White.copy(alpha = 0.7f)) }
+        )
+    }
 }
 
 @Composable
-private fun WaitingForAcceptDialog(opponentName: String, timeSeconds: Int, onTimeout: () -> Unit, onCancel: () -> Unit) {
+private fun WaitingForAcceptDialog(opponentName: String, isFriend: Boolean, timeSeconds: Int, onTimeout: () -> Unit, onCancel: () -> Unit) {
     var secondsLeft by remember { mutableStateOf(timeSeconds) }
     LaunchedEffect(Unit) { while (secondsLeft > 0) { delay(1000L); secondsLeft -= 1 }; onTimeout() }
     Dialog(onDismissRequest = { }, properties = DialogProperties(dismissOnBackPress = false, dismissOnClickOutside = false)) {
@@ -346,7 +413,10 @@ private fun WaitingForAcceptDialog(opponentName: String, timeSeconds: Int, onTim
                 Spacer(Modifier.height(20.dp))
                 Text("Ожидаем ответа...", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.height(8.dp))
-                Text("Мы отправили приглашение игроку $opponentName", color = Color.White.copy(alpha = 0.7f), fontSize = 14.sp, textAlign = TextAlign.Center)
+                
+                val msg = if (isFriend) "Мы отправили приглашение игроку $opponentName" else "Мы отправили приглашения всем подходящим игрокам ($opponentName)"
+                Text(msg, color = Color.White.copy(alpha = 0.7f), fontSize = 14.sp, textAlign = TextAlign.Center)
+                
                 Spacer(Modifier.height(8.dp))
                 Text("Осталось: $secondsLeft сек", color = GoldAccent, fontSize = 16.sp, fontWeight = FontWeight.Medium)
                 Spacer(Modifier.height(24.dp))
