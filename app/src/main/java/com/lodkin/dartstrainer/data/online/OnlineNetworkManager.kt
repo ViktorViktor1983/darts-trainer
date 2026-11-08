@@ -30,6 +30,7 @@ object OnlineNetworkManager {
 
     private val JSON = "application/json; charset=utf-8".toMediaType()
 
+    // Умная регистрация: проверяет, есть ли игрок, и обновляет или создает его
     suspend fun registerPlayer(nickname: String, level: Int): String? = withContext(Dispatchers.IO) {
         try {
             val filter = "(nickname='$nickname')"
@@ -82,10 +83,9 @@ object OnlineNetworkManager {
         }
     }
 
-    // Получаем список ВСЕХ подходящих соперников
+    // Получаем список ВСЕХ подходящих соперников по уровням
     suspend fun findMatchingOpponents(myNickname: String, levels: List<Int>): List<String> = withContext(Dispatchers.IO) {
         try {
-            // Формируем фильтр по уровням (например, level=1 || level=2)
             val levelsFilter = levels.joinToString(" || ") { "level=$it" }
             val filter = "(nickname!='$myNickname' && ($levelsFilter))"
             val encodedFilter = URLEncoder.encode(filter, "UTF-8")
@@ -149,7 +149,7 @@ object OnlineNetworkManager {
         } catch (e: Exception) { null }
     }
 
-    // Проверка входящего приглашения (возвращает первое попавшееся)
+    // Проверка входящего приглашения
     suspend fun checkIncomingInvite(myNickname: String): OnlineInvite? = withContext(Dispatchers.IO) {
         try {
             val filter = "(to_user='$myNickname'%26%26status='pending')"
@@ -173,7 +173,6 @@ object OnlineNetworkManager {
     // Принять приглашение и удалить остальные из этой же рассылки
     suspend fun acceptInvite(inviteId: String, matchId: String): Boolean = withContext(Dispatchers.IO) {
         try {
-            // 1. Меняем статус текущего приглашения на accepted
             val jsonBody = JSONObject().apply { put("status", "accepted") }.toString()
             val patchReq = Request.Builder().url("$INVITES_URL/$inviteId").patch(jsonBody.toRequestBody(JSON)).build()
             
@@ -181,7 +180,6 @@ object OnlineNetworkManager {
             client.newCall(patchReq).execute().use { response -> success = response.isSuccessful }
 
             if (success) {
-                // 2. Ищем все остальные приглашения с таким же match_id и удаляем их
                 val filter = "(match_id='$matchId'%26%26id!='$inviteId')"
                 val url = "$INVITES_URL?filter=$filter"
                 val getReq = Request.Builder().url(url).get().build()
@@ -254,5 +252,15 @@ object OnlineNetworkManager {
             }
             deletedAny
         } catch (e: Exception) { false }
+    }
+
+    // Удалить одно приглашение (при отказе)
+    suspend fun deleteInvite(inviteId: String): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val request = Request.Builder().url("$INVITES_URL/$inviteId").delete().build()
+            client.newCall(request).execute().use { response -> response.isSuccessful }
+        } catch (e: Exception) {
+            false
+        }
     }
 }
