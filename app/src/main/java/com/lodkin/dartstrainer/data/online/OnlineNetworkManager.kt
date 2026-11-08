@@ -27,21 +27,53 @@ object OnlineNetworkManager {
 
     private val JSON = "application/json; charset=utf-8".toMediaType()
 
+    // Умная регистрация: проверяет, есть ли игрок, и обновляет или создает его
     suspend fun registerPlayer(nickname: String, level: Int): Boolean = withContext(Dispatchers.IO) {
         try {
+            // 1. Проверяем, есть ли такой игрок
+            val checkUrl = "$PLAYERS_URL?filter=(nickname='$nickname')"
+            val checkRequest = Request.Builder().url(checkUrl).get().build()
+            var existingId: String? = null
+
+            client.newCall(checkRequest).execute().use { response ->
+                if (response.isSuccessful) {
+                    val body = response.body?.string()
+                    if (body != null) {
+                        val items = JSONObject(body).optJSONArray("items")
+                        if (items != null && items.length() > 0) {
+                            existingId = items.getJSONObject(0).optString("id")
+                        }
+                    }
+                }
+            }
+
             val jsonBody = JSONObject().apply {
                 put("nickname", nickname)
                 put("level", level)
             }.toString()
 
-            val request = Request.Builder()
-                .url(PLAYERS_URL)
-                .post(jsonBody.toRequestBody(JSON))
-                .build()
-
-            client.newCall(request).execute().use { response -> response.isSuccessful }
+            if (existingId != null) {
+                // 2. Игрок уже есть -> Обновляем его данные (PATCH)
+                val updateRequest = Request.Builder()
+                    .url("$PLAYERS_URL/$existingId")
+                    .patch(jsonBody.toRequestBody(JSON))
+                    .build()
+                client.newCall(updateRequest).execute().use { response ->
+                    return@withContext response.isSuccessful
+                }
+            } else {
+                // 3. Игрока нет -> Создаем новую запись (POST)
+                val createRequest = Request.Builder()
+                    .url(PLAYERS_URL)
+                    .post(jsonBody.toRequestBody(JSON))
+                    .build()
+                client.newCall(createRequest).execute().use { response ->
+                    return@withContext response.isSuccessful
+                }
+            }
         } catch (e: Exception) {
-            false
+            e.printStackTrace()
+            return@withContext false
         }
     }
 
