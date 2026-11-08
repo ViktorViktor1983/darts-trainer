@@ -653,7 +653,6 @@ fun DartsTrainerApp() {
                     TrainingRoutes(
                         screen = screen, onScreenChange = { screen = it },
                         trainingRepository = trainingRepository, aroundClockRepository = aroundClockRepository, sectorRepository = sectorRepository,
-                        cricketRepository = cricketRepository, game501Repository = game501Repository,
                         scoreSetRepository = scoreSetRepository, bigRoundRepository = bigRoundRepository, playerName = SettingsStorage.getPlayerName(context),
                         context = context, scope = scope, trainingMinutes = trainingMinutes, isTrainingActive = isTrainingActive,
                         trainingElapsedSeconds = trainingElapsedSeconds, trainingPaused = trainingPaused, onTogglePause = { trainingPaused = !trainingPaused },
