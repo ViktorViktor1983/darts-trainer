@@ -129,7 +129,7 @@ data class OnlineGameParams(
     val level: Int,
     val legs: Int,
     val sets: Int,
-    val nickname: String,
+    val opponentName: String?,
     val saveToTraining: Boolean,
     val onlineMatchId: String? = null,
     val isCreator: Boolean = false
@@ -360,10 +360,11 @@ fun DartsTrainerApp() {
 
             if (params.is501) {
                 // Игрок 1 - всегда ты. Игрок 2 - соперник (или бот).
+                val p2Name = if (isRealOnline) (params.opponentName ?: "Соперник") else botNameFor(params.level)
                 val players = listOf(
                     Player501(name = myName, isBot = false, botLevel = 0, teamIndex = 0),
                     Player501(
-                        name = params.nickname, 
+                        name = p2Name, 
                         isBot = !isRealOnline, 
                         botLevel = if (isRealOnline) 0 else params.level, 
                         teamIndex = 1
@@ -378,17 +379,18 @@ fun DartsTrainerApp() {
                         val existing = OnlineNetworkManager.getGameState(params.onlineMatchId)
                         if (existing == null) {
                             val json = Game501Serializer.toJson(game501!!)
-                            OnlineNetworkManager.createGameState(params.onlineMatchId, "501", json, myName, params.nickname)
+                            OnlineNetworkManager.createGameState(params.onlineMatchId, "501", json, myName, p2Name)
                         }
                     }
                 }
 
                 screen = "game501_game"
             } else {
+                val p2Name = if (isRealOnline) (params.opponentName ?: "Соперник") else botNameFor(params.level)
                 val players = listOf(
                     CricketPlayer(name = myName, isBot = false, botLevel = 0, teamIndex = 0),
                     CricketPlayer(
-                        name = params.nickname, 
+                        name = p2Name, 
                         isBot = !isRealOnline, 
                         botLevel = if (isRealOnline) 0 else params.level, 
                         teamIndex = 1
@@ -796,9 +798,9 @@ fun DartsTrainerApp() {
                 "online_lobby" -> {
                     OnlineLobbyScreen(
                         onBack = { screen = "main" },
-                        onStartGame = { is501, level, legs, sets, nickname, saveToTraining, onlineMatchId, isCreator ->
+                        onStartGame = { is501, level, legs, sets, opponentName, saveToTraining, onlineMatchId, isCreator ->
                             currentOnlineMatchId = onlineMatchId
-                            pendingOnlineGameParams = OnlineGameParams(is501, level, legs, sets, nickname, saveToTraining, onlineMatchId, isCreator)
+                            pendingOnlineGameParams = OnlineGameParams(is501, level, legs, sets, opponentName, saveToTraining, onlineMatchId, isCreator)
                             bullDrawExerciseId = if (is501) "game501" else "cricket"
                             showBullDraw = true
                         }
