@@ -131,7 +131,8 @@ data class OnlineGameParams(
     val sets: Int,
     val nickname: String,
     val saveToTraining: Boolean,
-    val onlineMatchId: String? = null
+    val onlineMatchId: String? = null,
+    val isCreator: Boolean = false
 )
 
 class MainActivity : ComponentActivity() {
@@ -371,7 +372,8 @@ fun DartsTrainerApp() {
                 game501 = Game501Logic.newGame(GameType.X501, OutMode.DOUBLE_OUT, players, params.legs, params.sets, false, startingTeam, TRAINING_AUTO_OK_SECONDS, sessionStartTime, sessionForm)
                 game501ExistingId = 0L
 
-                if (params.onlineMatchId != null) {
+                // ЗАПИСЬ В БАЗУ СОЗДАЕТ ТОЛЬКО СОЗДАТЕЛЬ ИГРЫ (isCreator)
+                if (params.onlineMatchId != null && params.isCreator) {
                     scope.launch(Dispatchers.IO) {
                         val existing = OnlineNetworkManager.getGameState(params.onlineMatchId)
                         if (existing == null) {
@@ -794,9 +796,9 @@ fun DartsTrainerApp() {
                 "online_lobby" -> {
                     OnlineLobbyScreen(
                         onBack = { screen = "main" },
-                        onStartGame = { is501, level, legs, sets, nickname, saveToTraining, onlineMatchId ->
+                        onStartGame = { is501, level, legs, sets, nickname, saveToTraining, onlineMatchId, isCreator ->
                             currentOnlineMatchId = onlineMatchId
-                            pendingOnlineGameParams = OnlineGameParams(is501, level, legs, sets, nickname, saveToTraining, onlineMatchId)
+                            pendingOnlineGameParams = OnlineGameParams(is501, level, legs, sets, nickname, saveToTraining, onlineMatchId, isCreator)
                             bullDrawExerciseId = if (is501) "game501" else "cricket"
                             showBullDraw = true
                         }
