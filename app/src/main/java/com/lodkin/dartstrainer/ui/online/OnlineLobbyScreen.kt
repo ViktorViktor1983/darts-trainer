@@ -40,7 +40,8 @@ private enum class SearchPhase { NONE, SETUP, SEARCHING, RESULT }
 @Composable
 fun OnlineLobbyScreen(
     onBack: () -> Unit,
-    onPlayBot: (is501: Boolean, level: Int, legs: Int, sets: Int, nickname: String, saveToTraining: Boolean) -> Unit
+    // ИЗМЕНЕНО: Добавлен параметр onlineMatchId
+    onStartGame: (is501: Boolean, level: Int, legs: Int, sets: Int, opponentName: String, saveToTraining: Boolean, onlineMatchId: String?) -> Unit
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -98,11 +99,11 @@ fun OnlineLobbyScreen(
             delay(2000L)
             val acceptedBy = OnlineNetworkManager.checkIfMatchAccepted(mId)
             if (acceptedBy != null) {
-                // Кто-то принял!
+                // Кто-то принял! Запускаем игру с matchId
                 currentMatchId = null
                 targetOpponent = null
                 searchPhase = SearchPhase.NONE
-                onPlayBot(is501, selectedLevel, legs, sets, acceptedBy, saveToTraining)
+                onStartGame(is501, selectedLevel, legs, sets, acceptedBy, saveToTraining, mId)
                 break
             }
         }
@@ -320,7 +321,8 @@ fun OnlineLobbyScreen(
                     if (connectionError) { Spacer(Modifier.height(8.dp)); Text(errorMsg, color = Color.Red, fontSize = 12.sp, textAlign = TextAlign.Center) }
                     
                     Spacer(Modifier.height(8.dp))
-                    TextButton(onClick = { searchPhase = SearchPhase.NONE; onPlayBot(is501, selectedLevel, legs, sets, nickname, saveToTraining) }, enabled = !isConnecting) { Text("Играть с ботом", color = Color.White.copy(alpha = 0.6f), fontSize = 14.sp) }
+                    // Здесь игра с ботом передает null в onlineMatchId
+                    TextButton(onClick = { searchPhase = SearchPhase.NONE; onStartGame(is501, selectedLevel, legs, sets, nickname, saveToTraining, null) }, enabled = !isConnecting) { Text("Играть с ботом", color = Color.White.copy(alpha = 0.6f), fontSize = 14.sp) }
                 }
             }
         }
@@ -348,7 +350,7 @@ fun OnlineLobbyScreen(
     if (searchPhase == SearchPhase.RESULT) {
         AlertDialog(
             onDismissRequest = { searchPhase = SearchPhase.NONE }, confirmButton = {}, title = { Text("Соперник не ответил", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold) },
-            text = { Column { Text("Игрок не принял приглашение вовремя. Что будем делать?", color = Color.White.copy(alpha = 0.7f), fontSize = 14.sp); Spacer(Modifier.height(20.dp)); Box(modifier = Modifier.fillMaxWidth().height(48.dp).clip(RoundedCornerShape(10.dp)).background(Accent).clickable { searchPhase = SearchPhase.SETUP }, contentAlignment = Alignment.Center) { Text("Искать снова", color = DarkBg, fontSize = 15.sp, fontWeight = FontWeight.Bold) }; Spacer(Modifier.height(8.dp)); Box(modifier = Modifier.fillMaxWidth().height(48.dp).clip(RoundedCornerShape(10.dp)).background(GoldAccent.copy(alpha = 0.2f)).clickable { searchPhase = SearchPhase.NONE; onPlayBot(is501, selectedLevel, legs, sets, nickname, saveToTraining) }, contentAlignment = Alignment.Center) { Text("Играть с ботом", color = GoldAccent, fontSize = 15.sp, fontWeight = FontWeight.Bold) } } }
+            text = { Column { Text("Игрок не принял приглашение вовремя. Что будем делать?", color = Color.White.copy(alpha = 0.7f), fontSize = 14.sp); Spacer(Modifier.height(20.dp)); Box(modifier = Modifier.fillMaxWidth().height(48.dp).clip(RoundedCornerShape(10.dp)).background(Accent).clickable { searchPhase = SearchPhase.SETUP }, contentAlignment = Alignment.Center) { Text("Искать снова", color = DarkBg, fontSize = 15.sp, fontWeight = FontWeight.Bold) }; Spacer(Modifier.height(8.dp)); Box(modifier = Modifier.fillMaxWidth().height(48.dp).clip(RoundedCornerShape(10.dp)).background(GoldAccent.copy(alpha = 0.2f)).clickable { searchPhase = SearchPhase.NONE; onStartGame(is501, selectedLevel, legs, sets, nickname, saveToTraining, null) }, contentAlignment = Alignment.Center) { Text("Играть с ботом", color = GoldAccent, fontSize = 15.sp, fontWeight = FontWeight.Bold) } } }
         )
     }
 
@@ -364,7 +366,8 @@ fun OnlineLobbyScreen(
                             val success = OnlineNetworkManager.acceptInvite(inv.id, inv.matchId)
                             if (success) {
                                 incomingInvite = null
-                                onPlayBot(is501, selectedLevel, legs, sets, inv.fromUser, saveToTraining)
+                                // Запускаем игру с matchId
+                                onStartGame(is501, selectedLevel, legs, sets, inv.fromUser, saveToTraining, inv.matchId)
                             } else {
                                 // Если не удалось (уже удалено), показываем "Устарело"
                                 incomingInvite = null
