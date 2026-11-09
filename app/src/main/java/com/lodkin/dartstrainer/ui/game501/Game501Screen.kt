@@ -121,14 +121,20 @@ fun Game501Screen(
 
     val allBots = game.players.all { it.isBot }
 
+    // ГЛАВНАЯ ПРОВЕРКА: Мой ли сейчас ход?
+    val isMyTurn = !isOnlineGame || (game.currentPlayer?.name == myName)
+    
+    // Можно ли вообще взаимодействовать с клавиатурой
+    val canInteract = !game.isFinished && game.currentPlayer?.isBot != true && isMyTurn
+
     val history = remember { mutableStateListOf<Game501>() }
 
     fun saveHistory() { history.add(game); if (history.size > 300) history.removeAt(0) }
-    fun undo() { if (history.isNotEmpty()) game = history.removeAt(history.lastIndex) }
+    fun undo() { if (history.isNotEmpty() && isMyTurn) game = history.removeAt(history.lastIndex) }
 
     val dialogOpen = showLegWonDialog || showSetWonDialog || showWinDialog ||
         showLegQuestionDialog || showDoublesQuestionDialog || showDoublesOnlyDialog
-    val canUndo = history.isNotEmpty() && !dialogOpen
+    val canUndo = history.isNotEmpty() && !dialogOpen && isMyTurn
 
     LaunchedEffect(isOnlineGame) {
         if (isOnlineGame) {
@@ -149,13 +155,12 @@ fun Game501Screen(
     // Отправляем ход, если сейчас НЕ наш ход (значит, мы только что походили) или игра закончена
     LaunchedEffect(game, isOnlineGame) {
         if (isOnlineGame && onlineMatchId != null) {
-            val isMyTurn = game.currentPlayer?.name == myName
+            val isTurnNow = game.currentPlayer?.name == myName
             val currentJson = Game501Serializer.toJson(game)
             
-            if ((!isMyTurn || game.isFinished) && currentJson != lastSyncedJson) {
+            if ((!isTurnNow || game.isFinished) && currentJson != lastSyncedJson) {
                 lastSyncedJson = currentJson
                 scope.launch(Dispatchers.IO) {
-                    // ИСПОЛЬЗУЕМ НОВЫЙ МЕТОД upsertGameState
                     OnlineNetworkManager.upsertGameState(
                         onlineMatchId,
                         "501",
@@ -181,7 +186,6 @@ fun Game501Screen(
                     val localJson = Game501Serializer.toJson(game)
                     val isRemoteMyTurn = remoteGame.currentPlayer?.name == myName
                     
-                    // Если пришел новый стейт, и сейчас НАШ ход (или игра закончена) — обновляем
                     if (remoteJson != localJson && (isRemoteMyTurn || remoteGame.isFinished)) {
                         game = remoteGame
                         lastSyncedJson = remoteJson
@@ -309,9 +313,9 @@ fun Game501Screen(
     }
 
     fun applySum(value: Int) {
+        if (!canInteract) return // Блокировка ввода
         if (value < 0 || value > 180) return
         val currentPlayer = game.players.getOrNull(game.currentPlayerIndex) ?: return
-        if (currentPlayer.isBot || game.isFinished) return
 
         saveHistory()
         val scoreBefore = currentPlayer.score
@@ -345,21 +349,23 @@ fun Game501Screen(
     }
 
     fun submitSum() {
+        if (!canInteract) return
         val value = inputText.toIntOrNull() ?: return
         inputText = ""
         applySum(value)
     }
 
     fun pressQuickButton(sum: Int) {
+        if (!canInteract) return
         inputText = ""
         applySum(sum)
     }
 
     fun submitRemaining() {
+        if (!canInteract) return
         val value = inputText.toIntOrNull() ?: return
         inputText = ""
         val currentPlayer = game.players.getOrNull(game.currentPlayerIndex) ?: return
-        if (currentPlayer.isBot || game.isFinished) return
         if (value < 0 || value >= currentPlayer.score) return
         val gained = currentPlayer.score - value
         if (gained < 0) return
@@ -395,8 +401,7 @@ fun Game501Screen(
     }
 
     fun pressLeg() {
-        val currentPlayer = game.players.getOrNull(game.currentPlayerIndex) ?: return
-        if (currentPlayer.isBot || game.isFinished) return
+        if (!canInteract) return
         chosenDarts = 0
         showLegQuestionDialog = true
     }
@@ -505,9 +510,15 @@ fun Game501Screen(
             }
 
             if (showGameControls) {
+                if (isOnlineGame && !isMyTurn) {
+                    Box(modifier = Modifier.fillMaxWidth().background(GoldAccent.copy(alpha = 0.15f)).padding(vertical = 8.dp), contentAlignment = Alignment.Center) {
+                        Text("ОЖИДАНИЕ ХОДА СОПЕРНИКА...", color = GoldAccent, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+
                 QuickButtonsWithLeg(
                     sums = quickSums,
-                    enabled = !game.isFinished && game.currentPlayer?.isBot != true,
+                    enabled = canInteract,
                     onQuick = { pressQuickButton(it) },
                     onLeg = { pressLeg() }
                 )
@@ -516,12 +527,12 @@ fun Game501Screen(
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 4.dp),
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    BigActionButton("Остаток", !game.isFinished && game.currentPlayer?.isBot != true, TileBg, Accent, Modifier.weight(2f)) { submitRemaining() }
-                    BigActionButton("OK", !game.isFinished && game.currentPlayer?.isBot != true, Accent, Color(0xFF121212), Modifier.weight(4f)) { submitSum() }
+                    BigActionButton("Остаток", canInteract, TileBg, Accent, Modifier.weight(2f)) { submitRemaining() }
+                    BigActionButton("OK", canInteract, Accent, Color(0xFF121212), Modifier.weight(4f)) { submitSum() }
                 }
 
                 Keyboard501(
-                    enabled = !game.isFinished && game.currentPlayer?.isBot != true,
+                    enabled = canInteract,
                     canUndo = canUndo,
                     isOnlineGame = isOnlineGame,
                     onDigit = { inputText = if (inputText.length < 3) inputText + it else inputText },
