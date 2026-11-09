@@ -25,6 +25,7 @@ import androidx.compose.ui.unit.sp
 import com.lodkin.dartstrainer.data.SettingsStorage
 import com.lodkin.dartstrainer.data.freerecords.FreePlayRecordsRepository
 import com.lodkin.dartstrainer.data.game501.*
+import com.lodkin.dartstrainer.data.online.OnlineNetworkManager
 import com.lodkin.dartstrainer.data.training.TrainingRepository
 import com.lodkin.dartstrainer.data.training.TrainingUnfinishedStorage
 import com.lodkin.dartstrainer.theme.Accent
@@ -72,6 +73,7 @@ fun Game501Screen(
     existingId: Long = 0L,
     isTrainingMode: Boolean = false,
     isOnlineGame: Boolean = false,
+    onlineMatchId: String? = null,
     trainingRepository: TrainingRepository? = null,
     onGameFinish: (Game501, Long) -> Unit,
     onBack: () -> Unit
@@ -112,6 +114,9 @@ fun Game501Screen(
     var showLegRecordCelebration by remember { mutableStateOf(false) }
     var showMatchRecordCelebration by remember { mutableStateOf(false) }
 
+    // Стейт для сетевой синхронизации
+    var lastSyncedJson by remember { mutableStateOf("") }
+
     val allBots = game.players.all { it.isBot }
 
     val history = remember { mutableStateListOf<Game501>() }
@@ -133,6 +138,62 @@ fun Game501Screen(
     fun addChatSystemMessage(text: String) {
         if (isOnlineGame) {
             chatMessages.add(ChatMessage(System.currentTimeMillis().toString(), "Система", text, isSystem = true))
+        }
+    }
+
+    // ────────────────────────────────────────────────────────
+    // ЛОГИКА СИНХРОНИЗАЦИИ ПО СЕТИ
+    // ────────────────────────────────────────────────────────
+    
+    // Отправляем ход, если сейчас очередь соперника (значит, мы только что походили) или игра закончена
+    LaunchedEffect(game, isOnlineGame) {
+        if (isOnlineGame && onlineMatchId != null) {
+            val currentJson = Game501Serializer.toJson(game)
+            if ((game.currentPlayerIndex == 1 || game.isFinished) && currentJson != lastSyncedJson) {
+                lastSyncedJson = currentJson
+                scope.launch(Dispatchers.IO) {
+                    // Получаем ID записи в базе, чтобы обновить её
+                    val remoteRecord = OnlineNetworkManager.getGameState(onlineMatchId)
+                    if (remoteRecord != null) {
+                        OnlineNetworkManager.updateGameState(remoteRecord.id, currentJson)
+                    }
+                }
+            }
+        }
+    }
+
+    // Слушаем ход соперника (каждые 1.5 секунды)
+    LaunchedEffect(isOnlineGame, onlineMatchId) {
+        if (!isOnlineGame || onlineMatchId == null) return@LaunchedEffect
+        while (true) {
+            delay(1500L)
+            val remote = OnlineNetworkManager.getGameState(onlineMatchId)
+            if (remote != null) {
+                val remoteGame = Game501Serializer.fromJson(remote.stateJson)
+                if (remoteGame != null) {
+                    val remoteJson = Game501Serializer.toJson(remoteGame)
+                    val localJson = Game501Serializer.toJson(game)
+                    
+                    // Если пришел новый стейт и сейчас наш ход (индекс 0) или игра закончена — обновляем
+                    if (remoteJson != localJson && (remoteGame.currentPlayerIndex == 0 || remoteGame.isFinished)) {
+                        game = remoteGame
+                        lastSyncedJson = remoteJson
+                    }
+                }
+            }
+        }
+    }
+
+    // ────────────────────────────────────────────────────────
+
+    fun syncFinishGame() {
+        if (isOnlineGame && onlineMatchId != null) {
+            scope.launch(Dispatchers.IO) {
+                val remoteRecord = OnlineNetworkManager.getGameState(onlineMatchId)
+                if (remoteRecord != null) {
+                    OnlineNetworkManager.deleteGameState(remoteRecord.id)
+                }
+            }
         }
     }
 
@@ -234,7 +295,7 @@ fun Game501Screen(
     }
 
     LaunchedEffect(game) {
-        if (!game.isFinished) currentId = repository.saveUnfinishedGame(game, currentId)
+        if (!game.isFinished && !isOnlineGame) currentId = repository.saveUnfinishedGame(game, currentId)
     }
 
     fun setLastScore(value: Int) {
@@ -346,6 +407,10 @@ fun Game501Screen(
 
         val currentPlayer = game.players.getOrNull(game.currentPlayerIndex) ?: return@LaunchedEffect
         if (!currentPlayer.isBot) return@LaunchedEffect
+        
+        // Если игра по сети, мы не запускаем бота, а ждем хода соперника по сети
+        if (isOnlineGame) return@LaunchedEffect
+
         if (!allBots && (showLegWonDialog || showSetWonDialog)) return@LaunchedEffect
 
         delay(if (allBots) 400L else 900L)
@@ -392,6 +457,11 @@ fun Game501Screen(
 
     LaunchedEffect(game.isFinished, allBots, showLegWonDialog, showSetWonDialog) {
         if (!game.isFinished) return@LaunchedEffect
+        
+        if (isOnlineGame) {
+            syncFinishGame()
+        }
+        
         if (allBots) {
             Game501SettingsStorage.updateQuickSumsIfNeeded(context)
             onGameFinish(game, currentId)
