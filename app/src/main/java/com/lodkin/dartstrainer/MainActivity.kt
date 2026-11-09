@@ -214,6 +214,7 @@ fun DartsTrainerApp() {
     // ── СТЕЙТЫ ОНЛАЙНА ──
     var pendingOnlineGameParams by remember { mutableStateOf<OnlineGameParams?>(null) }
     var currentOnlineMatchId by remember { mutableStateOf<String?>(null) }
+    var currentOnlinePlayerIndex by remember { mutableStateOf(0) } // 0 - Хост, 1 - Гость
 
     // ── СТЕЙТЫ СВОБОДНОЙ ТРЕНИРОВКИ ──
     val prefs = context.getSharedPreferences("free_training_prefs", Context.MODE_PRIVATE)
@@ -274,6 +275,7 @@ fun DartsTrainerApp() {
             isTrainingCricket = false
             isResumingFromStats = false
             currentOnlineMatchId = null
+            currentOnlinePlayerIndex = 0
         }
         if (screen == "main" || screen == "game_select") {
             isTraining501 = false
@@ -281,6 +283,7 @@ fun DartsTrainerApp() {
             isResumingFromStats = false
             isOnlineGame = false
             currentOnlineMatchId = null
+            currentOnlinePlayerIndex = 0
         }
         if (screen == "training") {
             isTraining501 = false
@@ -288,6 +291,7 @@ fun DartsTrainerApp() {
             isResumingFromStats = false
             isOnlineGame = false
             currentOnlineMatchId = null
+            currentOnlinePlayerIndex = 0
         }
     }
 
@@ -804,6 +808,7 @@ fun DartsTrainerApp() {
                         onBack = { screen = "main" },
                         onStartGame = { is501, level, legs, sets, opponentName, saveToTraining, onlineMatchId, isCreator ->
                             currentOnlineMatchId = onlineMatchId
+                            currentOnlinePlayerIndex = if (isCreator) 0 else 1
                             pendingOnlineGameParams = OnlineGameParams(is501, level, legs, sets, opponentName, saveToTraining, onlineMatchId, isCreator)
                             if (onlineMatchId != null) {
                                 startOnlineBotGame(OnlineGameParams(is501, level, legs, sets, opponentName, saveToTraining, onlineMatchId, isCreator), 0)
@@ -899,6 +904,7 @@ fun DartsTrainerApp() {
                         isOnlineGame = isOnlineGame, isResumingFromStats = isResumingFromStats, 
                         trainingSessionId = trainingSessionId, exerciseStartMillis = exerciseStartMillis, isNormativesExercise = isNormativesExercise,
                         onlineMatchId = currentOnlineMatchId,
+                        onlinePlayerIndex = currentOnlinePlayerIndex,
                         onTrainingGameFinished = { playerWon, isGame501 ->
                             if (isGame501) {
                                 TrainingUnfinishedStorage.removeUnfinished501(context, game501ExistingId)
