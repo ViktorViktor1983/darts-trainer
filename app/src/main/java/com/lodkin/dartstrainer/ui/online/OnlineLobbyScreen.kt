@@ -40,8 +40,8 @@ private enum class SearchPhase { NONE, SETUP, SEARCHING, RESULT }
 @Composable
 fun OnlineLobbyScreen(
     onBack: () -> Unit,
-    // ИЗМЕНЕНО: Добавлен параметр onlineMatchId
-    onStartGame: (is501: Boolean, level: Int, legs: Int, sets: Int, opponentName: String, saveToTraining: Boolean, onlineMatchId: String?) -> Unit
+    // ИЗМЕНЕНО: Добавлен параметр isCreator
+    onStartGame: (is501: Boolean, level: Int, legs: Int, sets: Int, opponentName: String, saveToTraining: Boolean, onlineMatchId: String?, isCreator: Boolean) -> Unit
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -61,10 +61,9 @@ fun OnlineLobbyScreen(
     var searchPhase by remember { mutableStateOf(SearchPhase.NONE) }
     var searchLevels by remember { mutableStateOf<Set<Int>>(emptySet()) }
     
-    // Для поиска (свой или друга)
     var currentMatchId by remember { mutableStateOf<String?>(null) }
-    var isFriendSearch by remember { mutableStateOf(false) } // Флаг: ищем друга или рандом
-    var targetOpponent by remember { mutableStateOf<String?>(null) } // Для отображения в окне ожидания
+    var isFriendSearch by remember { mutableStateOf(false) }
+    var targetOpponent by remember { mutableStateOf<String?>(null) }
     var incomingInvite by remember { mutableStateOf<OnlineInvite?>(null) }
     var showExpiredDialog by remember { mutableStateOf(false) }
 
@@ -79,7 +78,6 @@ fun OnlineLobbyScreen(
             .apply()
     }
 
-    // Слушаем входящие приглашения
     LaunchedEffect(nickname, searchPhase) {
         if (nickname.isBlank() || searchPhase != SearchPhase.NONE) return@LaunchedEffect
         while (true) {
@@ -92,18 +90,17 @@ fun OnlineLobbyScreen(
         }
     }
 
-    // Слушаем, принял ли кто-то наш матч
     LaunchedEffect(currentMatchId) {
         val mId = currentMatchId ?: return@LaunchedEffect
         while (true) {
             delay(2000L)
             val acceptedBy = OnlineNetworkManager.checkIfMatchAccepted(mId)
             if (acceptedBy != null) {
-                // Кто-то принял! Запускаем игру с matchId
+                // Кто-то принял! Запускаем игру (Я - создатель: isCreator = true)
                 currentMatchId = null
                 targetOpponent = null
                 searchPhase = SearchPhase.NONE
-                onStartGame(is501, selectedLevel, legs, sets, acceptedBy, saveToTraining, mId)
+                onStartGame(is501, selectedLevel, legs, sets, acceptedBy, saveToTraining, mId, true)
                 break
             }
         }
@@ -193,7 +190,6 @@ fun OnlineLobbyScreen(
         )
     }
 
-    // Диалог "Играть с другом"
     if (showFriendDialog) {
         var friendInput by remember { mutableStateOf("") }
         var isConnecting by remember { mutableStateOf(false) }
@@ -250,7 +246,6 @@ fun OnlineLobbyScreen(
         )
     }
 
-    // Окно настройки поиска (Рандом)
     if (searchPhase == SearchPhase.SETUP) {
         var isConnecting by remember { mutableStateOf(false) }
         var connectionError by remember { mutableStateOf(false) }
@@ -294,11 +289,9 @@ fun OnlineLobbyScreen(
                                     val regError = OnlineNetworkManager.registerPlayer(nickname, selectedLevel)
                                     if (regError != null) { isConnecting = false; connectionError = true; errorMsg = regError; return@launch }
                                     
-                                    // Ищем всех подходящих
                                     val opponents = OnlineNetworkManager.findMatchingOpponents(nickname, searchLevels.toList())
                                     if (opponents.isEmpty()) { isConnecting = false; connectionError = true; errorMsg = "Никого не найдено"; return@launch }
                                     
-                                    // Создаем ID матча и рассылаем
                                     val mId = UUID.randomUUID().toString()
                                     val success = OnlineNetworkManager.sendBroadcastInvites(nickname, opponents, mId)
                                     isConnecting = false
@@ -321,8 +314,7 @@ fun OnlineLobbyScreen(
                     if (connectionError) { Spacer(Modifier.height(8.dp)); Text(errorMsg, color = Color.Red, fontSize = 12.sp, textAlign = TextAlign.Center) }
                     
                     Spacer(Modifier.height(8.dp))
-                    // Здесь игра с ботом передает null в onlineMatchId
-                    TextButton(onClick = { searchPhase = SearchPhase.NONE; onStartGame(is501, selectedLevel, legs, sets, nickname, saveToTraining, null) }, enabled = !isConnecting) { Text("Играть с ботом", color = Color.White.copy(alpha = 0.6f), fontSize = 14.sp) }
+                    TextButton(onClick = { searchPhase = SearchPhase.NONE; onStartGame(is501, selectedLevel, legs, sets, nickname, saveToTraining, null, false) }, enabled = !isConnecting) { Text("Играть с ботом", color = Color.White.copy(alpha = 0.6f), fontSize = 14.sp) }
                 }
             }
         }
@@ -350,7 +342,7 @@ fun OnlineLobbyScreen(
     if (searchPhase == SearchPhase.RESULT) {
         AlertDialog(
             onDismissRequest = { searchPhase = SearchPhase.NONE }, confirmButton = {}, title = { Text("Соперник не ответил", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold) },
-            text = { Column { Text("Игрок не принял приглашение вовремя. Что будем делать?", color = Color.White.copy(alpha = 0.7f), fontSize = 14.sp); Spacer(Modifier.height(20.dp)); Box(modifier = Modifier.fillMaxWidth().height(48.dp).clip(RoundedCornerShape(10.dp)).background(Accent).clickable { searchPhase = SearchPhase.SETUP }, contentAlignment = Alignment.Center) { Text("Искать снова", color = DarkBg, fontSize = 15.sp, fontWeight = FontWeight.Bold) }; Spacer(Modifier.height(8.dp)); Box(modifier = Modifier.fillMaxWidth().height(48.dp).clip(RoundedCornerShape(10.dp)).background(GoldAccent.copy(alpha = 0.2f)).clickable { searchPhase = SearchPhase.NONE; onStartGame(is501, selectedLevel, legs, sets, nickname, saveToTraining, null) }, contentAlignment = Alignment.Center) { Text("Играть с ботом", color = GoldAccent, fontSize = 15.sp, fontWeight = FontWeight.Bold) } } }
+            text = { Column { Text("Игрок не принял приглашение вовремя. Что будем делать?", color = Color.White.copy(alpha = 0.7f), fontSize = 14.sp); Spacer(Modifier.height(20.dp)); Box(modifier = Modifier.fillMaxWidth().height(48.dp).clip(RoundedCornerShape(10.dp)).background(Accent).clickable { searchPhase = SearchPhase.SETUP }, contentAlignment = Alignment.Center) { Text("Искать снова", color = DarkBg, fontSize = 15.sp, fontWeight = FontWeight.Bold) }; Spacer(Modifier.height(8.dp)); Box(modifier = Modifier.fillMaxWidth().height(48.dp).clip(RoundedCornerShape(10.dp)).background(GoldAccent.copy(alpha = 0.2f)).clickable { searchPhase = SearchPhase.NONE; onStartGame(is501, selectedLevel, legs, sets, nickname, saveToTraining, null, false) }, contentAlignment = Alignment.Center) { Text("Играть с ботом", color = GoldAccent, fontSize = 15.sp, fontWeight = FontWeight.Bold) } } }
         )
     }
 
@@ -362,14 +354,12 @@ fun OnlineLobbyScreen(
                 confirmButton = {
                     TextButton(onClick = {
                         scope.launch { 
-                            // Пытаемся принять
                             val success = OnlineNetworkManager.acceptInvite(inv.id, inv.matchId)
                             if (success) {
                                 incomingInvite = null
-                                // Запускаем игру с matchId
-                                onStartGame(is501, selectedLevel, legs, sets, inv.fromUser, saveToTraining, inv.matchId)
+                                // Запускаем игру с matchId (Я - гость: isCreator = false)
+                                onStartGame(is501, selectedLevel, legs, sets, inv.fromUser, saveToTraining, inv.matchId, false)
                             } else {
-                                // Если не удалось (уже удалено), показываем "Устарело"
                                 incomingInvite = null
                                 showExpiredDialog = true
                             }
