@@ -54,6 +54,7 @@ import com.lodkin.dartstrainer.data.game501.Game501Serializer
 import com.lodkin.dartstrainer.data.game501.GameType
 import com.lodkin.dartstrainer.data.game501.OutMode
 import com.lodkin.dartstrainer.data.game501.Player501
+import com.lodkin.dartstrainer.data.online.OnlineNetworkManager
 import com.lodkin.dartstrainer.data.scoreset.ScoreSetDatabase
 import com.lodkin.dartstrainer.data.scoreset.ScoreSetRepository
 import com.lodkin.dartstrainer.data.sector.SectorDatabase
@@ -129,7 +130,8 @@ data class OnlineGameParams(
     val legs: Int,
     val sets: Int,
     val nickname: String,
-    val saveToTraining: Boolean
+    val saveToTraining: Boolean,
+    val onlineMatchId: String? = null
 )
 
 class MainActivity : ComponentActivity() {
@@ -210,6 +212,7 @@ fun DartsTrainerApp() {
 
     // ── СТЕЙТЫ ОНЛАЙНА ──
     var pendingOnlineGameParams by remember { mutableStateOf<OnlineGameParams?>(null) }
+    var currentOnlineMatchId by remember { mutableStateOf<String?>(null) }
 
     // ── СТЕЙТЫ СВОБОДНОЙ ТРЕНИРОВКИ ──
     val prefs = context.getSharedPreferences("free_training_prefs", Context.MODE_PRIVATE)
@@ -269,18 +272,21 @@ fun DartsTrainerApp() {
             isTraining501 = false
             isTrainingCricket = false
             isResumingFromStats = false
+            currentOnlineMatchId = null
         }
         if (screen == "main" || screen == "game_select") {
             isTraining501 = false
             isTrainingCricket = false
             isResumingFromStats = false
             isOnlineGame = false
+            currentOnlineMatchId = null
         }
         if (screen == "training") {
             isTraining501 = false
             isTrainingCricket = false
             isResumingFromStats = false
             isOnlineGame = false
+            currentOnlineMatchId = null
         }
     }
 
@@ -354,6 +360,16 @@ fun DartsTrainerApp() {
                 )
                 game501 = Game501Logic.newGame(GameType.X501, OutMode.DOUBLE_OUT, players, params.legs, params.sets, false, startingTeam, TRAINING_AUTO_OK_SECONDS, sessionStartTime, sessionForm)
                 game501ExistingId = 0L
+
+                // Если это сетевая игра — создаем запись в базе
+                if (params.onlineMatchId != null) {
+                    val existing = OnlineNetworkManager.getGameState(params.onlineMatchId)
+                    if (existing == null) {
+                        val json = Game501Serializer.toJson(game501!!)
+                        OnlineNetworkManager.createGameState(params.onlineMatchId, "501", json, SettingsStorage.getPlayerName(context), params.nickname)
+                    }
+                }
+
                 screen = "game501_game"
             } else {
                 val botName = botNameFor(params.level)
@@ -363,6 +379,10 @@ fun DartsTrainerApp() {
                 )
                 cricketGame = CricketLogic.newGame(CricketType.AMERICAN, players, params.legs, params.sets, false, startingTeam, TRAINING_AUTO_OK_SECONDS, sessionStartTime, sessionForm)
                 cricketExistingId = 0L
+                
+                // Если это сетевая игра (пока заглушка для крикета)
+                // TODO: Добавить синхронизацию для крикета
+                
                 screen = "cricket_game"
             }
         }
@@ -759,8 +779,9 @@ fun DartsTrainerApp() {
                 "online_lobby" -> {
                     OnlineLobbyScreen(
                         onBack = { screen = "main" },
-                        onPlayBot = { is501, level, legs, sets, nickname, saveToTraining ->
-                            pendingOnlineGameParams = OnlineGameParams(is501, level, legs, sets, nickname, saveToTraining)
+                        onStartGame = { is501, level, legs, sets, nickname, saveToTraining, onlineMatchId ->
+                            currentOnlineMatchId = onlineMatchId
+                            pendingOnlineGameParams = OnlineGameParams(is501, level, legs, sets, nickname, saveToTraining, onlineMatchId)
                             bullDrawExerciseId = if (is501) "game501" else "cricket"
                             showBullDraw = true
                         }
@@ -849,6 +870,7 @@ fun DartsTrainerApp() {
                         sessionStartTime = sessionStartTime, sessionForm = sessionForm, isTraining501 = isTraining501, isTrainingCricket = isTrainingCricket,
                         isOnlineGame = isOnlineGame, isResumingFromStats = isResumingFromStats, 
                         trainingSessionId = trainingSessionId, exerciseStartMillis = exerciseStartMillis, isNormativesExercise = isNormativesExercise,
+                        onlineMatchId = currentOnlineMatchId,
                         onTrainingGameFinished = { playerWon, isGame501 ->
                             if (isGame501) {
                                 TrainingUnfinishedStorage.removeUnfinished501(context, game501ExistingId)
