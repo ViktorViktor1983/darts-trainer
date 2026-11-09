@@ -279,27 +279,46 @@ object OnlineNetworkManager {
     // НОВЫЕ МЕТОДЫ ДЛЯ СИНХРОНИЗАЦИИ ИГРЫ (GAME STATES)
     // ────────────────────────────────────────────────────────
 
-    // 1. Создать новую игру (вызывается тем, кто создал лобби)
-    suspend fun createGameState(matchId: String, gameType: String, initialJson: String, p1Id: String, p2Id: String): String? = withContext(Dispatchers.IO) {
+    // 1. УМНОЕ СОХРАНЕНИЕ: обновляет, если есть, или создает, если нет
+    suspend fun upsertGameState(matchId: String, gameType: String, newJson: String, p1Name: String, p2Name: String): Boolean = withContext(Dispatchers.IO) {
         try {
-            val jsonBody = JSONObject().apply {
-                put("match_id", matchId)
-                put("game_type", gameType)
-                put("state_json", initialJson)
-                put("player1_id", p1Id)
-                put("player2_id", p2Id)
-            }.toString()
-
-            val request = Request.Builder().url(GAME_STATES_URL).post(jsonBody.toRequestBody(JSON)).build()
-            client.newCall(request).execute().use { response ->
+            // Сначала ищем запись
+            val filter = "(match_id='$matchId')"
+            val encodedFilter = URLEncoder.encode(filter, "UTF-8")
+            val url = "$GAME_STATES_URL?filter=$encodedFilter"
+            
+            var existingId: String? = null
+            val getRequest = Request.Builder().url(url).get().build()
+            client.newCall(getRequest).execute().use { response ->
                 if (response.isSuccessful) {
                     val body = response.body?.string()
-                    val id = JSONObject(body ?: "").optString("id")
-                    return@withContext id
+                    val items = JSONObject(body ?: "").optJSONArray("items")
+                    if (items != null && items.length() > 0) {
+                        existingId = items.getJSONObject(0).optString("id")
+                    }
                 }
-                null
             }
-        } catch (e: Exception) { null }
+
+            // Если запись есть — обновляем (PATCH)
+            if (existingId != null) {
+                val jsonBody = JSONObject().apply { put("state_json", newJson) }.toString()
+                val patchRequest = Request.Builder().url("$GAME_STATES_URL/$existingId").patch(jsonBody.toRequestBody(JSON)).build()
+                client.newCall(patchRequest).execute().use { response -> return@withContext response.isSuccessful }
+            } else {
+                // Если записи нет — создаем (POST)
+                val jsonBody = JSONObject().apply {
+                    put("match_id", matchId)
+                    put("game_type", gameType)
+                    put("state_json", newJson)
+                    put("player1_id", p1Name)
+                    put("player2_id", p2Name)
+                }.toString()
+                val postRequest = Request.Builder().url(GAME_STATES_URL).post(jsonBody.toRequestBody(JSON)).build()
+                client.newCall(postRequest).execute().use { response -> return@withContext response.isSuccessful }
+            }
+        } catch (e: Exception) {
+            false
+        }
     }
 
     // 2. Получить текущее состояние игры (вызывается обоими игроками в цикле)
@@ -331,19 +350,7 @@ object OnlineNetworkManager {
         } catch (e: Exception) { null }
     }
 
-    // 3. Обновить состояние игры (когда сделан ход)
-    suspend fun updateGameState(recordId: String, newJson: String): Boolean = withContext(Dispatchers.IO) {
-        try {
-            val jsonBody = JSONObject().apply {
-                put("state_json", newJson)
-            }.toString()
-
-            val request = Request.Builder().url("$GAME_STATES_URL/$recordId").patch(jsonBody.toRequestBody(JSON)).build()
-            client.newCall(request).execute().use { response -> response.isSuccessful }
-        } catch (e: Exception) { false }
-    }
-
-    // 4. Удалить состояние игры (когда игра закончена)
+    // 3. Удалить состояние игры (когда игра закончена)
     suspend fun deleteGameState(recordId: String): Boolean = withContext(Dispatchers.IO) {
         try {
             val request = Request.Builder().url("$GAME_STATES_URL/$recordId").delete().build()
