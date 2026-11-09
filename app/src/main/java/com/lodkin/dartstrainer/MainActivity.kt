@@ -359,7 +359,6 @@ fun DartsTrainerApp() {
             }
 
             if (params.is501) {
-                // Игрок 1 - всегда ты. Игрок 2 - соперник (или бот).
                 val p2Name = if (isRealOnline) (params.opponentName ?: "Соперник") else botNameFor(params.level)
                 val players = listOf(
                     Player501(name = myName, isBot = false, botLevel = 0, teamIndex = 0),
@@ -370,7 +369,8 @@ fun DartsTrainerApp() {
                         teamIndex = 1
                     )
                 )
-                game501 = Game501Logic.newGame(GameType.X501, OutMode.DOUBLE_OUT, players, params.legs, params.sets, false, startingTeam, TRAINING_AUTO_OK_SECONDS, sessionStartTime, sessionForm)
+                // ВСЕГДА начинаем с 0 (Хост ходит первым). Булл в онлайне временно отключен.
+                game501 = Game501Logic.newGame(GameType.X501, OutMode.DOUBLE_OUT, players, params.legs, params.sets, false, 0, TRAINING_AUTO_OK_SECONDS, sessionStartTime, sessionForm)
                 game501ExistingId = 0L
 
                 // ЗАПИСЬ В БАЗУ СОЗДАЕТ ТОЛЬКО СОЗДАТЕЛЬ ИГРЫ (isCreator)
@@ -396,7 +396,7 @@ fun DartsTrainerApp() {
                         teamIndex = 1
                     )
                 )
-                cricketGame = CricketLogic.newGame(CricketType.AMERICAN, players, params.legs, params.sets, false, startingTeam, TRAINING_AUTO_OK_SECONDS, sessionStartTime, sessionForm)
+                cricketGame = CricketLogic.newGame(CricketType.AMERICAN, players, params.legs, params.sets, false, 0, TRAINING_AUTO_OK_SECONDS, sessionStartTime, sessionForm)
                 cricketExistingId = 0L
                 
                 // Если это сетевая игра (пока заглушка для крикета)
@@ -801,8 +801,14 @@ fun DartsTrainerApp() {
                         onStartGame = { is501, level, legs, sets, opponentName, saveToTraining, onlineMatchId, isCreator ->
                             currentOnlineMatchId = onlineMatchId
                             pendingOnlineGameParams = OnlineGameParams(is501, level, legs, sets, opponentName, saveToTraining, onlineMatchId, isCreator)
-                            bullDrawExerciseId = if (is501) "game501" else "cricket"
-                            showBullDraw = true
+                            // Временно убираем Булл для онлайн игр, чтобы не было зависаний
+                            if (onlineMatchId != null) {
+                                startOnlineBotGame(OnlineGameParams(is501, level, legs, sets, opponentName, saveToTraining, onlineMatchId, isCreator), 0)
+                                pendingOnlineGameParams = null
+                            } else {
+                                bullDrawExerciseId = if (is501) "game501" else "cricket"
+                                showBullDraw = true
+                            }
                         }
                     )
                 }
