@@ -86,7 +86,10 @@ fun GameRoutes(
     trainingSessionId: Long = 0L,
     exerciseStartMillis: Long = 0L,
     isNormativesExercise: Boolean = false,
-    onTrainingGameFinished: (playerWon: Boolean, isGame501: Boolean) -> Unit = { _, _ -> }
+    onTrainingGameFinished: (playerWon: Boolean, isGame501: Boolean) -> Unit = { _, _ -> },
+    
+    // НОВЫЙ ПАРАМЕТР ДЛЯ СЕТЕВОЙ ИГРЫ
+    onlineMatchId: String? = null 
 ) {
     when (screen) {
         "game_select" -> GameSelectScreen(
@@ -211,7 +214,7 @@ fun GameRoutes(
 
         "game501_setup" -> Game501SetupScreen(
             playerName = playerName,
-            isTrainingMode = isTraining501, // ПЕРЕДАЕМ ФЛАГ ТРЕНИРОВКИ
+            isTrainingMode = isTraining501,
             onStartGame = { gameType, outMode, players, legsPerSet, setsPerMatch, isPairGame, startingTeam, autoOkSeconds ->
                 val newGame = Game501Logic.newGame(
                     gameType, outMode, players, legsPerSet, setsPerMatch, isPairGame,
@@ -236,6 +239,7 @@ fun GameRoutes(
                     existingId = game501ExistingId,
                     isTrainingMode = isTraining501,
                     isOnlineGame = isOnlineGame,
+                    onlineMatchId = onlineMatchId, // <-- ПЕРЕДАЕМ ID МАТЧА СЮДА
                     trainingRepository = trainingRepository,
                     onGameFinish = { f: Game501, id: Long ->
                         if (isTraining501) {
