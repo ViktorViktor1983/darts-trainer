@@ -381,11 +381,8 @@ fun DartsTrainerApp() {
                 // ЗАПИСЬ В БАЗУ СОЗДАЕТ ТОЛЬКО СОЗДАТЕЛЬ ИГРЫ (isCreator)
                 if (params.onlineMatchId != null && params.isCreator) {
                     scope.launch(Dispatchers.IO) {
-                        val existing = OnlineNetworkManager.getGameState(params.onlineMatchId)
-                        if (existing == null) {
-                            val json = Game501Serializer.toJson(game501!!)
-                            OnlineNetworkManager.createGameState(params.onlineMatchId, "501", json, p1Name, p2Name)
-                        }
+                        val json = Game501Serializer.toJson(game501!!)
+                        OnlineNetworkManager.upsertGameState(params.onlineMatchId, "501", json, p1Name, p2Name)
                     }
                 }
 
