@@ -88,7 +88,8 @@ fun GameRoutes(
     isNormativesExercise: Boolean = false,
     onTrainingGameFinished: (playerWon: Boolean, isGame501: Boolean) -> Unit = { _, _ -> },
     
-    // НОВЫЙ ПАРАМЕТР ДЛЯ СЕТЕВОЙ ИГРЫ
+    // НОВЫЙ ПАРАМЕТР ДЛЯ ИНДЕКСА ИГРОКА (0 - Хост, 1 - Гость)
+    onlinePlayerIndex: Int = 0,
     onlineMatchId: String? = null 
 ) {
     when (screen) {
@@ -239,7 +240,8 @@ fun GameRoutes(
                     existingId = game501ExistingId,
                     isTrainingMode = isTraining501,
                     isOnlineGame = isOnlineGame,
-                    onlineMatchId = onlineMatchId, // <-- ПЕРЕДАЕМ ID МАТЧА СЮДА
+                    onlineMatchId = onlineMatchId, 
+                    onlinePlayerIndex = onlinePlayerIndex, // <-- ПЕРЕДАЕМ ИНДЕКС СЮДА
                     trainingRepository = trainingRepository,
                     onGameFinish = { f: Game501, id: Long ->
                         if (isTraining501) {
