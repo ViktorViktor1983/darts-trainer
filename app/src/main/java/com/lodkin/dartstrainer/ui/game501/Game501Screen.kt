@@ -186,10 +186,21 @@ fun Game501Screen(
                     val remoteJson = Game501Serializer.toJson(remoteGame)
                     val localJson = Game501Serializer.toJson(game)
                     val isRemoteMyTurn = remoteGame.currentPlayerIndex == onlinePlayerIndex
-                    
-                    if (remoteJson != localJson && (isRemoteMyTurn || remoteGame.isFinished)) {
-                        game = remoteGame
-                        lastSyncedJson = remoteJson
+
+                    val remoteLeg = remoteGame.currentLegNumber
+                    val remoteSet = remoteGame.currentSetNumber
+                    val localLeg = game.currentLegNumber
+                    val localSet = game.currentSetNumber
+
+                    val isRemoteBehind = remoteSet < localSet || (remoteSet == localSet && remoteLeg < localLeg)
+                    val isRemoteAhead = remoteSet > localSet || (remoteSet == localSet && remoteLeg > localLeg)
+
+                    // ЗАЩИТА ОТ ОТКАТА: Принимаем данные, только если они не старше наших, и сейчас наш ход (или игра закончена)
+                    if (remoteJson != localJson && !isRemoteBehind) {
+                        if (isRemoteAhead || isRemoteMyTurn || remoteGame.isFinished) {
+                            game = remoteGame
+                            lastSyncedJson = remoteJson
+                        }
                     }
                 }
             }
