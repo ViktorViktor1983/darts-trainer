@@ -40,8 +40,8 @@ private enum class SearchPhase { NONE, SETUP, SEARCHING, RESULT }
 @Composable
 fun OnlineLobbyScreen(
     onBack: () -> Unit,
-    // ИЗМЕНЕНО: Добавлен параметр isCreator
-    onStartGame: (is501: Boolean, level: Int, legs: Int, sets: Int, opponentName: String, saveToTraining: Boolean, onlineMatchId: String?, isCreator: Boolean) -> Unit
+    // ИЗМЕНЕНО: opponentName теперь String? (null = игра с ботом)
+    onStartGame: (is501: Boolean, level: Int, legs: Int, sets: Int, opponentName: String?, saveToTraining: Boolean, onlineMatchId: String?, isCreator: Boolean) -> Unit
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -314,7 +314,7 @@ fun OnlineLobbyScreen(
                     if (connectionError) { Spacer(Modifier.height(8.dp)); Text(errorMsg, color = Color.Red, fontSize = 12.sp, textAlign = TextAlign.Center) }
                     
                     Spacer(Modifier.height(8.dp))
-                    TextButton(onClick = { searchPhase = SearchPhase.NONE; onStartGame(is501, selectedLevel, legs, sets, nickname, saveToTraining, null, false) }, enabled = !isConnecting) { Text("Играть с ботом", color = Color.White.copy(alpha = 0.6f), fontSize = 14.sp) }
+                    TextButton(onClick = { searchPhase = SearchPhase.NONE; onStartGame(is501, selectedLevel, legs, sets, null, saveToTraining, null, false) }, enabled = !isConnecting) { Text("Играть с ботом", color = Color.White.copy(alpha = 0.6f), fontSize = 14.sp) }
                 }
             }
         }
@@ -342,7 +342,7 @@ fun OnlineLobbyScreen(
     if (searchPhase == SearchPhase.RESULT) {
         AlertDialog(
             onDismissRequest = { searchPhase = SearchPhase.NONE }, confirmButton = {}, title = { Text("Соперник не ответил", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold) },
-            text = { Column { Text("Игрок не принял приглашение вовремя. Что будем делать?", color = Color.White.copy(alpha = 0.7f), fontSize = 14.sp); Spacer(Modifier.height(20.dp)); Box(modifier = Modifier.fillMaxWidth().height(48.dp).clip(RoundedCornerShape(10.dp)).background(Accent).clickable { searchPhase = SearchPhase.SETUP }, contentAlignment = Alignment.Center) { Text("Искать снова", color = DarkBg, fontSize = 15.sp, fontWeight = FontWeight.Bold) }; Spacer(Modifier.height(8.dp)); Box(modifier = Modifier.fillMaxWidth().height(48.dp).clip(RoundedCornerShape(10.dp)).background(GoldAccent.copy(alpha = 0.2f)).clickable { searchPhase = SearchPhase.NONE; onStartGame(is501, selectedLevel, legs, sets, nickname, saveToTraining, null, false) }, contentAlignment = Alignment.Center) { Text("Играть с ботом", color = GoldAccent, fontSize = 15.sp, fontWeight = FontWeight.Bold) } } }
+            text = { Column { Text("Игрок не принял приглашение вовремя. Что будем делать?", color = Color.White.copy(alpha = 0.7f), fontSize = 14.sp); Spacer(Modifier.height(20.dp)); Box(modifier = Modifier.fillMaxWidth().height(48.dp).clip(RoundedCornerShape(10.dp)).background(Accent).clickable { searchPhase = SearchPhase.SETUP }, contentAlignment = Alignment.Center) { Text("Искать снова", color = DarkBg, fontSize = 15.sp, fontWeight = FontWeight.Bold) }; Spacer(Modifier.height(8.dp)); Box(modifier = Modifier.fillMaxWidth().height(48.dp).clip(RoundedCornerShape(10.dp)).background(GoldAccent.copy(alpha = 0.2f)).clickable { searchPhase = SearchPhase.NONE; onStartGame(is501, selectedLevel, legs, sets, null, saveToTraining, null, false) }, contentAlignment = Alignment.Center) { Text("Играть с ботом", color = GoldAccent, fontSize = 15.sp, fontWeight = FontWeight.Bold) } } }
         )
     }
 
