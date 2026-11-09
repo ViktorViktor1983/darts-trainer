@@ -80,6 +80,8 @@ fun Game501Screen(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val myName = SettingsStorage.getPlayerName(context).ifBlank { "Игрок" }
+    
     var game by remember { mutableStateOf(initialGame) }
     var inputText by remember { mutableStateOf("") }
 
@@ -131,7 +133,6 @@ fun Game501Screen(
     LaunchedEffect(isOnlineGame) {
         if (isOnlineGame) {
             chatMessages.add(ChatMessage("1", "Система", "Игра началась! Удачной игры.", isSystem = true))
-            chatMessages.add(ChatMessage("2", game.players.getOrNull(1)?.name ?: "Соперник", "Привет! Погнали.", isMyMessage = false))
         }
     }
 
@@ -145,18 +146,23 @@ fun Game501Screen(
     // ЛОГИКА СИНХРОНИЗАЦИИ ПО СЕТИ
     // ────────────────────────────────────────────────────────
     
-    // Отправляем ход, если сейчас очередь соперника (значит, мы только что походили) или игра закончена
+    // Отправляем ход, если сейчас НЕ наш ход (значит, мы только что походили) или игра закончена
     LaunchedEffect(game, isOnlineGame) {
         if (isOnlineGame && onlineMatchId != null) {
+            val isMyTurn = game.currentPlayer?.name == myName
             val currentJson = Game501Serializer.toJson(game)
-            if ((game.currentPlayerIndex == 1 || game.isFinished) && currentJson != lastSyncedJson) {
+            
+            if ((!isMyTurn || game.isFinished) && currentJson != lastSyncedJson) {
                 lastSyncedJson = currentJson
                 scope.launch(Dispatchers.IO) {
-                    // Получаем ID записи в базе, чтобы обновить её
-                    val remoteRecord = OnlineNetworkManager.getGameState(onlineMatchId)
-                    if (remoteRecord != null) {
-                        OnlineNetworkManager.updateGameState(remoteRecord.id, currentJson)
-                    }
+                    // ИСПОЛЬЗУЕМ НОВЫЙ МЕТОД upsertGameState
+                    OnlineNetworkManager.upsertGameState(
+                        onlineMatchId,
+                        "501",
+                        currentJson,
+                        game.players[0].name,
+                        game.players[1].name
+                    )
                 }
             }
         }
@@ -173,9 +179,10 @@ fun Game501Screen(
                 if (remoteGame != null) {
                     val remoteJson = Game501Serializer.toJson(remoteGame)
                     val localJson = Game501Serializer.toJson(game)
+                    val isRemoteMyTurn = remoteGame.currentPlayer?.name == myName
                     
-                    // Если пришел новый стейт и сейчас наш ход (индекс 0) или игра закончена — обновляем
-                    if (remoteJson != localJson && (remoteGame.currentPlayerIndex == 0 || remoteGame.isFinished)) {
+                    // Если пришел новый стейт, и сейчас НАШ ход (или игра закончена) — обновляем
+                    if (remoteJson != localJson && (isRemoteMyTurn || remoteGame.isFinished)) {
                         game = remoteGame
                         lastSyncedJson = remoteJson
                     }
@@ -199,7 +206,6 @@ fun Game501Screen(
 
     suspend fun checkLegRecord(): PendingLegRecord? {
         if (game.isPairGame) return null
-        val myName = SettingsStorage.getPlayerName(context)
         if (myName.isBlank()) return null
         val snapshot = game.legHistory.lastOrNull() ?: return null
         val mySnap = snapshot.players.firstOrNull { it.name == myName && !it.isBot } ?: return null
@@ -240,7 +246,6 @@ fun Game501Screen(
 
     suspend fun checkAndUpdateMatchRecord(): PendingMatchRecord? {
         if (game.isPairGame) return null
-        val myName = SettingsStorage.getPlayerName(context)
         if (myName.isBlank()) return null
         val myIdx = game.players.indexOfFirst { it.name == myName && !it.isBot }
         if (myIdx < 0) return null
