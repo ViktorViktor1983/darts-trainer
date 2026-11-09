@@ -74,6 +74,7 @@ fun Game501Screen(
     isTrainingMode: Boolean = false,
     isOnlineGame: Boolean = false,
     onlineMatchId: String? = null,
+    onlinePlayerIndex: Int = 0, // НОВЫЙ ПАРАМЕТР: 0 - Хост, 1 - Гость
     trainingRepository: TrainingRepository? = null,
     onGameFinish: (Game501, Long) -> Unit,
     onBack: () -> Unit
@@ -121,8 +122,8 @@ fun Game501Screen(
 
     val allBots = game.players.all { it.isBot }
 
-    // ГЛАВНАЯ ПРОВЕРКА: Мой ли сейчас ход?
-    val isMyTurn = !isOnlineGame || (game.currentPlayer?.name == myName)
+    // ГЛАВНАЯ ПРОВЕРКА: Мой ли сейчас ход? (Используем ИНДЕКС, а не имя!)
+    val isMyTurn = !isOnlineGame || (game.currentPlayerIndex == onlinePlayerIndex)
     
     // Можно ли вообще взаимодействовать с клавиатурой
     val canInteract = !game.isFinished && game.currentPlayer?.isBot != true && isMyTurn
@@ -155,7 +156,7 @@ fun Game501Screen(
     // Отправляем ход, если сейчас НЕ наш ход (значит, мы только что походили) или игра закончена
     LaunchedEffect(game, isOnlineGame) {
         if (isOnlineGame && onlineMatchId != null) {
-            val isTurnNow = game.currentPlayer?.name == myName
+            val isTurnNow = game.currentPlayerIndex == onlinePlayerIndex
             val currentJson = Game501Serializer.toJson(game)
             
             if ((!isTurnNow || game.isFinished) && currentJson != lastSyncedJson) {
@@ -184,7 +185,7 @@ fun Game501Screen(
                 if (remoteGame != null) {
                     val remoteJson = Game501Serializer.toJson(remoteGame)
                     val localJson = Game501Serializer.toJson(game)
-                    val isRemoteMyTurn = remoteGame.currentPlayer?.name == myName
+                    val isRemoteMyTurn = remoteGame.currentPlayerIndex == onlinePlayerIndex
                     
                     if (remoteJson != localJson && (isRemoteMyTurn || remoteGame.isFinished)) {
                         game = remoteGame
