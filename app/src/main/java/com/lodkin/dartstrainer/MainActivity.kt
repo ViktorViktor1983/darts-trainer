@@ -333,8 +333,13 @@ fun DartsTrainerApp() {
     }
 
     fun startOnlineBotGame(params: OnlineGameParams, startingTeam: Int) {
-        isOnlineGame = true
+        // Включаем сетевой режим ТОЛЬКО если есть ID матча. Иначе это игра с ботом.
+        isOnlineGame = (params.onlineMatchId != null) 
+        
         scope.launch {
+            val myName = SettingsStorage.getPlayerName(context).ifBlank { "Игрок" }
+            val isRealOnline = params.onlineMatchId != null
+            
             if (params.saveToTraining) {
                 val session = TrainingSession(
                     dateMillis = System.currentTimeMillis(),
@@ -353,29 +358,39 @@ fun DartsTrainerApp() {
             }
 
             if (params.is501) {
-                val botName = botNameFor(params.level)
+                // Игрок 1 - всегда ты. Игрок 2 - соперник (или бот).
                 val players = listOf(
-                    Player501(name = params.nickname, isBot = false, botLevel = 0, teamIndex = 0),
-                    Player501(name = botName, isBot = true, botLevel = params.level, teamIndex = 1)
+                    Player501(name = myName, isBot = false, botLevel = 0, teamIndex = 0),
+                    Player501(
+                        name = params.nickname, 
+                        isBot = !isRealOnline, 
+                        botLevel = if (isRealOnline) 0 else params.level, 
+                        teamIndex = 1
+                    )
                 )
                 game501 = Game501Logic.newGame(GameType.X501, OutMode.DOUBLE_OUT, players, params.legs, params.sets, false, startingTeam, TRAINING_AUTO_OK_SECONDS, sessionStartTime, sessionForm)
                 game501ExistingId = 0L
 
-                // Если это сетевая игра — создаем запись в базе
                 if (params.onlineMatchId != null) {
-                    val existing = OnlineNetworkManager.getGameState(params.onlineMatchId)
-                    if (existing == null) {
-                        val json = Game501Serializer.toJson(game501!!)
-                        OnlineNetworkManager.createGameState(params.onlineMatchId, "501", json, SettingsStorage.getPlayerName(context), params.nickname)
+                    scope.launch(Dispatchers.IO) {
+                        val existing = OnlineNetworkManager.getGameState(params.onlineMatchId)
+                        if (existing == null) {
+                            val json = Game501Serializer.toJson(game501!!)
+                            OnlineNetworkManager.createGameState(params.onlineMatchId, "501", json, myName, params.nickname)
+                        }
                     }
                 }
 
                 screen = "game501_game"
             } else {
-                val botName = botNameFor(params.level)
                 val players = listOf(
-                    CricketPlayer(name = params.nickname, isBot = false, botLevel = 0, teamIndex = 0),
-                    CricketPlayer(name = botName, isBot = true, botLevel = params.level, teamIndex = 1)
+                    CricketPlayer(name = myName, isBot = false, botLevel = 0, teamIndex = 0),
+                    CricketPlayer(
+                        name = params.nickname, 
+                        isBot = !isRealOnline, 
+                        botLevel = if (isRealOnline) 0 else params.level, 
+                        teamIndex = 1
+                    )
                 )
                 cricketGame = CricketLogic.newGame(CricketType.AMERICAN, players, params.legs, params.sets, false, startingTeam, TRAINING_AUTO_OK_SECONDS, sessionStartTime, sessionForm)
                 cricketExistingId = 0L
