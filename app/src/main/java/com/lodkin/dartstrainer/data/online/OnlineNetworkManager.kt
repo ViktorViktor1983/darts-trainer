@@ -18,10 +18,21 @@ data class OnlineInvite(
     val matchId: String
 )
 
+// Модель для состояния игры
+data class GameStateRecord(
+    val id: String,
+    val matchId: String,
+    val gameType: String,
+    val stateJson: String,
+    val player1Id: String,
+    val player2Id: String
+)
+
 object OnlineNetworkManager {
     private const val BASE_URL = "http://179.236.147.116:8090"
     private const val PLAYERS_URL = "$BASE_URL/api/collections/players/records"
     private const val INVITES_URL = "$BASE_URL/api/collections/invites/records"
+    private const val GAME_STATES_URL = "$BASE_URL/api/collections/game_states/records"
 
     private val client = OkHttpClient.Builder()
         .connectTimeout(10, TimeUnit.SECONDS)
@@ -262,5 +273,81 @@ object OnlineNetworkManager {
         } catch (e: Exception) {
             false
         }
+    }
+
+    // ────────────────────────────────────────────────────────
+    // НОВЫЕ МЕТОДЫ ДЛЯ СИНХРОНИЗАЦИИ ИГРЫ (GAME STATES)
+    // ────────────────────────────────────────────────────────
+
+    // 1. Создать новую игру (вызывается тем, кто создал лобби)
+    suspend fun createGameState(matchId: String, gameType: String, initialJson: String, p1Id: String, p2Id: String): String? = withContext(Dispatchers.IO) {
+        try {
+            val jsonBody = JSONObject().apply {
+                put("match_id", matchId)
+                put("game_type", gameType)
+                put("state_json", initialJson)
+                put("player1_id", p1Id)
+                put("player2_id", p2Id)
+            }.toString()
+
+            val request = Request.Builder().url(GAME_STATES_URL).post(jsonBody.toRequestBody(JSON)).build()
+            client.newCall(request).execute().use { response ->
+                if (response.isSuccessful) {
+                    val body = response.body?.string()
+                    val id = JSONObject(body ?: "").optString("id")
+                    return@withContext id
+                }
+                null
+            }
+        } catch (e: Exception) { null }
+    }
+
+    // 2. Получить текущее состояние игры (вызывается обоими игроками в цикле)
+    suspend fun getGameState(matchId: String): GameStateRecord? = withContext(Dispatchers.IO) {
+        try {
+            val filter = "(match_id='$matchId')"
+            val encodedFilter = URLEncoder.encode(filter, "UTF-8")
+            val url = "$GAME_STATES_URL?filter=$encodedFilter"
+            
+            val request = Request.Builder().url(url).get().build()
+            client.newCall(request).execute().use { response ->
+                if (response.isSuccessful) {
+                    val body = response.body?.string() ?: return@withContext null
+                    val items = JSONObject(body).optJSONArray("items")
+                    if (items != null && items.length() > 0) {
+                        val obj = items.getJSONObject(0)
+                        return@withContext GameStateRecord(
+                            id = obj.getString("id"),
+                            matchId = obj.getString("match_id"),
+                            gameType = obj.getString("game_type"),
+                            stateJson = obj.getString("state_json"),
+                            player1Id = obj.optString("player1_id"),
+                            player2Id = obj.optString("player2_id")
+                        )
+                    }
+                }
+            }
+            null
+        } catch (e: Exception) { null }
+    }
+
+    // 3. Обновить состояние игры (когда сделан ход)
+    suspend fun updateGameState(recordId: String, newJson: String): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val jsonBody = JSONObject().apply {
+                put("state_json", newJson)
+            }.toString()
+
+            val request = Request.Builder().url("$GAME_STATES_URL/$recordId").patch(jsonBody.toRequestBody(JSON)).build()
+            client.newCall(request).execute().use { response -> response.isSuccessful }
+        } catch (e: Exception) { false }
+    }
+
+    // 4. Удалить состояние игры (когда игра закончена)
+    suspend fun deleteGameState(recordId: String): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val request = Request.Builder().url("$GAME_STATES_URL/$recordId").delete().build()
+            client.newCall(request).execute().use { response -> response.isSuccessful }
+        } catch (e: Exception) { false }
     }
 }
