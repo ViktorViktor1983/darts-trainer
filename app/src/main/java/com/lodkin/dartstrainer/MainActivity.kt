@@ -340,6 +340,7 @@ fun DartsTrainerApp() {
         scope.launch {
             val myName = SettingsStorage.getPlayerName(context).ifBlank { "Игрок" }
             val isRealOnline = params.onlineMatchId != null
+            val opponentNameSafe = params.opponentName ?: "Соперник"
             
             if (params.saveToTraining) {
                 val session = TrainingSession(
@@ -359,9 +360,13 @@ fun DartsTrainerApp() {
             }
 
             if (params.is501) {
-                val p2Name = if (isRealOnline) (params.opponentName ?: "Соперник") else botNameFor(params.level)
+                // ЖЕСТКАЯ ФИКСАЦИЯ ИГРОКОВ: 
+                // Игрок 1 - всегда Хост (создатель). Игрок 2 - Гость.
+                val p1Name = if (isRealOnline) (if (params.isCreator) myName else opponentNameSafe) else myName
+                val p2Name = if (isRealOnline) (if (params.isCreator) opponentNameSafe else myName) else botNameFor(params.level)
+
                 val players = listOf(
-                    Player501(name = myName, isBot = false, botLevel = 0, teamIndex = 0),
+                    Player501(name = p1Name, isBot = false, botLevel = 0, teamIndex = 0),
                     Player501(
                         name = p2Name, 
                         isBot = !isRealOnline, 
@@ -369,7 +374,7 @@ fun DartsTrainerApp() {
                         teamIndex = 1
                     )
                 )
-                // ВСЕГДА начинаем с 0 (Хост ходит первым). Булл в онлайне временно отключен.
+                // ВСЕГДА начинаем с 0 (Хост ходит первым).
                 game501 = Game501Logic.newGame(GameType.X501, OutMode.DOUBLE_OUT, players, params.legs, params.sets, false, 0, TRAINING_AUTO_OK_SECONDS, sessionStartTime, sessionForm)
                 game501ExistingId = 0L
 
@@ -379,16 +384,18 @@ fun DartsTrainerApp() {
                         val existing = OnlineNetworkManager.getGameState(params.onlineMatchId)
                         if (existing == null) {
                             val json = Game501Serializer.toJson(game501!!)
-                            OnlineNetworkManager.createGameState(params.onlineMatchId, "501", json, myName, p2Name)
+                            OnlineNetworkManager.createGameState(params.onlineMatchId, "501", json, p1Name, p2Name)
                         }
                     }
                 }
 
                 screen = "game501_game"
             } else {
-                val p2Name = if (isRealOnline) (params.opponentName ?: "Соперник") else botNameFor(params.level)
+                val p1Name = if (isRealOnline) (if (params.isCreator) myName else opponentNameSafe) else myName
+                val p2Name = if (isRealOnline) (if (params.isCreator) opponentNameSafe else myName) else botNameFor(params.level)
+                
                 val players = listOf(
-                    CricketPlayer(name = myName, isBot = false, botLevel = 0, teamIndex = 0),
+                    CricketPlayer(name = p1Name, isBot = false, botLevel = 0, teamIndex = 0),
                     CricketPlayer(
                         name = p2Name, 
                         isBot = !isRealOnline, 
@@ -801,7 +808,6 @@ fun DartsTrainerApp() {
                         onStartGame = { is501, level, legs, sets, opponentName, saveToTraining, onlineMatchId, isCreator ->
                             currentOnlineMatchId = onlineMatchId
                             pendingOnlineGameParams = OnlineGameParams(is501, level, legs, sets, opponentName, saveToTraining, onlineMatchId, isCreator)
-                            // Временно убираем Булл для онлайн игр, чтобы не было зависаний
                             if (onlineMatchId != null) {
                                 startOnlineBotGame(OnlineGameParams(is501, level, legs, sets, opponentName, saveToTraining, onlineMatchId, isCreator), 0)
                                 pendingOnlineGameParams = null
