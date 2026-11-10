@@ -8,6 +8,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -30,6 +31,7 @@ import com.lodkin.dartstrainer.data.online.OnlineNetworkManager
 import com.lodkin.dartstrainer.data.training.DartsNorms
 import com.lodkin.dartstrainer.theme.Accent
 import com.lodkin.dartstrainer.theme.DarkBg
+import com.lodkin.dartstrainer.theme.ErrorColor
 import com.lodkin.dartstrainer.theme.GoldAccent
 import com.lodkin.dartstrainer.theme.TileBg
 import com.lodkin.dartstrainer.theme.TileBgDark
@@ -71,6 +73,12 @@ fun OnlineLobbyScreen(
 
     // Список друзей
     var friendsList by remember { mutableStateOf(FriendsStorage.getFriends(context)) }
+
+    // Защита от запрещенных ников
+    fun isNicknameAllowed(name: String): Boolean {
+        val lower = name.lowercase().replace("_", "")
+        return !lower.contains("adm") && !lower.contains("адм")
+    }
 
     LaunchedEffect(nickname, selectedLevel, is501, legs, sets, saveToTraining) {
         prefs.edit()
@@ -176,14 +184,43 @@ fun OnlineLobbyScreen(
         Spacer(Modifier.height(8.dp))
     }
 
+    // --- ДИАЛОГ ВВОДА НИКНЕЙМА С ПРОВЕРКОЙ ---
     if (showNicknameDialog) {
         var input by remember { mutableStateOf(nickname) }
+        var errorMsg by remember { mutableStateOf("") }
+        
         AlertDialog(
             onDismissRequest = { showNicknameDialog = false },
-            confirmButton = { TextButton(onClick = { val trimmed = input.trim().replace(" ", "_"); if (trimmed.isNotBlank()) { nickname = trimmed; showNicknameDialog = false } }) { Text("Сохранить", color = Accent) } },
+            confirmButton = { 
+                TextButton(onClick = { 
+                    val trimmed = input.trim().replace(" ", "_")
+                    if (trimmed.isNotBlank()) {
+                        if (!isNicknameAllowed(trimmed)) {
+                            errorMsg = "Никнейм содержит запрещенные буквы (adm/адм)"
+                        } else {
+                            nickname = trimmed
+                            showNicknameDialog = false 
+                        }
+                    }
+                }) { Text("Сохранить", color = Accent) } 
+            },
             dismissButton = { TextButton(onClick = { showNicknameDialog = false }) { Text("Отмена", color = Color.White.copy(alpha = 0.6f)) } },
             title = { Text("Ваш никнейм в онлайне", color = Color.White) },
-            text = { Column { Text("Придумайте уникальное имя, по которому вас будут узнавать другие игроки.", color = Color.White.copy(alpha = 0.7f), fontSize = 13.sp); Spacer(Modifier.height(8.dp)); OutlinedTextField(value = input, onValueChange = { if (it.length <= 15) input = it }, singleLine = true, placeholder = { Text("Например: Vitya_501", color = TileBg) }, colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Color.White, unfocusedTextColor = Color.White, focusedBorderColor = Accent, unfocusedBorderColor = TileBg, cursorColor = Accent)) } }
+            text = { 
+                Column { 
+                    Text("Придумайте уникальное имя, по которому вас будут узнавать другие игроки.", color = Color.White.copy(alpha = 0.7f), fontSize = 13.sp)
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = input, onValueChange = { if (it.length <= 15) { input = it; errorMsg = "" } }, 
+                        singleLine = true, placeholder = { Text("Например: Vitya_501", color = TileBg) }, 
+                        colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Color.White, unfocusedTextColor = Color.White, focusedBorderColor = Accent, unfocusedBorderColor = TileBg, cursorColor = Accent)
+                    ) 
+                    if (errorMsg.isNotBlank()) {
+                        Spacer(Modifier.height(8.dp))
+                        Text(errorMsg, color = ErrorColor, fontSize = 12.sp)
+                    }
+                } 
+            }
         )
     }
 
@@ -194,11 +231,12 @@ fun OnlineLobbyScreen(
         )
     }
 
-    // --- ДИАЛОГ ИГРЫ С ДРУГОМ ---
+    // --- ДИАЛОГ ИГРЫ С ДРУГОМ (С ВЫПАДАЮЩИМ СПИСКОМ) ---
     if (showFriendDialog) {
         var friendInput by remember { mutableStateOf("") }
         var isConnecting by remember { mutableStateOf(false) }
         var errorMsg by remember { mutableStateOf("") }
+        var isDropdownExpanded by remember { mutableStateOf(false) }
 
         val sendInvite = { target: String ->
             if (target.isNotBlank() && !isConnecting) {
@@ -241,38 +279,59 @@ fun OnlineLobbyScreen(
                 Column {
                     Text("Введите никнейм или выберите из списка:", color = Color.White.copy(alpha = 0.7f), fontSize = 13.sp)
                     Spacer(Modifier.height(8.dp))
-                    OutlinedTextField(
-                        value = friendInput, onValueChange = { friendInput = it },
-                        singleLine = true, placeholder = { Text("Никнейм друга", color = TileBg) },
-                        colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Color.White, unfocusedTextColor = Color.White, focusedBorderColor = Accent, unfocusedBorderColor = TileBg, cursorColor = Accent)
-                    )
-                    
-                    Spacer(Modifier.height(16.dp))
                     
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("Мои друзья", color = Color.White, fontWeight = FontWeight.Bold)
-                        Spacer(Modifier.weight(1f))
-                        TextButton(onClick = { showAddFriendDialog = true }) {
-                            Text("+ Добавить", color = GoldAccent, fontSize = 12.sp)
-                        }
-                    }
-                    
-                    if (friendsList.isEmpty()) {
-                        Text("Список пуст", color = Color.White.copy(alpha = 0.5f), fontSize = 12.sp, modifier = Modifier.padding(vertical = 8.dp))
-                    } else {
-                        Column(modifier = Modifier.heightIn(max = 150.dp).verticalScroll(rememberScrollState())) {
-                            friendsList.forEach { friend ->
-                                Row(
-                                    modifier = Modifier.fillMaxWidth().clickable {
-                                        friendInput = friend.nickname
-                                        sendInvite(friend.nickname)
-                                    }.padding(vertical = 8.dp, horizontal = 4.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Text(friend.nickname, color = Accent, fontSize = 14.sp, fontWeight = FontWeight.Bold, modifier = Modifier.width(100.dp))
-                                    Text(friend.note, color = Color.White.copy(alpha = 0.7f), fontSize = 12.sp)
+                        OutlinedTextField(
+                            value = friendInput, onValueChange = { friendInput = it },
+                            singleLine = true, placeholder = { Text("Никнейм друга", color = TileBg) },
+                            modifier = Modifier.weight(1f),
+                            colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Color.White, unfocusedTextColor = Color.White, focusedBorderColor = Accent, unfocusedBorderColor = TileBg, cursorColor = Accent)
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        
+                        // КНОПКА СПИСКА ДРУЗЕЙ
+                        Box {
+                            TextButton(onClick = { isDropdownExpanded = true }) {
+                                Text("Список друзей", color = Accent, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            }
+                            DropdownMenu(
+                                expanded = isDropdownExpanded,
+                                onDismissRequest = { isDropdownExpanded = false },
+                                modifier = Modifier.background(TileBgDark)
+                            ) {
+                                Text("Мои друзья", color = Color.White, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+                                Divider(color = TileBg)
+                                if (friendsList.isEmpty()) {
+                                    Text("Список пуст", color = Color.White.copy(alpha = 0.5f), fontSize = 12.sp, modifier = Modifier.padding(16.dp))
+                                } else {
+                                    friendsList.forEach { friend ->
+                                        DropdownMenuItem(
+                                            text = { 
+                                                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                                                    Text(friend.nickname, color = Accent, fontWeight = FontWeight.Bold, modifier = Modifier.width(100.dp))
+                                                    Text(friend.note, color = Color.White.copy(alpha = 0.7f), fontSize = 12.sp, modifier = Modifier.weight(1f))
+                                                    IconButton(onClick = { 
+                                                        val updated = friendsList - friend
+                                                        FriendsStorage.saveFriends(context, updated)
+                                                        friendsList = updated
+                                                    }) {
+                                                        Icon(Icons.Default.Delete, contentDescription = "Удалить", tint = ErrorColor)
+                                                    }
+                                                }
+                                            },
+                                            onClick = {
+                                                friendInput = friend.nickname
+                                                isDropdownExpanded = false
+                                                sendInvite(friend.nickname)
+                                            }
+                                        )
+                                    }
                                 }
-                                Divider(color = TileBgDark, thickness = 1.dp)
+                                Divider(color = TileBg)
+                                DropdownMenuItem(
+                                    text = { Text("+ Добавить друга", color = GoldAccent, fontSize = 12.sp) },
+                                    onClick = { isDropdownExpanded = false; showAddFriendDialog = true }
+                                )
                             }
                         }
                     }
