@@ -647,11 +647,14 @@ fun Game501Screen(
                             messages = chatMessages,
                             unreadCount = unreadChatCount,
                             onSendMessage = { text ->
-                                // ОТПРАВЛЯЕМ НА СЕРВЕР
+                                // ОТПРАВЛЯЕМ НА СЕРВЕР И ЛОВИМ ОШИБКУ
                                 chatMessages.add(ChatMessage(System.currentTimeMillis().toString(), myName, text, isMyMessage = true))
                                 if (onlineMatchId != null) {
                                     scope.launch {
-                                        OnlineNetworkManager.sendChatMessage(onlineMatchId, myName, text)
+                                        val error = OnlineNetworkManager.sendChatMessage(onlineMatchId, myName, text)
+                                        if (error != null) {
+                                            chatMessages.add(ChatMessage(System.currentTimeMillis().toString(), "Система", "ОШИБКА ЧАТА: $error", isSystem = true))
+                                        }
                                     }
                                 }
                                 isChatExpanded = false 
