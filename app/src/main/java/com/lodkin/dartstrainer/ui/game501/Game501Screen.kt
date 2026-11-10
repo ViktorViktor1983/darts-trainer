@@ -215,15 +215,18 @@ fun Game501Screen(
 
                     if (remoteJson != localJson) {
                         if (isRemoteMyTurn || remoteGame.isFinished) {
-                            game = remoteGame
-                            lastSyncedJson = remoteJson
-                            
+                            // СНАЧАЛА ВЫЧИСЛЯЕМ ПРЕДЫДУЩИЙ НАБОР
                             val remoteP1Score = remoteGame.players[0].matchScoreGained
                             val remoteP2Score = remoteGame.players[1].matchScoreGained
                             val localP1Score = game.players[0].matchScoreGained
                             val localP2Score = game.players[1].matchScoreGained
+                            
                             if (remoteP1Score > localP1Score) lastScoreA = remoteP1Score - localP1Score
                             if (remoteP2Score > localP2Score) lastScoreB = remoteP2Score - localP2Score
+
+                            // ПОТОМ ОБНОВЛЯЕМ ИГРУ
+                            game = remoteGame
+                            lastSyncedJson = remoteJson
                         } else {
                             if (!isRemoteBehind) {
                                 game = remoteGame
