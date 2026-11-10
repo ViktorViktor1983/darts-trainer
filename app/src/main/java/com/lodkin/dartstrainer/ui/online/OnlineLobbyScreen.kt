@@ -23,6 +23,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import com.lodkin.dartstrainer.data.Friend
+import com.lodkin.dartstrainer.data.FriendsStorage
 import com.lodkin.dartstrainer.data.online.OnlineInvite
 import com.lodkin.dartstrainer.data.online.OnlineNetworkManager
 import com.lodkin.dartstrainer.data.training.DartsNorms
@@ -40,7 +42,6 @@ private enum class SearchPhase { NONE, SETUP, SEARCHING, RESULT }
 @Composable
 fun OnlineLobbyScreen(
     onBack: () -> Unit,
-    // ИЗМЕНЕНО: opponentName теперь String? (null = игра с ботом)
     onStartGame: (is501: Boolean, level: Int, legs: Int, sets: Int, opponentName: String?, saveToTraining: Boolean, onlineMatchId: String?, isCreator: Boolean) -> Unit
 ) {
     val context = LocalContext.current
@@ -57,6 +58,7 @@ fun OnlineLobbyScreen(
     var showNicknameDialog by remember { mutableStateOf(nickname.isBlank()) }
     var showLevelDialog by remember { mutableStateOf(false) }
     var showFriendDialog by remember { mutableStateOf(false) }
+    var showAddFriendDialog by remember { mutableStateOf(false) }
     
     var searchPhase by remember { mutableStateOf(SearchPhase.NONE) }
     var searchLevels by remember { mutableStateOf<Set<Int>>(emptySet()) }
@@ -66,6 +68,9 @@ fun OnlineLobbyScreen(
     var targetOpponent by remember { mutableStateOf<String?>(null) }
     var incomingInvite by remember { mutableStateOf<OnlineInvite?>(null) }
     var showExpiredDialog by remember { mutableStateOf(false) }
+
+    // Список друзей
+    var friendsList by remember { mutableStateOf(FriendsStorage.getFriends(context)) }
 
     LaunchedEffect(nickname, selectedLevel, is501, legs, sets, saveToTraining) {
         prefs.edit()
@@ -96,7 +101,6 @@ fun OnlineLobbyScreen(
             delay(2000L)
             val acceptedBy = OnlineNetworkManager.checkIfMatchAccepted(mId)
             if (acceptedBy != null) {
-                // Кто-то принял! Запускаем игру (Я - создатель: isCreator = true)
                 currentMatchId = null
                 targetOpponent = null
                 searchPhase = SearchPhase.NONE
@@ -190,37 +194,42 @@ fun OnlineLobbyScreen(
         )
     }
 
+    // --- ДИАЛОГ ИГРЫ С ДРУГОМ ---
     if (showFriendDialog) {
         var friendInput by remember { mutableStateOf("") }
         var isConnecting by remember { mutableStateOf(false) }
         var errorMsg by remember { mutableStateOf("") }
+
+        val sendInvite = { target: String ->
+            if (target.isNotBlank() && !isConnecting) {
+                scope.launch {
+                    isConnecting = true
+                    errorMsg = ""
+                    val regError = OnlineNetworkManager.registerPlayer(nickname, selectedLevel)
+                    if (regError != null) { errorMsg = regError; isConnecting = false; return@launch }
+                    
+                    val mId = OnlineNetworkManager.sendSingleInvite(nickname, target.trim())
+                    isConnecting = false
+                    
+                    if (mId != null) {
+                        currentMatchId = mId
+                        isFriendSearch = true
+                        targetOpponent = target.trim()
+                        showFriendDialog = false
+                        searchPhase = SearchPhase.SEARCHING
+                    } else {
+                        errorMsg = "Игрок не найден или ошибка сети"
+                    }
+                }
+            }
+        }
 
         AlertDialog(
             onDismissRequest = { if (!isConnecting) showFriendDialog = false },
             confirmButton = {
                 TextButton(
                     enabled = friendInput.isNotBlank() && !isConnecting,
-                    onClick = {
-                        scope.launch {
-                            isConnecting = true
-                            errorMsg = ""
-                            val regError = OnlineNetworkManager.registerPlayer(nickname, selectedLevel)
-                            if (regError != null) { errorMsg = regError; isConnecting = false; return@launch }
-                            
-                            val mId = OnlineNetworkManager.sendSingleInvite(nickname, friendInput.trim())
-                            isConnecting = false
-                            
-                            if (mId != null) {
-                                currentMatchId = mId
-                                isFriendSearch = true
-                                targetOpponent = friendInput.trim()
-                                showFriendDialog = false
-                                searchPhase = SearchPhase.SEARCHING
-                            } else {
-                                errorMsg = "Игрок не найден или ошибка сети"
-                            }
-                        }
-                    }
+                    onClick = { sendInvite(friendInput) }
                 ) { 
                     if (isConnecting) CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Accent) 
                     else Text("Пригласить", color = Accent) 
@@ -230,13 +239,44 @@ fun OnlineLobbyScreen(
             title = { Text("Играть с другом", color = Color.White) },
             text = {
                 Column {
-                    Text("Введите никнейм друга, чтобы отправить ему приглашение.", color = Color.White.copy(alpha = 0.7f), fontSize = 13.sp)
+                    Text("Введите никнейм или выберите из списка:", color = Color.White.copy(alpha = 0.7f), fontSize = 13.sp)
                     Spacer(Modifier.height(8.dp))
                     OutlinedTextField(
                         value = friendInput, onValueChange = { friendInput = it },
                         singleLine = true, placeholder = { Text("Никнейм друга", color = TileBg) },
                         colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Color.White, unfocusedTextColor = Color.White, focusedBorderColor = Accent, unfocusedBorderColor = TileBg, cursorColor = Accent)
                     )
+                    
+                    Spacer(Modifier.height(16.dp))
+                    
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("Мои друзья", color = Color.White, fontWeight = FontWeight.Bold)
+                        Spacer(Modifier.weight(1f))
+                        TextButton(onClick = { showAddFriendDialog = true }) {
+                            Text("+ Добавить", color = GoldAccent, fontSize = 12.sp)
+                        }
+                    }
+                    
+                    if (friendsList.isEmpty()) {
+                        Text("Список пуст", color = Color.White.copy(alpha = 0.5f), fontSize = 12.sp, modifier = Modifier.padding(vertical = 8.dp))
+                    } else {
+                        Column(modifier = Modifier.heightIn(max = 150.dp).verticalScroll(rememberScrollState())) {
+                            friendsList.forEach { friend ->
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().clickable {
+                                        friendInput = friend.nickname
+                                        sendInvite(friend.nickname)
+                                    }.padding(vertical = 8.dp, horizontal = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(friend.nickname, color = Accent, fontSize = 14.sp, fontWeight = FontWeight.Bold, modifier = Modifier.width(100.dp))
+                                    Text(friend.note, color = Color.White.copy(alpha = 0.7f), fontSize = 12.sp)
+                                }
+                                Divider(color = TileBgDark, thickness = 1.dp)
+                            }
+                        }
+                    }
+
                     if (errorMsg.isNotBlank()) {
                         Spacer(Modifier.height(8.dp))
                         Text(errorMsg, color = Color.Red, fontSize = 12.sp)
@@ -246,6 +286,47 @@ fun OnlineLobbyScreen(
         )
     }
 
+    // --- ДИАЛОГ ДОБАВЛЕНИЯ ДРУГА ---
+    if (showAddFriendDialog) {
+        var newNick by remember { mutableStateOf("") }
+        var newNote by remember { mutableStateOf("") }
+
+        AlertDialog(
+            onDismissRequest = { showAddFriendDialog = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    if (newNick.isNotBlank()) {
+                        val updated = friendsList + Friend(newNick.trim(), newNote.trim())
+                        FriendsStorage.saveFriends(context, updated)
+                        friendsList = updated
+                        showAddFriendDialog = false
+                    }
+                }) { Text("Сохранить", color = Accent) }
+            },
+            dismissButton = { TextButton(onClick = { showAddFriendDialog = false }) { Text("Отмена", color = Color.White.copy(alpha = 0.6f)) } },
+            title = { Text("Новый друг", color = Color.White) },
+            text = {
+                Column {
+                    OutlinedTextField(
+                        value = newNick, onValueChange = { newNick = it },
+                        label = { Text("Никнейм", color = Accent) },
+                        singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Color.White, unfocusedTextColor = Color.White, focusedBorderColor = Accent, unfocusedBorderColor = TileBg)
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    OutlinedTextField(
+                        value = newNote, onValueChange = { newNote = it },
+                        label = { Text("Заметка", color = Accent) },
+                        singleLine = true,
+                        placeholder = { Text("Например: Вася с работы", color = TileBg) },
+                        colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Color.White, unfocusedTextColor = Color.White, focusedBorderColor = Accent, unfocusedBorderColor = TileBg)
+                    )
+                }
+            }
+        )
+    }
+
+    // --- ОСТАЛЬНЫЕ ДИАЛОГИ ---
     if (searchPhase == SearchPhase.SETUP) {
         var isConnecting by remember { mutableStateOf(false) }
         var connectionError by remember { mutableStateOf(false) }
@@ -357,7 +438,6 @@ fun OnlineLobbyScreen(
                             val success = OnlineNetworkManager.acceptInvite(inv.id, inv.matchId)
                             if (success) {
                                 incomingInvite = null
-                                // Запускаем игру с matchId (Я - гость: isCreator = false)
                                 onStartGame(is501, selectedLevel, legs, sets, inv.fromUser, saveToTraining, inv.matchId, false)
                             } else {
                                 incomingInvite = null
