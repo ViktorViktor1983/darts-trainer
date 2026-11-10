@@ -136,14 +136,6 @@ fun Game501Screen(
         } 
     }
 
-    // МАШИНА ВРЕМЕНИ (Отмена хода соперника)
-    fun undoOpponentMove() {
-        val prevJson = game.previousStateJson ?: return
-        val prevGame = Game501Serializer.fromJson(prevJson) ?: return
-        // Восстанавливаем игру и очищаем снимок, чтобы нельзя было отменить дважды
-        game = prevGame.copy(previousStateJson = null)
-    }
-
     val dialogOpen = showLegWonDialog || showSetWonDialog || showWinDialog ||
         showLegQuestionDialog || showDoublesQuestionDialog || showDoublesOnlyDialog
     
@@ -215,7 +207,6 @@ fun Game501Screen(
                     val remoteLegs = remoteGame.currentLegNumber
                     val localLegs = game.currentLegNumber
 
-                    // УМНАЯ ЛОГИКА ОТКАТА: Принимаем откат, если он не ломает структуру сетов/легов
                     val isRemoteBehind = (remoteSets < localSets) || 
                                          (remoteSets == localSets && remoteLegs < localLegs) ||
                                          (remoteSets == localSets && remoteLegs == localLegs && remoteDarts < localDarts)
@@ -224,11 +215,9 @@ fun Game501Screen(
 
                     if (remoteJson != localJson) {
                         if (isRemoteMyTurn || remoteGame.isFinished) {
-                            // Если сейчас наш ход, мы обязаны принять данные
                             game = remoteGame
                             lastSyncedJson = remoteJson
                             
-                            // Вычисляем предыдущий набор соперника
                             val remoteP1Score = remoteGame.players[0].matchScoreGained
                             val remoteP2Score = remoteGame.players[1].matchScoreGained
                             val localP1Score = game.players[0].matchScoreGained
@@ -236,7 +225,6 @@ fun Game501Screen(
                             if (remoteP1Score > localP1Score) lastScoreA = remoteP1Score - localP1Score
                             if (remoteP2Score > localP2Score) lastScoreB = remoteP2Score - localP2Score
                         } else {
-                            // Если ход соперника, но он откатил свой ход (сеты/леги те же, но дротиков меньше)
                             if (!isRemoteBehind) {
                                 game = remoteGame
                                 lastSyncedJson = remoteJson
@@ -370,7 +358,6 @@ fun Game501Screen(
         if (value < 0 || value > 180) return
         val currentPlayer = game.players.getOrNull(game.currentPlayerIndex) ?: return
 
-        val snapshot = Game501Serializer.toJson(game) // СНИМОК ПЕРЕД ХОДОМ
         saveHistory()
         val scoreBefore = currentPlayer.score
 
@@ -383,7 +370,7 @@ fun Game501Screen(
         if (value > scoreBefore) {
             val updated = Game501Logic.applyTurnScore(game, value)
             showBustMessage = true
-            game = updated.copy(previousStateJson = snapshot) // ПРИМЕНЯЕМ СНИМОК
+            game = updated
             if (scoreBefore <= 50) showDoublesOnlyDialog = true
             else game = Game501Logic.finishTurn(game)
             if (isOnlineGame) addChatSystemMessage("${currentPlayer.name}: Перебор!")
@@ -395,7 +382,7 @@ fun Game501Screen(
             recordSum = value
             setLastScore(value)
         }
-        game = updated.copy(previousStateJson = snapshot) // ПРИМЕНЯЕМ СНИМОК
+        game = updated
 
         if (isOnlineGame) addChatSystemMessage("${currentPlayer.name} набрал $value. Остаток: ${updated.players[game.currentPlayerIndex].score}")
         if (scoreBefore <= 50) showDoublesOnlyDialog = true
@@ -424,7 +411,6 @@ fun Game501Screen(
         val gained = currentPlayer.score - value
         if (gained < 0) return
 
-        val snapshot = Game501Serializer.toJson(game) // СНИМОК ПЕРЕД ХОДОМ
         saveHistory()
         val scoreBefore = currentPlayer.score
 
@@ -438,7 +424,7 @@ fun Game501Screen(
         if (value == 1 && requiresDouble) {
             val updated = Game501Logic.applyTurnRemaining(game, value)
             showBustMessage = true
-            game = updated.copy(previousStateJson = snapshot) // ПРИМЕНЯЕМ СНИМОК
+            game = updated
             if (scoreBefore <= 50) showDoublesOnlyDialog = true
             else game = Game501Logic.finishTurn(game)
             if (isOnlineGame) addChatSystemMessage("${currentPlayer.name}: Перебор!")
@@ -448,7 +434,7 @@ fun Game501Screen(
         val updated = Game501Logic.applyTurnRemaining(game, value)
         recordSum = gained
         setLastScore(gained)
-        game = updated.copy(previousStateJson = snapshot) // ПРИМЕНЯЕМ СНИМОК
+        game = updated
 
         if (isOnlineGame) addChatSystemMessage("${currentPlayer.name} набрал $gained. Остаток: $value")
         if (scoreBefore <= 50) showDoublesOnlyDialog = true
@@ -591,21 +577,8 @@ fun Game501Screen(
 
                 if (showGameControls) {
                     if (isOnlineGame && !isMyTurn && !game.isFinished) {
-                        Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-                            Box(modifier = Modifier.fillMaxWidth().background(GoldAccent.copy(alpha = 0.15f)).padding(vertical = 8.dp), contentAlignment = Alignment.Center) {
-                                Text("ОЖИДАНИЕ ХОДА СОПЕРНИКА...", color = GoldAccent, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                            }
-                            // КНОПКА ОТМЕНЫ ХОДА СОПЕРНИКА (МАШИНА ВРЕМЕНИ)
-                            if (game.previousStateJson != null) {
-                                Box(
-                                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)
-                                        .height(40.dp).clip(RoundedCornerShape(10.dp))
-                                        .background(ErrorColor).clickable { undoOpponentMove() },
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text("ОТМЕНИТЬ ХОД СОПЕРНИКА", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                                }
-                            }
+                        Box(modifier = Modifier.fillMaxWidth().background(GoldAccent.copy(alpha = 0.15f)).padding(vertical = 8.dp), contentAlignment = Alignment.Center) {
+                            Text("ОЖИДАНИЕ ХОДА СОПЕРНИКА...", color = GoldAccent, fontSize = 14.sp, fontWeight = FontWeight.Bold)
                         }
                     }
                     if (isOnlineGame && isSendingMove) {
