@@ -148,7 +148,13 @@ data class Game501(
 
     val isPairGame: Boolean = false,
     val teamCount: Int = 2,
-    val playersPerTeam: Int = 1
+    val playersPerTeam: Int = 1,
+
+    // НОВЫЕ ПОЛЯ ДЛЯ РОЗЫГРЫША БУЛЛА
+    val isBullPhase: Boolean = false,
+    val bullThrowP1: Int? = null, // null - не бросал, 0 - мимо, 25 - зелёный, 50 - красный
+    val bullThrowP2: Int? = null,
+    val bullWinnerIndex: Int? = null // 0 - Хост, 1 - Гость. Если null и оба бросили - ничья
 ) {
     val currentPlayer: Player501?
         get() = players.getOrNull(currentPlayerIndex)
