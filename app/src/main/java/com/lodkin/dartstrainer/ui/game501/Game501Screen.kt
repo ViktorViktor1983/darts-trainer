@@ -112,6 +112,7 @@ fun Game501Screen(
     var isChatExpanded by remember { mutableStateOf(true) }
     var unreadChatCount by remember { mutableStateOf(0) }
     val chatMessages = remember { mutableStateListOf<ChatMessage>() }
+    var lastSeenMessageCount by remember { mutableStateOf(0) }
 
     var pendingLegRecord by remember { mutableStateOf<PendingLegRecord?>(null) }
     var pendingMatchRecord by remember { mutableStateOf<PendingMatchRecord?>(null) }
@@ -143,7 +144,7 @@ fun Game501Screen(
 
     LaunchedEffect(isOnlineGame) {
         if (isOnlineGame) {
-            chatMessages.add(ChatMessage("1", "Система", "Игра началась! Удачной игры.", isSystem = true))
+            chatMessages.add(ChatMessage("sys1", "Система", "Игра началась! Удачной игры.", isSystem = true))
         }
     }
 
@@ -235,6 +236,26 @@ fun Game501Screen(
                         }
                     }
                 }
+            }
+        }
+    }
+
+    // СЛУШАЕМ ЧАТ
+    LaunchedEffect(isOnlineGame, onlineMatchId) {
+        if (!isOnlineGame || onlineMatchId == null) return@LaunchedEffect
+        while (true) {
+            delay(2500L)
+            val remoteMsgs = OnlineNetworkManager.getChatMessages(onlineMatchId)
+            if (remoteMsgs.size > lastSeenMessageCount) {
+                val newMsgs = remoteMsgs.drop(lastSeenMessageCount)
+                for (msg in newMsgs) {
+                    // Не добавляем свои же сообщения (они уже добавлены локально)
+                    if (msg.fromUser != myName) {
+                        chatMessages.add(ChatMessage(msg.id, msg.fromUser, msg.text, isMyMessage = false))
+                        if (!isChatExpanded) unreadChatCount++
+                    }
+                }
+                lastSeenMessageCount = remoteMsgs.size
             }
         }
     }
@@ -626,7 +647,13 @@ fun Game501Screen(
                             messages = chatMessages,
                             unreadCount = unreadChatCount,
                             onSendMessage = { text ->
-                                chatMessages.add(ChatMessage(System.currentTimeMillis().toString(), "Вы", text, isMyMessage = true))
+                                // ОТПРАВЛЯЕМ НА СЕРВЕР
+                                chatMessages.add(ChatMessage(System.currentTimeMillis().toString(), myName, text, isMyMessage = true))
+                                if (onlineMatchId != null) {
+                                    scope.launch {
+                                        OnlineNetworkManager.sendChatMessage(onlineMatchId, myName, text)
+                                    }
+                                }
                                 isChatExpanded = false 
                             },
                             onClose = { isChatExpanded = false },
