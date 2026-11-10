@@ -15,14 +15,12 @@ import java.util.TimeZone
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 
-// Модель для входящего приглашения
 data class OnlineInvite(
     val id: String,
     val fromUser: String,
     val matchId: String
 )
 
-// Модель для состояния игры
 data class GameStateRecord(
     val id: String,
     val matchId: String,
@@ -32,7 +30,6 @@ data class GameStateRecord(
     val player2Id: String
 )
 
-// Модель для сообщения чата
 data class ChatMessageRecord(
     val id: String,
     val fromUser: String,
@@ -54,7 +51,6 @@ object OnlineNetworkManager {
 
     private val JSON = "application/json; charset=utf-8".toMediaType()
 
-    // Умная регистрация: проверяет, есть ли игрок, и обновляет или создает его
     suspend fun registerPlayer(nickname: String, level: Int): String? = withContext(Dispatchers.IO) {
         try {
             val filter = "(nickname='$nickname')"
@@ -107,7 +103,6 @@ object OnlineNetworkManager {
         }
     }
 
-    // Получаем список ВСЕХ подходящих соперников по уровням
     suspend fun findMatchingOpponents(myNickname: String, levels: List<Int>): List<String> = withContext(Dispatchers.IO) {
         try {
             val levelsFilter = levels.joinToString(" || ") { "level=$it" }
@@ -133,7 +128,6 @@ object OnlineNetworkManager {
         } catch (e: Exception) { emptyList() }
     }
 
-    // Отправка массового приглашения всем найденным
     suspend fun sendBroadcastInvites(fromUser: String, toUsers: List<String>, matchId: String): Boolean = withContext(Dispatchers.IO) {
         try {
             var allSuccess = true
@@ -154,7 +148,6 @@ object OnlineNetworkManager {
         } catch (e: Exception) { false }
     }
 
-    // Отправка одиночного приглашения (для друга)
     suspend fun sendSingleInvite(fromUser: String, toUser: String): String? = withContext(Dispatchers.IO) {
         try {
             val matchId = UUID.randomUUID().toString()
@@ -173,7 +166,6 @@ object OnlineNetworkManager {
         } catch (e: Exception) { null }
     }
 
-    // Проверка входящего приглашения
     suspend fun checkIncomingInvite(myNickname: String): OnlineInvite? = withContext(Dispatchers.IO) {
         try {
             val filter = "(to_user='$myNickname'%26%26status='pending')"
@@ -194,7 +186,6 @@ object OnlineNetworkManager {
         } catch (e: Exception) { null }
     }
 
-    // Принять приглашение и удалить остальные из этой же рассылки
     suspend fun acceptInvite(inviteId: String, matchId: String): Boolean = withContext(Dispatchers.IO) {
         try {
             val jsonBody = JSONObject().apply { put("status", "accepted") }.toString()
@@ -228,7 +219,6 @@ object OnlineNetworkManager {
         } catch (e: Exception) { false }
     }
 
-    // Проверить, не принял ли кто-то из рассылки наше приглашение
     suspend fun checkIfMatchAccepted(matchId: String): String? = withContext(Dispatchers.IO) {
         try {
             val filter = "(match_id='$matchId'%26%26status='accepted')"
@@ -250,7 +240,6 @@ object OnlineNetworkManager {
         } catch (e: Exception) { null }
     }
 
-    // Удалить все приглашения по matchId (при отмене)
     suspend fun cancelMatchSearch(matchId: String): Boolean = withContext(Dispatchers.IO) {
         try {
             val filter = "(match_id='$matchId')"
@@ -278,7 +267,6 @@ object OnlineNetworkManager {
         } catch (e: Exception) { false }
     }
 
-    // Удалить одно приглашение (при отказе)
     suspend fun deleteInvite(inviteId: String): Boolean = withContext(Dispatchers.IO) {
         try {
             val request = Request.Builder().url("$INVITES_URL/$inviteId").delete().build()
@@ -288,14 +276,8 @@ object OnlineNetworkManager {
         }
     }
 
-    // ────────────────────────────────────────────────────────
-    // МЕТОДЫ ДЛЯ СИНХРОНИЗАЦИИ ИГРЫ (GAME STATES)
-    // ────────────────────────────────────────────────────────
-
-    // 1. УМНОЕ СОХРАНЕНИЕ: обновляет, если есть, или создает, если нет
     suspend fun upsertGameState(matchId: String, gameType: String, newJson: String, p1Name: String, p2Name: String): Boolean = withContext(Dispatchers.IO) {
         try {
-            // Сначала ищем запись
             val filter = "(match_id='$matchId')"
             val encodedFilter = URLEncoder.encode(filter, "UTF-8")
             val url = "$GAME_STATES_URL?filter=$encodedFilter"
@@ -312,13 +294,11 @@ object OnlineNetworkManager {
                 }
             }
 
-            // Если запись есть — обновляем (PATCH)
             if (existingId != null) {
                 val jsonBody = JSONObject().apply { put("state_json", newJson) }.toString()
                 val patchRequest = Request.Builder().url("$GAME_STATES_URL/$existingId").patch(jsonBody.toRequestBody(JSON)).build()
                 client.newCall(patchRequest).execute().use { response -> return@withContext response.isSuccessful }
             } else {
-                // Если записи нет — создаем (POST)
                 val jsonBody = JSONObject().apply {
                     put("match_id", matchId)
                     put("game_type", gameType)
@@ -334,7 +314,6 @@ object OnlineNetworkManager {
         }
     }
 
-    // 2. Получить текущее состояние игры (вызывается обоими игроками в цикле)
     suspend fun getGameState(matchId: String): GameStateRecord? = withContext(Dispatchers.IO) {
         try {
             val filter = "(match_id='$matchId')"
@@ -363,7 +342,6 @@ object OnlineNetworkManager {
         } catch (e: Exception) { null }
     }
 
-    // 3. Удалить состояние игры (когда игра закончена)
     suspend fun deleteGameState(recordId: String): Boolean = withContext(Dispatchers.IO) {
         try {
             val request = Request.Builder().url("$GAME_STATES_URL/$recordId").delete().build()
@@ -371,10 +349,8 @@ object OnlineNetworkManager {
         } catch (e: Exception) { false }
     }
 
-    // 4. ОЧИСТКА СТАРЫХ ИГР (Уборщик)
     suspend fun cleanupOldGames(): Boolean = withContext(Dispatchers.IO) {
         try {
-            // Вычисляем время 3 часа назад (в формате UTC, который использует PocketBase)
             val threeHoursAgo = System.currentTimeMillis() - (3 * 60 * 60 * 1000)
             val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US)
             dateFormat.timeZone = TimeZone.getTimeZone("UTC")
@@ -407,12 +383,8 @@ object OnlineNetworkManager {
         } catch (e: Exception) { false }
     }
 
-    // ────────────────────────────────────────────────────────
-    // МЕТОДЫ ДЛЯ ЧАТА (MESSAGES)
-    // ────────────────────────────────────────────────────────
-
-    // 5. Отправить сообщение
-    suspend fun sendChatMessage(matchId: String, fromUser: String, text: String): Boolean = withContext(Dispatchers.IO) {
+    // ИЗМЕНЕНО: теперь возвращает текст ошибки (или null, если успех)
+    suspend fun sendChatMessage(matchId: String, fromUser: String, text: String): String? = withContext(Dispatchers.IO) {
         try {
             val jsonBody = JSONObject().apply {
                 put("match_id", matchId)
@@ -421,11 +393,18 @@ object OnlineNetworkManager {
             }.toString()
 
             val request = Request.Builder().url(MESSAGES_URL).post(jsonBody.toRequestBody(JSON)).build()
-            client.newCall(request).execute().use { response -> response.isSuccessful }
-        } catch (e: Exception) { false }
+            client.newCall(request).execute().use { response -> 
+                if (response.isSuccessful) null
+                else {
+                    val err = response.body?.string() ?: ""
+                    "Ошибка ${response.code}: $err"
+                }
+            }
+        } catch (e: Exception) { 
+            "Исключение: ${e.message}" 
+        }
     }
 
-    // 6. Получить сообщения для матча
     suspend fun getChatMessages(matchId: String): List<ChatMessageRecord> = withContext(Dispatchers.IO) {
         try {
             val filter = "(match_id='$matchId')"
