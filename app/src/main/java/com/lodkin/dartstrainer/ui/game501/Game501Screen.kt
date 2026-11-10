@@ -484,9 +484,7 @@ fun Game501Screen(
     LaunchedEffect(game.isFinished, allBots, showLegWonDialog, showSetWonDialog) {
         if (!game.isFinished) return@LaunchedEffect
         
-        if (isOnlineGame) {
-            syncFinishGame()
-        }
+        // УБРАЛИ syncFinishGame() ОТСЮДА! Теперь мы не удаляем игру сразу.
         
         if (allBots) {
             Game501SettingsStorage.updateQuickSumsIfNeeded(context)
@@ -533,7 +531,8 @@ fun Game501Screen(
             }
 
             if (showGameControls) {
-                if (isOnlineGame && !isMyTurn) {
+                // Скрываем плашку ожидания, если игра уже закончилась
+                if (isOnlineGame && !isMyTurn && !game.isFinished) {
                     Box(modifier = Modifier.fillMaxWidth().background(GoldAccent.copy(alpha = 0.15f)).padding(vertical = 8.dp), contentAlignment = Alignment.Center) {
                         Text("ОЖИДАНИЕ ХОДА СОПЕРНИКА...", color = GoldAccent, fontSize = 14.sp, fontWeight = FontWeight.Bold)
                     }
@@ -760,6 +759,7 @@ fun Game501Screen(
                         showMatchRecordCelebration = true
                     } else {
                         Game501SettingsStorage.updateQuickSumsIfNeeded(context)
+                        if (isOnlineGame) syncFinishGame() // УДАЛЯЕМ ИГРУ, КОГДА ИГРОК НАЖАЛ ПРОДОЛЖИТЬ
                         onGameFinish(game, currentId)
                     }
                 }
@@ -785,7 +785,7 @@ fun Game501Screen(
     if (showMatchRecordCelebration && pendingMatchRecord != null) {
         val rec = pendingMatchRecord!!
         val recordScale by animateFloatAsState(targetValue = if (rec.isBetter) 1f else 0.85f, animationSpec = tween(durationMillis = 500), label = "match_record_scale")
-        CelebrationOverlay(visible = true, isNewRecord = rec.isBetter, onConfirm = { showMatchRecordCelebration = false; pendingMatchRecord = null; Game501SettingsStorage.updateQuickSumsIfNeeded(context); onGameFinish(game, currentId) }, onUndo = { showMatchRecordCelebration = false; pendingMatchRecord = null; Game501SettingsStorage.updateQuickSumsIfNeeded(context); onGameFinish(game, currentId) }) {
+        CelebrationOverlay(visible = true, isNewRecord = rec.isBetter, onConfirm = { showMatchRecordCelebration = false; pendingMatchRecord = null; Game501SettingsStorage.updateQuickSumsIfNeeded(context); if (isOnlineGame) syncFinishGame(); onGameFinish(game, currentId) }, onUndo = { showMatchRecordCelebration = false; pendingMatchRecord = null; Game501SettingsStorage.updateQuickSumsIfNeeded(context); if (isOnlineGame) syncFinishGame(); onGameFinish(game, currentId) }) {
             Text("МАТЧ", color = Accent, fontSize = 14.sp, fontWeight = FontWeight.Bold, letterSpacing = 3.sp)
             Spacer(Modifier.height(12.dp))
             if (rec.isFirst) { FirstResultBlock501(); Spacer(Modifier.height(14.dp)) } 
@@ -805,11 +805,13 @@ fun Game501Screen(
                     if (isTrainingMode) {
                         TrainingUnfinishedStorage.addUnfinished501(context, currentId)
                     }
+                    if (isOnlineGame) syncFinishGame() // УДАЛЯЕМ ПРИ ВЫХОДЕ
                     showBackConfirm = false; onBack() 
                 }) { Text("Продолжить позже", color = Accent) } 
             },
             dismissButton = { 
                 TextButton(onClick = { 
+                    if (isOnlineGame) syncFinishGame() // УДАЛЯЕМ ПРИ ВЫХОДЕ
                     showBackConfirm = false; scope.launch { if (currentId > 0L) repository.deleteGame(currentId); onBack() } 
                 }) { Text("Удалить партию", color = ErrorColor) } 
             },
