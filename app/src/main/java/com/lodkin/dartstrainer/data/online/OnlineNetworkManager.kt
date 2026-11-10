@@ -8,6 +8,10 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 import java.net.URLEncoder
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import java.util.TimeZone
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 
@@ -28,11 +32,20 @@ data class GameStateRecord(
     val player2Id: String
 )
 
+// Модель для сообщения чата
+data class ChatMessageRecord(
+    val id: String,
+    val fromUser: String,
+    val text: String,
+    val created: String
+)
+
 object OnlineNetworkManager {
     private const val BASE_URL = "http://179.236.147.116:8090"
     private const val PLAYERS_URL = "$BASE_URL/api/collections/players/records"
     private const val INVITES_URL = "$BASE_URL/api/collections/invites/records"
     private const val GAME_STATES_URL = "$BASE_URL/api/collections/game_states/records"
+    private const val MESSAGES_URL = "$BASE_URL/api/collections/messages/records"
 
     private val client = OkHttpClient.Builder()
         .connectTimeout(10, TimeUnit.SECONDS)
@@ -276,7 +289,7 @@ object OnlineNetworkManager {
     }
 
     // ────────────────────────────────────────────────────────
-    // НОВЫЕ МЕТОДЫ ДЛЯ СИНХРОНИЗАЦИИ ИГРЫ (GAME STATES)
+    // МЕТОДЫ ДЛЯ СИНХРОНИЗАЦИИ ИГРЫ (GAME STATES)
     // ────────────────────────────────────────────────────────
 
     // 1. УМНОЕ СОХРАНЕНИЕ: обновляет, если есть, или создает, если нет
@@ -356,5 +369,92 @@ object OnlineNetworkManager {
             val request = Request.Builder().url("$GAME_STATES_URL/$recordId").delete().build()
             client.newCall(request).execute().use { response -> response.isSuccessful }
         } catch (e: Exception) { false }
+    }
+
+    // 4. ОЧИСТКА СТАРЫХ ИГР (Уборщик)
+    suspend fun cleanupOldGames(): Boolean = withContext(Dispatchers.IO) {
+        try {
+            // Вычисляем время 3 часа назад (в формате UTC, который использует PocketBase)
+            val threeHoursAgo = System.currentTimeMillis() - (3 * 60 * 60 * 1000)
+            val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US)
+            dateFormat.timeZone = TimeZone.getTimeZone("UTC")
+            val dateString = dateFormat.format(Date(threeHoursAgo))
+
+            val filter = "(created < '$dateString')"
+            val encodedFilter = URLEncoder.encode(filter, "UTF-8")
+            val url = "$GAME_STATES_URL?filter=$encodedFilter"
+            
+            val request = Request.Builder().url(url).get().build()
+            var deletedAny = false
+
+            client.newCall(request).execute().use { response ->
+                if (response.isSuccessful) {
+                    val body = response.body?.string()
+                    if (body != null) {
+                        val items = JSONObject(body).optJSONArray("items")
+                        if (items != null) {
+                            for (i in 0 until items.length()) {
+                                val id = items.getJSONObject(i).optString("id")
+                                val deleteReq = Request.Builder().url("$GAME_STATES_URL/$id").delete().build()
+                                client.newCall(deleteReq).execute().close()
+                                deletedAny = true
+                            }
+                        }
+                    }
+                }
+            }
+            deletedAny
+        } catch (e: Exception) { false }
+    }
+
+    // ────────────────────────────────────────────────────────
+    // МЕТОДЫ ДЛЯ ЧАТА (MESSAGES)
+    // ────────────────────────────────────────────────────────
+
+    // 5. Отправить сообщение
+    suspend fun sendChatMessage(matchId: String, fromUser: String, text: String): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val jsonBody = JSONObject().apply {
+                put("match_id", matchId)
+                put("from_user", fromUser)
+                put("text", text)
+            }.toString()
+
+            val request = Request.Builder().url(MESSAGES_URL).post(jsonBody.toRequestBody(JSON)).build()
+            client.newCall(request).execute().use { response -> response.isSuccessful }
+        } catch (e: Exception) { false }
+    }
+
+    // 6. Получить сообщения для матча
+    suspend fun getChatMessages(matchId: String): List<ChatMessageRecord> = withContext(Dispatchers.IO) {
+        try {
+            val filter = "(match_id='$matchId')"
+            val encodedFilter = URLEncoder.encode(filter, "UTF-8")
+            val url = "$MESSAGES_URL?filter=$encodedFilter&sort=created"
+            
+            val request = Request.Builder().url(url).get().build()
+            val result = mutableListOf<ChatMessageRecord>()
+
+            client.newCall(request).execute().use { response ->
+                if (response.isSuccessful) {
+                    val body = response.body?.string() ?: return@withContext emptyList()
+                    val items = JSONObject(body).optJSONArray("items")
+                    if (items != null) {
+                        for (i in 0 until items.length()) {
+                            val obj = items.getJSONObject(i)
+                            result.add(
+                                ChatMessageRecord(
+                                    id = obj.getString("id"),
+                                    fromUser = obj.getString("from_user"),
+                                    text = obj.getString("text"),
+                                    created = obj.getString("created")
+                                )
+                            )
+                        }
+                    }
+                }
+            }
+            result
+        } catch (e: Exception) { emptyList() }
     }
 }
