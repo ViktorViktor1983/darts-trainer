@@ -36,6 +36,12 @@ object Game501Serializer {
         root.put("teamCount", game.teamCount)
         root.put("playersPerTeam", game.playersPerTeam)
 
+        // НОВЫЕ ПОЛЯ ДЛЯ БУЛЛА
+        root.put("isBullPhase", game.isBullPhase)
+        root.put("bullThrowP1", game.bullThrowP1 ?: JSONObject.NULL)
+        root.put("bullThrowP2", game.bullThrowP2 ?: JSONObject.NULL)
+        root.put("bullWinnerIndex", game.bullWinnerIndex ?: JSONObject.NULL)
+
         // Игроки
         val playersArr = JSONArray()
         for (p in game.players) {
@@ -79,6 +85,12 @@ object Game501Serializer {
             val teamCount = root.optInt("teamCount", 2)
             val playersPerTeam = root.optInt("playersPerTeam", 1)
 
+            // НОВЫЕ ПОЛЯ ДЛЯ БУЛЛА
+            val isBullPhase = root.optBoolean("isBullPhase", false)
+            val bullThrowP1 = if (root.isNull("bullThrowP1")) null else root.optInt("bullThrowP1", 0)
+            val bullThrowP2 = if (root.isNull("bullThrowP2")) null else root.optInt("bullThrowP2", 0)
+            val bullWinnerIndex = if (root.isNull("bullWinnerIndex")) null else root.optInt("bullWinnerIndex", 0)
+
             // Игроки
             val playersArr = root.getJSONArray("players")
             val players = mutableListOf<Player501>()
@@ -113,7 +125,11 @@ object Game501Serializer {
                 legHistory = legHistory,
                 isPairGame = isPairGame,
                 teamCount = teamCount,
-                playersPerTeam = playersPerTeam
+                playersPerTeam = playersPerTeam,
+                isBullPhase = isBullPhase,
+                bullThrowP1 = bullThrowP1,
+                bullThrowP2 = bullThrowP2,
+                bullWinnerIndex = bullWinnerIndex
             )
         } catch (e: Exception) {
             null
