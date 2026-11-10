@@ -119,7 +119,7 @@ fun Game501Screen(
 
     // Стейт для сетевой синхронизации
     var lastSyncedJson by remember { mutableStateOf("") }
-    var isSendingMove by remember { mutableStateOf(false) } // ЗАЩИТА ОТ ЭХА
+    var isSendingMove by remember { mutableStateOf(false) }
 
     val allBots = game.players.all { it.isBot }
 
@@ -151,13 +151,12 @@ fun Game501Screen(
     // ЛОГИКА СИНХРОНИЗАЦИИ ПО СЕТИ
     // ────────────────────────────────────────────────────────
     
-    // Отправляем ЛЮБОЕ изменение стейта на сервер
     LaunchedEffect(game, isOnlineGame) {
         if (isOnlineGame && onlineMatchId != null) {
             val currentJson = Game501Serializer.toJson(game)
             
             if (currentJson != lastSyncedJson && !isSendingMove) {
-                isSendingMove = true // БЛОКИРУЕМ
+                isSendingMove = true 
                 
                 scope.launch {
                     val success = withContext(Dispatchers.IO) {
@@ -171,22 +170,21 @@ fun Game501Screen(
                     }
                     
                     if (success) {
-                        lastSyncedJson = currentJson // Обновляем ТОЛЬКО при успехе
+                        lastSyncedJson = currentJson
                     }
                     
-                    delay(800L) // Даем серверу время
-                    isSendingMove = false // РАЗБЛОКИРУЕМ
+                    delay(800L) 
+                    isSendingMove = false 
                 }
             }
         }
     }
 
-    // Слушаем ход соперника (каждые 1.5 секунды)
     LaunchedEffect(isOnlineGame, onlineMatchId) {
         if (!isOnlineGame || onlineMatchId == null) return@LaunchedEffect
         while (true) {
             delay(1500L)
-            if (isSendingMove) continue // Если мы отправляем ход — молчим
+            if (isSendingMove) continue 
             
             val remote = OnlineNetworkManager.getGameState(onlineMatchId)
             if (remote != null) {
@@ -195,7 +193,6 @@ fun Game501Screen(
                     val remoteJson = Game501Serializer.toJson(remoteGame)
                     val localJson = Game501Serializer.toJson(game)
                     
-                    // ЗАЩИТА ОТ ОТКАТА (используем количество брошенных дротиков за матч)
                     val remoteDarts = remoteGame.players.sumOf { it.matchDarts }
                     val localDarts = game.players.sumOf { it.matchDarts }
 
@@ -484,8 +481,6 @@ fun Game501Screen(
     LaunchedEffect(game.isFinished, allBots, showLegWonDialog, showSetWonDialog) {
         if (!game.isFinished) return@LaunchedEffect
         
-        // УБРАЛИ syncFinishGame() ОТСЮДА! Теперь мы не удаляем игру сразу.
-        
         if (allBots) {
             Game501SettingsStorage.updateQuickSumsIfNeeded(context)
             onGameFinish(game, currentId)
@@ -507,66 +502,89 @@ fun Game501Screen(
                 unreadCount = unreadChatCount,
                 onToggleChat = { isChatExpanded = !isChatExpanded; if (isChatExpanded) unreadChatCount = 0 }
             )
-            // Передаем onlinePlayerIndex, чтобы понять, кого рисовать слева
-            PlayersHeader501(game = game, onlinePlayerIndex = onlinePlayerIndex)
 
-            Row(
-                modifier = Modifier.fillMaxWidth().background(Color(0xFF16202C)).padding(horizontal = 12.dp, vertical = 6.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                val leftIdx = if (onlinePlayerIndex == 1) 1 else 0
-                val rightIdx = if (onlinePlayerIndex == 1) 0 else 1
-                
-                val leftLastScore = if (leftIdx == 0) lastScoreA else lastScoreB
-                val rightLastScore = if (rightIdx == 0) lastScoreA else lastScoreB
-
-                PrevScoreBlock("Пред.", leftLastScore, activeTeam == leftIdx, Alignment.Start)
-                Text(
-                    if (inputText.isEmpty()) "—" else inputText,
-                    color = if (inputText.isEmpty()) Color.White.copy(alpha = 0.3f) else GoldAccent,
-                    fontSize = 36.sp, fontWeight = FontWeight.Bold,
-                    modifier = Modifier.weight(1f), textAlign = TextAlign.Center
-                )
-                PrevScoreBlock("Пред.", rightLastScore, activeTeam == rightIdx, Alignment.End)
-            }
-
-            if (showGameControls) {
-                // Скрываем плашку ожидания, если игра уже закончилась
-                if (isOnlineGame && !isMyTurn && !game.isFinished) {
-                    Box(modifier = Modifier.fillMaxWidth().background(GoldAccent.copy(alpha = 0.15f)).padding(vertical = 8.dp), contentAlignment = Alignment.Center) {
-                        Text("ОЖИДАНИЕ ХОДА СОПЕРНИКА...", color = GoldAccent, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+            if (isOnlineGame && game.isBullPhase) {
+                BullThrowScreen(
+                    game = game,
+                    myIndex = onlinePlayerIndex,
+                    onThrow = { score ->
+                        game = game.copy(
+                            bullThrowP1 = if (onlinePlayerIndex == 0) score else game.bullThrowP1,
+                            bullThrowP2 = if (onlinePlayerIndex == 1) score else game.bullThrowP2
+                        )
+                    },
+                    onReThrow = {
+                        game = game.copy(bullThrowP1 = null, bullThrowP2 = null)
+                    },
+                    onStartGame = { winner ->
+                        game = game.copy(
+                            isBullPhase = false,
+                            currentPlayerIndex = winner,
+                            lastLegStartingTeam = winner
+                        )
                     }
-                }
-                if (isOnlineGame && isSendingMove) {
-                    Box(modifier = Modifier.fillMaxWidth().background(Accent.copy(alpha = 0.15f)).padding(vertical = 8.dp), contentAlignment = Alignment.Center) {
-                        Text("ОТПРАВКА ХОДА...", color = Accent, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                    }
-                }
-
-                QuickButtonsWithLeg(
-                    sums = quickSums,
-                    enabled = canInteract,
-                    onQuick = { pressQuickButton(it) },
-                    onLeg = { pressLeg() }
                 )
+            } else {
+                // СТАНДАРТНЫЙ ЭКРАН ИГРЫ
+                PlayersHeader501(game = game, onlinePlayerIndex = onlinePlayerIndex)
 
                 Row(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 4.dp),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    modifier = Modifier.fillMaxWidth().background(Color(0xFF16202C)).padding(horizontal = 12.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    BigActionButton("Остаток", canInteract, TileBg, Accent, Modifier.weight(2f)) { submitRemaining() }
-                    BigActionButton("OK", canInteract, Accent, Color(0xFF121212), Modifier.weight(4f)) { submitSum() }
+                    val leftIdx = if (onlinePlayerIndex == 1) 1 else 0
+                    val rightIdx = if (onlinePlayerIndex == 1) 0 else 1
+                    
+                    val leftLastScore = if (leftIdx == 0) lastScoreA else lastScoreB
+                    val rightLastScore = if (rightIdx == 0) lastScoreA else lastScoreB
+
+                    PrevScoreBlock("Пред.", leftLastScore, activeTeam == leftIdx, Alignment.Start)
+                    Text(
+                        if (inputText.isEmpty()) "—" else inputText,
+                        color = if (inputText.isEmpty()) Color.White.copy(alpha = 0.3f) else GoldAccent,
+                        fontSize = 36.sp, fontWeight = FontWeight.Bold,
+                        modifier = Modifier.weight(1f), textAlign = TextAlign.Center
+                    )
+                    PrevScoreBlock("Пред.", rightLastScore, activeTeam == rightIdx, Alignment.End)
                 }
 
-                Keyboard501(
-                    enabled = canInteract,
-                    canUndo = canUndo,
-                    isOnlineGame = isOnlineGame,
-                    onDigit = { inputText = if (inputText.length < 3) inputText + it else inputText },
-                    onBackspace = { inputText = if (inputText.isNotEmpty()) inputText.dropLast(1) else "" },
-                    onClear = { inputText = "" },
-                    onUndo = { undo() }
-                )
+                if (showGameControls) {
+                    if (isOnlineGame && !isMyTurn && !game.isFinished) {
+                        Box(modifier = Modifier.fillMaxWidth().background(GoldAccent.copy(alpha = 0.15f)).padding(vertical = 8.dp), contentAlignment = Alignment.Center) {
+                            Text("ОЖИДАНИЕ ХОДА СОПЕРНИКА...", color = GoldAccent, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                    if (isOnlineGame && isSendingMove) {
+                        Box(modifier = Modifier.fillMaxWidth().background(Accent.copy(alpha = 0.15f)).padding(vertical = 8.dp), contentAlignment = Alignment.Center) {
+                            Text("ОТПРАВКА ХОДА...", color = Accent, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+
+                    QuickButtonsWithLeg(
+                        sums = quickSums,
+                        enabled = canInteract,
+                        onQuick = { pressQuickButton(it) },
+                        onLeg = { pressLeg() }
+                    )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        BigActionButton("Остаток", canInteract, TileBg, Accent, Modifier.weight(2f)) { submitRemaining() }
+                        BigActionButton("OK", canInteract, Accent, Color(0xFF121212), Modifier.weight(4f)) { submitSum() }
+                    }
+
+                    Keyboard501(
+                        enabled = canInteract,
+                        canUndo = canUndo,
+                        isOnlineGame = isOnlineGame,
+                        onDigit = { inputText = if (inputText.length < 3) inputText + it else inputText },
+                        onBackspace = { inputText = if (inputText.isNotEmpty()) inputText.dropLast(1) else "" },
+                        onClear = { inputText = "" },
+                        onUndo = { undo() }
+                    )
+                }
             }
 
             if (isOnlineGame) {
@@ -759,7 +777,7 @@ fun Game501Screen(
                         showMatchRecordCelebration = true
                     } else {
                         Game501SettingsStorage.updateQuickSumsIfNeeded(context)
-                        if (isOnlineGame) syncFinishGame() // УДАЛЯЕМ ИГРУ, КОГДА ИГРОК НАЖАЛ ПРОДОЛЖИТЬ
+                        if (isOnlineGame) syncFinishGame()
                         onGameFinish(game, currentId)
                     }
                 }
@@ -805,19 +823,131 @@ fun Game501Screen(
                     if (isTrainingMode) {
                         TrainingUnfinishedStorage.addUnfinished501(context, currentId)
                     }
-                    if (isOnlineGame) syncFinishGame() // УДАЛЯЕМ ПРИ ВЫХОДЕ
+                    if (isOnlineGame) syncFinishGame()
                     showBackConfirm = false; onBack() 
                 }) { Text("Продолжить позже", color = Accent) } 
             },
             dismissButton = { 
                 TextButton(onClick = { 
-                    if (isOnlineGame) syncFinishGame() // УДАЛЯЕМ ПРИ ВЫХОДЕ
+                    if (isOnlineGame) syncFinishGame()
                     showBackConfirm = false; scope.launch { if (currentId > 0L) repository.deleteGame(currentId); onBack() } 
                 }) { Text("Удалить партию", color = ErrorColor) } 
             },
             title = { Text("Прервать игру?", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold) },
             text = { Text("Партия автоматически сохраняется. Ты можешь вернуться к ней позже из статистики — она будет отмечена красным.\n\nЛибо удалить её навсегда.", color = Color.White, fontSize = 14.sp) }
         )
+    }
+}
+
+@Composable
+private fun BullThrowScreen(
+    game: Game501,
+    myIndex: Int,
+    onThrow: (Int) -> Unit,
+    onReThrow: () -> Unit,
+    onStartGame: (Int) -> Unit
+) {
+    val p1Name = game.players.getOrNull(0)?.name ?: "Хост"
+    val p2Name = game.players.getOrNull(1)?.name ?: "Гость"
+
+    val p1Throw = game.bullThrowP1
+    val p2Throw = game.bullThrowP2
+
+    val myThrow = if (myIndex == 0) p1Throw else p2Throw
+    val oppThrow = if (myIndex == 0) p2Throw else p1Throw
+
+    val bothThrown = p1Throw != null && p2Throw != null
+    val isTie = bothThrown && p1Throw == p2Throw
+
+    // Вычисляем победителя
+    var winnerIndex: Int? = null
+    if (bothThrown && !isTie) {
+        winnerIndex = if ((p1Throw ?: 0) > (p2Throw ?: 0)) 0 else 1
+    }
+
+    Column(
+        modifier = Modifier.fillMaxSize().padding(16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text("РОЗЫГРЫШ БУЛЛА", color = GoldAccent, fontSize = 28.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 24.dp))
+
+        // Табло
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            BullPlayerBox(p1Name, p1Throw, isMyIndex = myIndex == 0)
+            BullPlayerBox(p2Name, p2Throw, isMyIndex = myIndex == 1)
+        }
+
+        Spacer(Modifier.weight(1f))
+
+        // Зона действий
+        if (!bothThrown) {
+            if (myThrow == null) {
+                Text("ВАШ БРОСОК", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 16.dp))
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    BullButton("МИМО", ErrorColor, Modifier.weight(1f)) { onThrow(0) }
+                    BullButton("ЗЕЛЁНЫЙ\n(25)", Color(0xFF4CAF50), Modifier.weight(1f)) { onThrow(25) }
+                    BullButton("КРАСНЫЙ\n(50)", Color(0xFFF44336), Modifier.weight(1f)) { onThrow(50) }
+                }
+            } else {
+                Text("ОЖИДАНИЕ БРОСКА СОПЕРНИКА...", color = GoldAccent, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(16.dp))
+                CircularProgressIndicator(color = GoldAccent)
+            }
+        } else {
+            if (isTie) {
+                Text("НИЧЬЯ! НУЖЕН ПЕРЕБРОС", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 16.dp))
+                BullButton("ПЕРЕБРОС", Accent, Modifier.fillMaxWidth().height(60.dp)) { onReThrow() }
+            } else if (winnerIndex != null) {
+                val winnerName = if (winnerIndex == 0) p1Name else p2Name
+                Text("Победитель: $winnerName", color = GoldAccent, fontSize = 22.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 16.dp))
+                
+                BullButton("НАЧАТЬ ИГРУ", Accent, Modifier.fillMaxWidth().height(60.dp)) {
+                    onStartGame(winnerIndex)
+                }
+            }
+        }
+        
+        Spacer(Modifier.weight(1f))
+    }
+}
+
+@Composable
+private fun BullPlayerBox(name: String, throwValue: Int?, isMyIndex: Boolean) {
+    val label = when (throwValue) {
+        0 -> "МИМО"
+        25 -> "ЗЕЛЁНЫЙ"
+        50 -> "КРАСНЫЙ"
+        else -> "ЖДЕМ..."
+    }
+    val color = when (throwValue) {
+        0 -> ErrorColor
+        25 -> Color(0xFF4CAF50)
+        50 -> Color(0xFFF44336)
+        else -> TileBg
+    }
+
+    Column(
+        modifier = Modifier.width(140.dp).clip(RoundedCornerShape(12.dp)).background(TileBgDark).padding(16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(name, color = if (isMyIndex) Accent else Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Spacer(Modifier.height(12.dp))
+        Box(
+            modifier = Modifier.size(80.dp).clip(CircleShape).background(if (throwValue != null) color else TileBg),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(label, color = if (throwValue != null) Color.White else Color.White.copy(alpha = 0.5f), fontSize = 14.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+        }
+    }
+}
+
+@Composable
+private fun BullButton(text: String, color: Color, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    Box(
+        modifier = modifier.height(80.dp).clip(RoundedCornerShape(12.dp)).background(color).clickable { onClick() },
+        contentAlignment = Alignment.Center
+    ) {
+        Text(text, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
     }
 }
 
@@ -835,7 +965,6 @@ private fun PrevScoreBlock(label: String, value: Int?, isActive: Boolean, alignm
 private fun PlayersHeader501(game: Game501, onlinePlayerIndex: Int) {
     val activeTeam = game.currentPlayer?.teamIndex ?: -1
     
-    // ЗЕРКАЛЬНАЯ ЛОГИКА: Тот, кто играет на этом телефоне, всегда слева
     val leftIdx = if (onlinePlayerIndex == 1) 1 else 0
     val rightIdx = if (onlinePlayerIndex == 1) 0 else 1
     
