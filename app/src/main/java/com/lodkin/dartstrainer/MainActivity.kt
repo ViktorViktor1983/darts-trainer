@@ -378,8 +378,13 @@ fun DartsTrainerApp() {
                         teamIndex = 1
                     )
                 )
-                // ВСЕГДА начинаем с 0 (Хост ходит первым).
-                game501 = Game501Logic.newGame(GameType.X501, OutMode.DOUBLE_OUT, players, params.legs, params.sets, false, 0, TRAINING_AUTO_OK_SECONDS, sessionStartTime, sessionForm)
+                
+                // Создаем игру. Если это онлайн, включаем фазу Булла.
+                var newGame = Game501Logic.newGame(GameType.X501, OutMode.DOUBLE_OUT, players, params.legs, params.sets, false, 0, TRAINING_AUTO_OK_SECONDS, sessionStartTime, sessionForm)
+                if (isRealOnline) {
+                    newGame = newGame.copy(isBullPhase = true)
+                }
+                game501 = newGame
                 game501ExistingId = 0L
 
                 // ЗАПИСЬ В БАЗУ СОЗДАЕТ ТОЛЬКО СОЗДАТЕЛЬ ИГРЫ (isCreator)
