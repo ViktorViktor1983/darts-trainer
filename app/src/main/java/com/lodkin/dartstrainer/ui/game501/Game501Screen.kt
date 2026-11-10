@@ -74,7 +74,7 @@ fun Game501Screen(
     isTrainingMode: Boolean = false,
     isOnlineGame: Boolean = false,
     onlineMatchId: String? = null,
-    onlinePlayerIndex: Int = 0, // НОВЫЙ ПАРАМЕТР: 0 - Хост, 1 - Гость
+    onlinePlayerIndex: Int = 0, 
     trainingRepository: TrainingRepository? = null,
     onGameFinish: (Game501, Long) -> Unit,
     onBack: () -> Unit
@@ -119,14 +119,12 @@ fun Game501Screen(
 
     // Стейт для сетевой синхронизации
     var lastSyncedJson by remember { mutableStateOf("") }
+    var isSendingMove by remember { mutableStateOf(false) } // ЗАЩИТА ОТ ЭХА
 
     val allBots = game.players.all { it.isBot }
 
-    // ГЛАВНАЯ ПРОВЕРКА: Мой ли сейчас ход? (Используем ИНДЕКС, а не имя!)
     val isMyTurn = !isOnlineGame || (game.currentPlayerIndex == onlinePlayerIndex)
-    
-    // Можно ли вообще взаимодействовать с клавиатурой
-    val canInteract = !game.isFinished && game.currentPlayer?.isBot != true && isMyTurn
+    val canInteract = !game.isFinished && game.currentPlayer?.isBot != true && isMyTurn && !isSendingMove
 
     val history = remember { mutableStateListOf<Game501>() }
 
@@ -135,7 +133,7 @@ fun Game501Screen(
 
     val dialogOpen = showLegWonDialog || showSetWonDialog || showWinDialog ||
         showLegQuestionDialog || showDoublesQuestionDialog || showDoublesOnlyDialog
-    val canUndo = history.isNotEmpty() && !dialogOpen && isMyTurn
+    val canUndo = history.isNotEmpty() && !dialogOpen && isMyTurn && !isSendingMove
 
     LaunchedEffect(isOnlineGame) {
         if (isOnlineGame) {
@@ -153,7 +151,7 @@ fun Game501Screen(
     // ЛОГИКА СИНХРОНИЗАЦИИ ПО СЕТИ
     // ────────────────────────────────────────────────────────
     
-    // Отправляем ход, если сейчас НЕ наш ход (значит, мы только что походили) или игра закончена
+    // Отправляем ход, если сейчас НЕ наш ход или игра закончена
     LaunchedEffect(game, isOnlineGame) {
         if (isOnlineGame && onlineMatchId != null) {
             val isTurnNow = game.currentPlayerIndex == onlinePlayerIndex
@@ -161,6 +159,8 @@ fun Game501Screen(
             
             if ((!isTurnNow || game.isFinished) && currentJson != lastSyncedJson) {
                 lastSyncedJson = currentJson
+                isSendingMove = true // БЛОКИРУЕМ ЧТЕНИЕ
+                
                 scope.launch(Dispatchers.IO) {
                     OnlineNetworkManager.upsertGameState(
                         onlineMatchId,
@@ -169,6 +169,8 @@ fun Game501Screen(
                         game.players[0].name,
                         game.players[1].name
                     )
+                    delay(800L) // Даем серверу время обработать запись
+                    isSendingMove = false // РАЗБЛОКИРУЕМ ЧТЕНИЕ
                 }
             }
         }
@@ -179,6 +181,8 @@ fun Game501Screen(
         if (!isOnlineGame || onlineMatchId == null) return@LaunchedEffect
         while (true) {
             delay(1500L)
+            if (isSendingMove) continue // Если мы отправляем ход — молчим
+            
             val remote = OnlineNetworkManager.getGameState(onlineMatchId)
             if (remote != null) {
                 val remoteGame = Game501Serializer.fromJson(remote.stateJson)
@@ -195,7 +199,6 @@ fun Game501Screen(
                     val isRemoteBehind = remoteSet < localSet || (remoteSet == localSet && remoteLeg < localLeg)
                     val isRemoteAhead = remoteSet > localSet || (remoteSet == localSet && remoteLeg > localLeg)
 
-                    // ЗАЩИТА ОТ ОТКАТА: Принимаем данные, только если они не старше наших, и сейчас наш ход (или игра закончена)
                     if (remoteJson != localJson && !isRemoteBehind) {
                         if (isRemoteAhead || isRemoteMyTurn || remoteGame.isFinished) {
                             game = remoteGame
@@ -325,7 +328,7 @@ fun Game501Screen(
     }
 
     fun applySum(value: Int) {
-        if (!canInteract) return // Блокировка ввода
+        if (!canInteract) return 
         if (value < 0 || value > 180) return
         val currentPlayer = game.players.getOrNull(game.currentPlayerIndex) ?: return
 
@@ -430,7 +433,6 @@ fun Game501Screen(
         val currentPlayer = game.players.getOrNull(game.currentPlayerIndex) ?: return@LaunchedEffect
         if (!currentPlayer.isBot) return@LaunchedEffect
         
-        // Если игра по сети, мы не запускаем бота, а ждем хода соперника по сети
         if (isOnlineGame) return@LaunchedEffect
 
         if (!allBots && (showLegWonDialog || showSetWonDialog)) return@LaunchedEffect
@@ -527,6 +529,11 @@ fun Game501Screen(
                         Text("ОЖИДАНИЕ ХОДА СОПЕРНИКА...", color = GoldAccent, fontSize = 14.sp, fontWeight = FontWeight.Bold)
                     }
                 }
+                if (isOnlineGame && isSendingMove) {
+                    Box(modifier = Modifier.fillMaxWidth().background(Accent.copy(alpha = 0.15f)).padding(vertical = 8.dp), contentAlignment = Alignment.Center) {
+                        Text("ОТПРАВКА ХОДА...", color = Accent, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
 
                 QuickButtonsWithLeg(
                     sums = quickSums,
@@ -554,7 +561,6 @@ fun Game501Screen(
                 )
             }
 
-            // Чат: либо на весь экран, либо полоска предпросмотра внизу
             if (isOnlineGame) {
                 if (isChatExpanded) {
                     Box(modifier = Modifier.weight(1f).fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp)) {
@@ -565,14 +571,14 @@ fun Game501Screen(
                             unreadCount = unreadChatCount,
                             onSendMessage = { text ->
                                 chatMessages.add(ChatMessage(System.currentTimeMillis().toString(), "Вы", text, isMyMessage = true))
-                                isChatExpanded = false // Автосворачивание
+                                isChatExpanded = false 
                             },
                             onClose = { isChatExpanded = false },
                             onExpand = { isChatExpanded = true; unreadChatCount = 0 }
                         )
                     }
                 } else {
-                    Spacer(Modifier.weight(1f)) // Занимаем место
+                    Spacer(Modifier.weight(1f)) 
                     OnlineChatOverlay(
                         modifier = Modifier.fillMaxWidth(),
                         isExpanded = false,
