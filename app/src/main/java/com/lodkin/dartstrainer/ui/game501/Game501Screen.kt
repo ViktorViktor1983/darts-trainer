@@ -8,7 +8,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.CircularProgressIndicator // <-- ДОБАВЛЕН ИМПОРТ
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
@@ -130,11 +130,17 @@ fun Game501Screen(
     val history = remember { mutableStateListOf<Game501>() }
 
     fun saveHistory() { history.add(game); if (history.size > 300) history.removeAt(0) }
-    fun undo() { if (history.isNotEmpty() && isMyTurn) game = history.removeAt(history.lastIndex) }
+    fun undo() { 
+        if (history.isNotEmpty() && !isSendingMove) { 
+            game = history.removeAt(history.lastIndex) 
+        } 
+    }
 
     val dialogOpen = showLegWonDialog || showSetWonDialog || showWinDialog ||
         showLegQuestionDialog || showDoublesQuestionDialog || showDoublesOnlyDialog
-    val canUndo = history.isNotEmpty() && !dialogOpen && isMyTurn && !isSendingMove
+    
+    // РАЗРЕШАЕМ UNDO В ОНЛАЙНЕ
+    val canUndo = history.isNotEmpty() && !dialogOpen && !isSendingMove
 
     LaunchedEffect(isOnlineGame) {
         if (isOnlineGame) {
@@ -197,13 +203,38 @@ fun Game501Screen(
                     val remoteDarts = remoteGame.players.sumOf { it.matchDarts }
                     val localDarts = game.players.sumOf { it.matchDarts }
 
-                    val isRemoteBehind = (remoteGame.currentSetNumber < game.currentSetNumber) || 
-                                         (remoteGame.currentSetNumber == game.currentSetNumber && remoteGame.currentLegNumber < game.currentLegNumber) ||
-                                         (remoteGame.currentSetNumber == game.currentSetNumber && remoteGame.currentLegNumber == game.currentLegNumber && remoteDarts < localDarts)
+                    val remoteSets = remoteGame.currentSetNumber
+                    val localSets = game.currentSetNumber
+                    val remoteLegs = remoteGame.currentLegNumber
+                    val localLegs = game.currentLegNumber
 
-                    if (remoteJson != localJson && !isRemoteBehind) {
-                        game = remoteGame
-                        lastSyncedJson = remoteJson
+                    // УМНАЯ ЛОГИКА ОТКАТА: Принимаем откат, если он не ломает структуру сетов/легов
+                    val isRemoteBehind = (remoteSets < localSets) || 
+                                         (remoteSets == localSets && remoteLegs < localLegs) ||
+                                         (remoteSets == localSets && remoteLegs == localLegs && remoteDarts < localDarts)
+
+                    val isRemoteMyTurn = remoteGame.currentPlayerIndex == onlinePlayerIndex
+
+                    if (remoteJson != localJson) {
+                        if (isRemoteMyTurn || remoteGame.isFinished) {
+                            // Если сейчас наш ход, мы обязаны принять данные
+                            game = remoteGame
+                            lastSyncedJson = remoteJson
+                            
+                            // Вычисляем предыдущий набор соперника
+                            val remoteP1Score = remoteGame.players[0].matchScoreGained
+                            val remoteP2Score = remoteGame.players[1].matchScoreGained
+                            val localP1Score = game.players[0].matchScoreGained
+                            val localP2Score = game.players[1].matchScoreGained
+                            if (remoteP1Score > localP1Score) lastScoreA = remoteP1Score - localP1Score
+                            if (remoteP2Score > localP2Score) lastScoreB = remoteP2Score - localP2Score
+                        } else {
+                            // Если ход соперника, но он откатил свой ход (сеты/леги те же, но дротиков меньше)
+                            if (!isRemoteBehind) {
+                                game = remoteGame
+                                lastSyncedJson = remoteJson
+                            }
+                        }
                     }
                 }
             }
@@ -866,6 +897,14 @@ private fun BullThrowScreen(
         winnerIndex = if ((p1Throw ?: 0) > (p2Throw ?: 0)) 0 else 1
     }
 
+    // АВТОСТАРТ ЧЕРЕЗ 2 СЕКУНДЫ
+    LaunchedEffect(winnerIndex) {
+        if (winnerIndex != null) {
+            delay(2000L)
+            onStartGame(winnerIndex)
+        }
+    }
+
     Column(
         modifier = Modifier.fillMaxSize().padding(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally
@@ -885,7 +924,8 @@ private fun BullThrowScreen(
             if (myThrow == null) {
                 Text("ВАШ БРОСОК", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 16.dp))
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    BullButton("МИМО", ErrorColor, Modifier.weight(1f)) { onThrow(0) }
+                    // СЕРАЯ КНОПКА "МИМО"
+                    BullButton("МИМО", Color.Gray, Modifier.weight(1f)) { onThrow(0) }
                     BullButton("ЗЕЛЁНЫЙ\n(25)", Color(0xFF4CAF50), Modifier.weight(1f)) { onThrow(25) }
                     BullButton("КРАСНЫЙ\n(50)", Color(0xFFF44336), Modifier.weight(1f)) { onThrow(50) }
                 }
@@ -901,10 +941,7 @@ private fun BullThrowScreen(
             } else if (winnerIndex != null) {
                 val winnerName = if (winnerIndex == 0) p1Name else p2Name
                 Text("Победитель: $winnerName", color = GoldAccent, fontSize = 22.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 16.dp))
-                
-                BullButton("НАЧАТЬ ИГРУ", Accent, Modifier.fillMaxWidth().height(60.dp)) {
-                    onStartGame(winnerIndex)
-                }
+                Text("Игра начнется автоматически...", color = Color.White.copy(alpha = 0.7f), fontSize = 16.sp, fontWeight = FontWeight.Medium)
             }
         }
         
@@ -921,7 +958,7 @@ private fun BullPlayerBox(name: String, throwValue: Int?, isMyIndex: Boolean) {
         else -> "ЖДЕМ..."
     }
     val color = when (throwValue) {
-        0 -> ErrorColor
+        0 -> Color.Gray
         25 -> Color(0xFF4CAF50)
         50 -> Color(0xFFF44336)
         else -> TileBg
