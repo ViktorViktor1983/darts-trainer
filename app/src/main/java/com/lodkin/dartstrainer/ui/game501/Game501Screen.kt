@@ -158,19 +158,25 @@ fun Game501Screen(
             val currentJson = Game501Serializer.toJson(game)
             
             if ((!isTurnNow || game.isFinished) && currentJson != lastSyncedJson) {
-                lastSyncedJson = currentJson
-                isSendingMove = true // БЛОКИРУЕМ ЧТЕНИЕ
+                isSendingMove = true // БЛОКИРУЕМ
                 
-                scope.launch(Dispatchers.IO) {
-                    OnlineNetworkManager.upsertGameState(
-                        onlineMatchId,
-                        "501",
-                        currentJson,
-                        game.players[0].name,
-                        game.players[1].name
-                    )
-                    delay(800L) // Даем серверу время обработать запись
-                    isSendingMove = false // РАЗБЛОКИРУЕМ ЧТЕНИЕ
+                scope.launch {
+                    val success = withContext(Dispatchers.IO) {
+                        OnlineNetworkManager.upsertGameState(
+                            onlineMatchId,
+                            "501",
+                            currentJson,
+                            game.players[0].name,
+                            game.players[1].name
+                        )
+                    }
+                    
+                    if (success) {
+                        lastSyncedJson = currentJson // Обновляем ТОЛЬКО при успехе
+                    }
+                    
+                    delay(800L) // Даем серверу время
+                    isSendingMove = false // РАЗБЛОКИРУЕМ
                 }
             }
         }
@@ -189,21 +195,17 @@ fun Game501Screen(
                 if (remoteGame != null) {
                     val remoteJson = Game501Serializer.toJson(remoteGame)
                     val localJson = Game501Serializer.toJson(game)
-                    val isRemoteMyTurn = remoteGame.currentPlayerIndex == onlinePlayerIndex
-
-                    val remoteLeg = remoteGame.currentLegNumber
-                    val remoteSet = remoteGame.currentSetNumber
-                    val localLeg = game.currentLegNumber
-                    val localSet = game.currentSetNumber
-
-                    val isRemoteBehind = remoteSet < localSet || (remoteSet == localSet && remoteLeg < localLeg)
-                    val isRemoteAhead = remoteSet > localSet || (remoteSet == localSet && remoteLeg > localLeg)
+                    
+                    // ЗАЩИТА ОТ ОТКАТА: Проверяем, не старее ли данные
+                    val remoteTotalScore = remoteGame.players.sumOf { it.matchScoreGained }
+                    val localTotalScore = game.players.sumOf { it.matchScoreGained }
+                    val isRemoteBehind = remoteTotalScore < localTotalScore || 
+                        (remoteGame.currentSetNumber < game.currentSetNumber) ||
+                        (remoteGame.currentSetNumber == game.currentSetNumber && remoteGame.currentLegNumber < game.currentLegNumber)
 
                     if (remoteJson != localJson && !isRemoteBehind) {
-                        if (isRemoteAhead || isRemoteMyTurn || remoteGame.isFinished) {
-                            game = remoteGame
-                            lastSyncedJson = remoteJson
-                        }
+                        game = remoteGame
+                        lastSyncedJson = remoteJson
                     }
                 }
             }
