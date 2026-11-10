@@ -151,13 +151,12 @@ fun Game501Screen(
     // ЛОГИКА СИНХРОНИЗАЦИИ ПО СЕТИ
     // ────────────────────────────────────────────────────────
     
-    // Отправляем ход, если сейчас НЕ наш ход или игра закончена
+    // Отправляем ЛЮБОЕ изменение стейта на сервер
     LaunchedEffect(game, isOnlineGame) {
         if (isOnlineGame && onlineMatchId != null) {
-            val isTurnNow = game.currentPlayerIndex == onlinePlayerIndex
             val currentJson = Game501Serializer.toJson(game)
             
-            if ((!isTurnNow || game.isFinished) && currentJson != lastSyncedJson) {
+            if (currentJson != lastSyncedJson && !isSendingMove) {
                 isSendingMove = true // БЛОКИРУЕМ
                 
                 scope.launch {
@@ -196,12 +195,13 @@ fun Game501Screen(
                     val remoteJson = Game501Serializer.toJson(remoteGame)
                     val localJson = Game501Serializer.toJson(game)
                     
-                    // ЗАЩИТА ОТ ОТКАТА: Проверяем, не старее ли данные
-                    val remoteTotalScore = remoteGame.players.sumOf { it.matchScoreGained }
-                    val localTotalScore = game.players.sumOf { it.matchScoreGained }
-                    val isRemoteBehind = remoteTotalScore < localTotalScore || 
-                        (remoteGame.currentSetNumber < game.currentSetNumber) ||
-                        (remoteGame.currentSetNumber == game.currentSetNumber && remoteGame.currentLegNumber < game.currentLegNumber)
+                    // ЗАЩИТА ОТ ОТКАТА (используем количество брошенных дротиков за матч)
+                    val remoteDarts = remoteGame.players.sumOf { it.matchDarts }
+                    val localDarts = game.players.sumOf { it.matchDarts }
+
+                    val isRemoteBehind = (remoteGame.currentSetNumber < game.currentSetNumber) || 
+                                         (remoteGame.currentSetNumber == game.currentSetNumber && remoteGame.currentLegNumber < game.currentLegNumber) ||
+                                         (remoteGame.currentSetNumber == game.currentSetNumber && remoteGame.currentLegNumber == game.currentLegNumber && remoteDarts < localDarts)
 
                     if (remoteJson != localJson && !isRemoteBehind) {
                         game = remoteGame
@@ -509,20 +509,27 @@ fun Game501Screen(
                 unreadCount = unreadChatCount,
                 onToggleChat = { isChatExpanded = !isChatExpanded; if (isChatExpanded) unreadChatCount = 0 }
             )
-            PlayersHeader501(game = game)
+            // Передаем onlinePlayerIndex, чтобы понять, кого рисовать слева
+            PlayersHeader501(game = game, onlinePlayerIndex = onlinePlayerIndex)
 
             Row(
                 modifier = Modifier.fillMaxWidth().background(Color(0xFF16202C)).padding(horizontal = 12.dp, vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                PrevScoreBlock("Пред.", lastScoreA, activeTeam == 0, Alignment.Start)
+                val leftIdx = if (onlinePlayerIndex == 1) 1 else 0
+                val rightIdx = if (onlinePlayerIndex == 1) 0 else 1
+                
+                val leftLastScore = if (leftIdx == 0) lastScoreA else lastScoreB
+                val rightLastScore = if (rightIdx == 0) lastScoreA else lastScoreB
+
+                PrevScoreBlock("Пред.", leftLastScore, activeTeam == leftIdx, Alignment.Start)
                 Text(
                     if (inputText.isEmpty()) "—" else inputText,
                     color = if (inputText.isEmpty()) Color.White.copy(alpha = 0.3f) else GoldAccent,
                     fontSize = 36.sp, fontWeight = FontWeight.Bold,
                     modifier = Modifier.weight(1f), textAlign = TextAlign.Center
                 )
-                PrevScoreBlock("Пред.", lastScoreB, activeTeam == 1, Alignment.End)
+                PrevScoreBlock("Пред.", rightLastScore, activeTeam == rightIdx, Alignment.End)
             }
 
             if (showGameControls) {
@@ -823,26 +830,32 @@ private fun PrevScoreBlock(label: String, value: Int?, isActive: Boolean, alignm
 }
 
 @Composable
-private fun PlayersHeader501(game: Game501) {
+private fun PlayersHeader501(game: Game501, onlinePlayerIndex: Int) {
     val activeTeam = game.currentPlayer?.teamIndex ?: -1
-    val teamA = game.playersOfTeam(0)
-    val teamB = game.playersOfTeam(1)
-    val legsA = teamA.firstOrNull()?.legsInCurrentSet ?: 0
-    val legsB = teamB.firstOrNull()?.legsInCurrentSet ?: 0
-    val setsA = teamA.firstOrNull()?.setsWon ?: 0
-    val setsB = teamB.firstOrNull()?.setsWon ?: 0
+    
+    // ЗЕРКАЛЬНАЯ ЛОГИКА: Тот, кто играет на этом телефоне, всегда слева
+    val leftIdx = if (onlinePlayerIndex == 1) 1 else 0
+    val rightIdx = if (onlinePlayerIndex == 1) 0 else 1
+    
+    val teamLeft = game.playersOfTeam(leftIdx)
+    val teamRight = game.playersOfTeam(rightIdx)
+    
+    val legsLeft = teamLeft.firstOrNull()?.legsInCurrentSet ?: 0
+    val legsRight = teamRight.firstOrNull()?.legsInCurrentSet ?: 0
+    val setsLeft = teamLeft.firstOrNull()?.setsWon ?: 0
+    val setsRight = teamRight.firstOrNull()?.setsWon ?: 0
 
     Column(modifier = Modifier.fillMaxWidth().background(Color(0xFF16202C)).padding(vertical = 8.dp)) {
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            PlayerScoreCol(teamA.joinToString("/") { it.name }, if (game.isPairGame) teamA.minOfOrNull { it.score } ?: 0 else teamA.firstOrNull()?.score ?: 0, teamA.firstOrNull()?.let { Game501Logic.matchPpr(it) } ?: 0.0, if (game.isPairGame) teamA.sumOf { it.legDarts } else teamA.firstOrNull()?.legDarts ?: 0, activeTeam == 0, Modifier.weight(1f))
+            PlayerScoreCol(teamLeft.joinToString("/") { it.name }, if (game.isPairGame) teamLeft.minOfOrNull { it.score } ?: 0 else teamLeft.firstOrNull()?.score ?: 0, teamLeft.firstOrNull()?.let { Game501Logic.matchPpr(it) } ?: 0.0, if (game.isPairGame) teamLeft.sumOf { it.legDarts } else teamLeft.firstOrNull()?.legDarts ?: 0, activeTeam == leftIdx, Modifier.weight(1f))
             Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(horizontal = 4.dp)) {
                 Text("СЕТ", color = Color(0xFF99AABB), fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                Text("$setsA : $setsB", color = Color.White.copy(alpha = 0.85f), fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                Text("$setsLeft : $setsRight", color = Color.White.copy(alpha = 0.85f), fontSize = 18.sp, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.height(2.dp))
                 Text("ЛЕГ", color = Color(0xFF99AABB), fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                Text("$legsA : $legsB", color = Color.White, fontSize = 36.sp, fontWeight = FontWeight.Bold)
+                Text("$legsLeft : $legsRight", color = Color.White, fontSize = 36.sp, fontWeight = FontWeight.Bold)
             }
-            PlayerScoreCol(teamB.joinToString("/") { it.name }, if (game.isPairGame) teamB.minOfOrNull { it.score } ?: 0 else teamB.firstOrNull()?.score ?: 0, teamB.firstOrNull()?.let { Game501Logic.matchPpr(it) } ?: 0.0, if (game.isPairGame) teamB.sumOf { it.legDarts } else teamB.firstOrNull()?.legDarts ?: 0, activeTeam == 1, Modifier.weight(1f))
+            PlayerScoreCol(teamRight.joinToString("/") { it.name }, if (game.isPairGame) teamRight.minOfOrNull { it.score } ?: 0 else teamRight.firstOrNull()?.score ?: 0, teamRight.firstOrNull()?.let { Game501Logic.matchPpr(it) } ?: 0.0, if (game.isPairGame) teamRight.sumOf { it.legDarts } else teamRight.firstOrNull()?.legDarts ?: 0, activeTeam == rightIdx, Modifier.weight(1f))
         }
     }
 }
