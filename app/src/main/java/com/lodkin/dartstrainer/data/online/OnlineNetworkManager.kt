@@ -51,13 +51,22 @@ object OnlineNetworkManager {
 
     private val JSON = "application/json; charset=utf-8".toMediaType()
 
-    suspend fun registerPlayer(nickname: String, level: Int): String? = withContext(Dispatchers.IO) {
+    // УМНАЯ РЕГИСТРАЦИЯ С ПАРОЛЕМ И ЗАЩИТОЙ ОТ "adm"
+    suspend fun registerPlayer(nickname: String, level: Int, password: String): String? = withContext(Dispatchers.IO) {
         try {
+            // 1. Защита от запрещенных ников (adm / адм)
+            val lower = nickname.lowercase().replace("_", "")
+            if (lower.contains("adm") || lower.contains("адм")) {
+                return@withContext "Никнейм содержит запрещенные буквы (adm/адм)"
+            }
+
+            // 2. Ищем игрока по нику
             val filter = "(nickname='$nickname')"
             val encodedFilter = URLEncoder.encode(filter, "UTF-8")
             val checkUrl = "$PLAYERS_URL?filter=$encodedFilter"
             
             val checkRequest = Request.Builder().url(checkUrl).get().build()
+            var existingPlayer: JSONObject? = null
             var existingId: String? = null
 
             client.newCall(checkRequest).execute().use { response ->
@@ -66,7 +75,8 @@ object OnlineNetworkManager {
                     if (body != null) {
                         val items = JSONObject(body).optJSONArray("items")
                         if (items != null && items.length() > 0) {
-                            existingId = items.getJSONObject(0).optString("id")
+                            existingPlayer = items.getJSONObject(0)
+                            existingId = existingPlayer?.optString("id")
                         }
                     }
                 } else {
@@ -77,9 +87,24 @@ object OnlineNetworkManager {
             val jsonBody = JSONObject().apply {
                 put("nickname", nickname)
                 put("level", level)
+                if (password.isNotBlank()) {
+                    put("password", password)
+                }
             }.toString()
 
             if (existingId != null) {
+                // Игрок существует. Проверяем пароль.
+                val dbPassword = existingPlayer?.optString("password") ?: ""
+                
+                if (dbPassword.isNotBlank()) {
+                    // Если в базе пароль есть, он должен совпадать
+                    if (dbPassword != password) {
+                        return@withContext "Неверный пароль"
+                    }
+                } else {
+                    // Если в базе пароля нет (старый игрок), а мы ввели новый — он запишется через PATCH ниже.
+                }
+
                 val updateRequest = Request.Builder().url("$PLAYERS_URL/$existingId").patch(jsonBody.toRequestBody(JSON)).build()
                 client.newCall(updateRequest).execute().use { response ->
                     if (response.isSuccessful) return@withContext null
@@ -89,6 +114,7 @@ object OnlineNetworkManager {
                     }
                 }
             } else {
+                // Игрока нет. Создаем нового.
                 val createRequest = Request.Builder().url(PLAYERS_URL).post(jsonBody.toRequestBody(JSON)).build()
                 client.newCall(createRequest).execute().use { response ->
                     if (response.isSuccessful) return@withContext null
@@ -383,7 +409,6 @@ object OnlineNetworkManager {
         } catch (e: Exception) { false }
     }
 
-    // ИЗМЕНЕНО: теперь возвращает текст ошибки (или null, если успех)
     suspend fun sendChatMessage(matchId: String, fromUser: String, text: String): String? = withContext(Dispatchers.IO) {
         try {
             val jsonBody = JSONObject().apply {
