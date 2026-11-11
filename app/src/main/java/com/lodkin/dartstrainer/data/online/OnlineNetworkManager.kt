@@ -55,9 +55,14 @@ object OnlineNetworkManager {
     suspend fun registerPlayer(nickname: String, level: Int, password: String): String? = withContext(Dispatchers.IO) {
         try {
             // 1. Защита от запрещенных ников (adm / адм)
-            val lower = nickname.lowercase().replace("_", "")
-            if (lower.contains("adm") || lower.contains("адм")) {
-                return@withContext "Никнейм содержит запрещенные буквы (adm/адм)"
+            val lowerName = nickname.lowercase()
+            val checkName = lowerName.replace("_", "")
+            
+            // Исключение для личного ника автора
+            if (lowerName != "admin_viktor") {
+                if (checkName.contains("adm") || checkName.contains("адм")) {
+                    return@withContext "Никнейм содержит запрещенные буквы (adm/адм)"
+                }
             }
 
             // 2. Ищем игрока по нику
