@@ -51,6 +51,7 @@ fun OnlineLobbyScreen(
     val prefs = remember { context.getSharedPreferences("online_prefs", android.content.Context.MODE_PRIVATE) }
 
     var nickname by remember { mutableStateOf(prefs.getString("nickname", "") ?: "") }
+    var password by remember { mutableStateOf(prefs.getString("password", "") ?: "") }
     var selectedLevel by remember { mutableStateOf(prefs.getInt("level", 1)) }
     var is501 by remember { mutableStateOf(prefs.getBoolean("is501", true)) }
     var legs by remember { mutableStateOf(prefs.getInt("legs", 3)) }
@@ -58,6 +59,7 @@ fun OnlineLobbyScreen(
     var saveToTraining by remember { mutableStateOf(prefs.getBoolean("save_to_training", false)) }
 
     var showNicknameDialog by remember { mutableStateOf(nickname.isBlank()) }
+    var showPasswordDialog by remember { mutableStateOf(false) }
     var showLevelDialog by remember { mutableStateOf(false) }
     var showFriendDialog by remember { mutableStateOf(false) }
     var showAddFriendDialog by remember { mutableStateOf(false) }
@@ -80,9 +82,10 @@ fun OnlineLobbyScreen(
         return !lower.contains("adm") && !lower.contains("адм")
     }
 
-    LaunchedEffect(nickname, selectedLevel, is501, legs, sets, saveToTraining) {
+    LaunchedEffect(nickname, password, selectedLevel, is501, legs, sets, saveToTraining) {
         prefs.edit()
             .putString("nickname", nickname)
+            .putString("password", password)
             .putInt("level", selectedLevel)
             .putBoolean("is501", is501)
             .putInt("legs", legs)
@@ -137,6 +140,13 @@ fun OnlineLobbyScreen(
                         Text(if (nickname.isBlank()) "Задать ✏️" else nickname, color = if (nickname.isBlank()) GoldAccent else Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
                     }
                     Spacer(Modifier.height(12.dp))
+                    Row(modifier = Modifier.fillMaxWidth().clickable { showPasswordDialog = true }, verticalAlignment = Alignment.CenterVertically) {
+                        Text("Пароль:", color = Color.White.copy(alpha = 0.7f), fontSize = 14.sp, modifier = Modifier.weight(1f))
+                        Text(if (password.isBlank()) "Не задан ✏️" else "••••••", color = if (password.isBlank()) GoldAccent else Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                    }
+                    Spacer(Modifier.height(4.dp))
+                    Text("Без пароля нельзя восстановить ник после сброса телефона.", color = Color.White.copy(alpha = 0.4f), fontSize = 11.sp)
+                    Spacer(Modifier.height(12.dp))
                     Row(modifier = Modifier.fillMaxWidth().clickable { showLevelDialog = true }, verticalAlignment = Alignment.CenterVertically) {
                         Text("Уровень:", color = Color.White.copy(alpha = 0.7f), fontSize = 14.sp, modifier = Modifier.weight(1f))
                         Text(DartsNorms.getLevelName(selectedLevel) + " (PPR " + getPprRange(selectedLevel) + ") ▼", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
@@ -178,7 +188,7 @@ fun OnlineLobbyScreen(
 
         Spacer(Modifier.height(12.dp))
 
-        Box(modifier = Modifier.fillMaxWidth().height(50.dp).clip(RoundedCornerShape(16.dp)).background(Color(0xFF26A69A)).clickable(enabled = nickname.isNotBlank()) { showFriendDialog = true }, contentAlignment = Alignment.Center) {
+        Box(modifier = Modifier.fillMaxWidth().height(50.dp).clip(RoundedCornerShape(16.dp)).background(TileBg).clickable(enabled = nickname.isNotBlank()) { showFriendDialog = true }, contentAlignment = Alignment.Center) {
             Text("👥 Играть с другом", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
         }
         Spacer(Modifier.height(8.dp))
@@ -224,6 +234,34 @@ fun OnlineLobbyScreen(
         )
     }
 
+    // --- ДИАЛОГ ВВОДА ПАРОЛЯ ---
+    if (showPasswordDialog) {
+        var input by remember { mutableStateOf(password) }
+        
+        AlertDialog(
+            onDismissRequest = { showPasswordDialog = false },
+            confirmButton = { 
+                TextButton(onClick = { 
+                    password = input.trim()
+                    showPasswordDialog = false 
+                }) { Text("Сохранить", color = Accent) } 
+            },
+            dismissButton = { TextButton(onClick = { showPasswordDialog = false }) { Text("Отмена", color = Color.White.copy(alpha = 0.6f)) } },
+            title = { Text("Пароль", color = Color.White) },
+            text = { 
+                Column { 
+                    Text("Если забудете пароль или не зададите его, то при сбросе телефона не сможете зайти под своим ником.", color = Color.White.copy(alpha = 0.7f), fontSize = 13.sp)
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = input, onValueChange = { input = it }, 
+                        singleLine = true, placeholder = { Text("Введите пароль", color = TileBg) }, 
+                        colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Color.White, unfocusedTextColor = Color.White, focusedBorderColor = Accent, unfocusedBorderColor = TileBg, cursorColor = Accent)
+                    ) 
+                } 
+            }
+        )
+    }
+
     if (showLevelDialog) {
         AlertDialog(
             onDismissRequest = { showLevelDialog = false }, confirmButton = { TextButton(onClick = { showLevelDialog = false }) { Text("OK", color = Accent) } }, title = { Text("Выберите ваш уровень", color = Color.White) },
@@ -243,7 +281,7 @@ fun OnlineLobbyScreen(
                 scope.launch {
                     isConnecting = true
                     errorMsg = ""
-                    val regError = OnlineNetworkManager.registerPlayer(nickname, selectedLevel)
+                    val regError = OnlineNetworkManager.registerPlayer(nickname, selectedLevel, password)
                     if (regError != null) { errorMsg = regError; isConnecting = false; return@launch }
                     
                     val mId = OnlineNetworkManager.sendSingleInvite(nickname, target.trim())
@@ -426,7 +464,7 @@ fun OnlineLobbyScreen(
                                     connectionError = false
                                     errorMsg = ""
                                     
-                                    val regError = OnlineNetworkManager.registerPlayer(nickname, selectedLevel)
+                                    val regError = OnlineNetworkManager.registerPlayer(nickname, selectedLevel, password)
                                     if (regError != null) { isConnecting = false; connectionError = true; errorMsg = regError; return@launch }
                                     
                                     val opponents = OnlineNetworkManager.findMatchingOpponents(nickname, searchLevels.toList())
