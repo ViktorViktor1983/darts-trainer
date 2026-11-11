@@ -58,7 +58,18 @@ fun OnlineLobbyScreen(
     var sets by remember { mutableStateOf(prefs.getInt("sets", 1)) }
     var saveToTraining by remember { mutableStateOf(prefs.getBoolean("save_to_training", false)) }
 
-    var showNicknameDialog by remember { mutableStateOf(nickname.isBlank()) }
+    // ФУНКЦИЯ ПРОВЕРКИ НИКА С ИСКЛЮЧЕНИЕМ ДЛЯ admin_viktor
+    fun isNicknameAllowed(name: String): Boolean {
+        val lowerName = name.lowercase()
+        if (lowerName == "admin_viktor") return true // Твое личное исключение
+        
+        val checkName = lowerName.replace("_", "")
+        return !checkName.contains("adm") && !checkName.contains("адм")
+    }
+
+    // ПРИНУДИТЕЛЬНО ОТКРЫВАЕМ ОКНО ВВОДА, ЕСЛИ НИК ПУСТОЙ ИЛИ ЗАПРЕЩЕННЫЙ
+    var showNicknameDialog by remember { mutableStateOf(nickname.isBlank() || !isNicknameAllowed(nickname)) }
+    
     var showPasswordDialog by remember { mutableStateOf(false) }
     var showLevelDialog by remember { mutableStateOf(false) }
     var showFriendDialog by remember { mutableStateOf(false) }
@@ -75,12 +86,6 @@ fun OnlineLobbyScreen(
 
     // Список друзей
     var friendsList by remember { mutableStateOf(FriendsStorage.getFriends(context)) }
-
-    // Защита от запрещенных ников
-    fun isNicknameAllowed(name: String): Boolean {
-        val lower = name.lowercase().replace("_", "")
-        return !lower.contains("adm") && !lower.contains("адм")
-    }
 
     LaunchedEffect(nickname, password, selectedLevel, is501, legs, sets, saveToTraining) {
         prefs.edit()
@@ -137,7 +142,7 @@ fun OnlineLobbyScreen(
                 Column {
                     Row(modifier = Modifier.fillMaxWidth().clickable { showNicknameDialog = true }, verticalAlignment = Alignment.CenterVertically) {
                         Text("Никнейм:", color = Color.White.copy(alpha = 0.7f), fontSize = 14.sp, modifier = Modifier.weight(1f))
-                        Text(if (nickname.isBlank()) "Задать ✏️" else nickname, color = if (nickname.isBlank()) GoldAccent else Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                        Text(if (nickname.isBlank()) "Задать ✏️" else nickname, color = if (nickname.isBlank() || !isNicknameAllowed(nickname)) GoldAccent else Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
                     }
                     Spacer(Modifier.height(12.dp))
                     Row(modifier = Modifier.fillMaxWidth().clickable { showPasswordDialog = true }, verticalAlignment = Alignment.CenterVertically) {
@@ -182,13 +187,14 @@ fun OnlineLobbyScreen(
             Spacer(Modifier.height(24.dp))
         }
 
-        Box(modifier = Modifier.fillMaxWidth().height(60.dp).clip(RoundedCornerShape(16.dp)).background(if (nickname.isNotBlank()) GoldAccent else TileBg).clickable(enabled = nickname.isNotBlank()) { searchLevels = setOf(selectedLevel); searchPhase = SearchPhase.SETUP }, contentAlignment = Alignment.Center) {
-            Text("🔍 НАЙТИ СОПЕРНИКА", color = if (nickname.isNotBlank()) DarkBg else Color.White.copy(alpha = 0.5f), fontSize = 16.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+        Box(modifier = Modifier.fillMaxWidth().height(60.dp).clip(RoundedCornerShape(16.dp)).background(if (nickname.isNotBlank() && isNicknameAllowed(nickname)) GoldAccent else TileBg).clickable(enabled = nickname.isNotBlank() && isNicknameAllowed(nickname)) { searchLevels = setOf(selectedLevel); searchPhase = SearchPhase.SETUP }, contentAlignment = Alignment.Center) {
+            Text("🔍 НАЙТИ СОПЕРНИКА", color = if (nickname.isNotBlank() && isNicknameAllowed(nickname)) DarkBg else Color.White.copy(alpha = 0.5f), fontSize = 16.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
         }
 
         Spacer(Modifier.height(12.dp))
 
-        Box(modifier = Modifier.fillMaxWidth().height(50.dp).clip(RoundedCornerShape(16.dp)).background(TileBg).clickable(enabled = nickname.isNotBlank()) { showFriendDialog = true }, contentAlignment = Alignment.Center) {
+        // КНОПКА МОРСКОЙ ВОЛНЫ
+        Box(modifier = Modifier.fillMaxWidth().height(50.dp).clip(RoundedCornerShape(16.dp)).background(Color(0xFF26A69A)).clickable(enabled = nickname.isNotBlank() && isNicknameAllowed(nickname)) { showFriendDialog = true }, contentAlignment = Alignment.Center) {
             Text("👥 Играть с другом", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
         }
         Spacer(Modifier.height(8.dp))
@@ -200,7 +206,7 @@ fun OnlineLobbyScreen(
         var errorMsg by remember { mutableStateOf("") }
         
         AlertDialog(
-            onDismissRequest = { showNicknameDialog = false },
+            onDismissRequest = { if (nickname.isNotBlank() && isNicknameAllowed(nickname)) showNicknameDialog = false },
             confirmButton = { 
                 TextButton(onClick = { 
                     val trimmed = input.trim().replace(" ", "_")
@@ -214,7 +220,11 @@ fun OnlineLobbyScreen(
                     }
                 }) { Text("Сохранить", color = Accent) } 
             },
-            dismissButton = { TextButton(onClick = { showNicknameDialog = false }) { Text("Отмена", color = Color.White.copy(alpha = 0.6f)) } },
+            dismissButton = { 
+                if (nickname.isNotBlank() && isNicknameAllowed(nickname)) {
+                    TextButton(onClick = { showNicknameDialog = false }) { Text("Отмена", color = Color.White.copy(alpha = 0.6f)) } 
+                }
+            },
             title = { Text("Ваш никнейм в онлайне", color = Color.White) },
             text = { 
                 Column { 
