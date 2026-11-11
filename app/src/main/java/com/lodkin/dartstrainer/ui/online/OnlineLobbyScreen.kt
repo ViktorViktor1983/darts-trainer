@@ -178,7 +178,7 @@ fun OnlineLobbyScreen(
 
         Spacer(Modifier.height(12.dp))
 
-        Box(modifier = Modifier.fillMaxWidth().height(50.dp).clip(RoundedCornerShape(16.dp)).background(TileBg).clickable(enabled = nickname.isNotBlank()) { showFriendDialog = true }, contentAlignment = Alignment.Center) {
+        Box(modifier = Modifier.fillMaxWidth().height(50.dp).clip(RoundedCornerShape(16.dp)).background(Color(0xFF26A69A)).clickable(enabled = nickname.isNotBlank()) { showFriendDialog = true }, contentAlignment = Alignment.Center) {
             Text("👥 Играть с другом", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
         }
         Spacer(Modifier.height(8.dp))
