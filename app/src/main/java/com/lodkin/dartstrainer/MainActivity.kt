@@ -54,6 +54,7 @@ import com.lodkin.dartstrainer.data.game501.Game501Serializer
 import com.lodkin.dartstrainer.data.game501.GameType
 import com.lodkin.dartstrainer.data.game501.OutMode
 import com.lodkin.dartstrainer.data.game501.Player501
+import com.lodkin.dartstrainer.data.online.OnlineInvite
 import com.lodkin.dartstrainer.data.online.OnlineNetworkManager
 import com.lodkin.dartstrainer.data.scoreset.ScoreSetDatabase
 import com.lodkin.dartstrainer.data.scoreset.ScoreSetRepository
@@ -216,6 +217,11 @@ fun DartsTrainerApp() {
     var currentOnlineMatchId by remember { mutableStateOf<String?>(null) }
     var currentOnlinePlayerIndex by remember { mutableStateOf(0) } // 0 - Хост, 1 - Гость
 
+    // ГЛОБАЛЬНЫЙ РАДАР ПРИГЛАШЕНИЙ
+    var globalIncomingInvite by remember { mutableStateOf<OnlineInvite?>(null) }
+    val onlinePrefs = remember { context.getSharedPreferences("online_prefs", Context.MODE_PRIVATE) }
+    val myOnlineNickname = onlinePrefs.getString("nickname", "") ?: ""
+
     // ── СТЕЙТЫ СВОБОДНОЙ ТРЕНИРОВКИ ──
     val prefs = context.getSharedPreferences("free_training_prefs", Context.MODE_PRIVATE)
     var isFreeTraining by remember { mutableStateOf(false) }
@@ -292,6 +298,19 @@ fun DartsTrainerApp() {
             isOnlineGame = false
             currentOnlineMatchId = null
             currentOnlinePlayerIndex = 0
+        }
+    }
+
+    // ГЛОБАЛЬНЫЙ РАДАР (Проверяет приглашения везде, кроме лобби и самой онлайн-игры)
+    LaunchedEffect(screen, myOnlineNickname, isOnlineGame) {
+        if (myOnlineNickname.isBlank() || screen == "online_lobby" || (isOnlineGame && screen == "game501_game")) return@LaunchedEffect
+        while (true) {
+            delay(3000L)
+            val inv = OnlineNetworkManager.checkIncomingInvite(myOnlineNickname)
+            if (inv != null) {
+                globalIncomingInvite = inv
+                break
+            }
         }
     }
 
@@ -741,6 +760,7 @@ fun DartsTrainerApp() {
                 showFreeNewRoundDialog -> showFreeNewRoundDialog = false
                 showTimeUpDialog -> showTimeUpDialog = false
                 examResultMessage != null -> examResultMessage = null
+                globalIncomingInvite != null -> globalIncomingInvite = null // Закрываем окно приглашения
                 
                 // 2. Если мы на экране тренировки, вызываем окно выхода
                 isTrainingActive && screen in TRAINING_SCREENS -> {
@@ -1106,6 +1126,55 @@ fun DartsTrainerApp() {
                 },
                 title = { Text("Результат экзамена", color = GoldAccent, fontSize = 20.sp, fontWeight = FontWeight.Bold) },
                 text = { Text(examResultMessage!!, color = Color.White, fontSize = 15.sp, lineHeight = 22.sp) }
+            )
+        }
+
+        // ГЛОБАЛЬНОЕ ПРИГЛАШЕНИЕ В ИГРУ
+        if (globalIncomingInvite != null) {
+            val inv = globalIncomingInvite!!
+            AlertDialog(
+                onDismissRequest = { },
+                confirmButton = {
+                    TextButton(onClick = {
+                        scope.launch {
+                            val success = OnlineNetworkManager.acceptInvite(inv.id, inv.matchId)
+                            if (success) {
+                                globalIncomingInvite = null
+                                // Подготовка параметров (гость)
+                                val is501 = onlinePrefs.getBoolean("is501", true)
+                                val level = onlinePrefs.getInt("level", 1)
+                                val legs = onlinePrefs.getInt("legs", 3)
+                                val sets = onlinePrefs.getInt("sets", 1)
+                                val saveToTraining = onlinePrefs.getBoolean("save_to_training", false)
+
+                                // Сохраняем текущее состояние тренировки, если она идет
+                                if (isTrainingActive) saveCurrentTrainingState()
+
+                                currentOnlineMatchId = inv.matchId
+                                currentOnlinePlayerIndex = 1 // Гость
+                                val params = OnlineGameParams(is501, level, legs, sets, inv.fromUser, saveToTraining, inv.matchId, false)
+                                startOnlineBotGame(params, 0)
+                            } else {
+                                globalIncomingInvite = null
+                            }
+                        }
+                    }) { Text("ПРИНЯТЬ", color = GoldAccent, fontWeight = FontWeight.Bold, fontSize = 18.sp) }
+                },
+                dismissButton = {
+                    TextButton(onClick = {
+                        scope.launch { OnlineNetworkManager.deleteInvite(inv.id) }
+                        globalIncomingInvite = null
+                    }) { Text("ОТКЛОНИТЬ", color = Color.White.copy(alpha = 0.6f)) }
+                },
+                title = { Text("Вас приглашают!", color = Accent, fontSize = 22.sp, fontWeight = FontWeight.Bold) },
+                text = {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
+                        Text("Игрок:", color = Color.White.copy(alpha = 0.7f), fontSize = 14.sp)
+                        Text(inv.fromUser, color = GoldAccent, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+                        Spacer(Modifier.height(12.dp))
+                        Text("хочет сыграть с вами матч.", color = Color.White, fontSize = 14.sp)
+                    }
+                }
             )
         }
     }
