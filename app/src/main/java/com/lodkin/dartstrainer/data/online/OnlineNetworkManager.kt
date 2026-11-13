@@ -51,21 +51,28 @@ object OnlineNetworkManager {
 
     private val JSON = "application/json; charset=utf-8".toMediaType()
 
+    // НОВЫЙ МЕТОД: Проверка связи с сервером (пинг)
+    suspend fun checkConnection(): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val request = Request.Builder().url("$BASE_URL/api/health").get().build()
+            client.newCall(request).execute().use { response -> response.isSuccessful }
+        } catch (e: Exception) {
+            false
+        }
+    }
+
     // УМНАЯ РЕГИСТРАЦИЯ С ПАРОЛЕМ И ЗАЩИТОЙ ОТ "adm"
     suspend fun registerPlayer(nickname: String, level: Int, password: String): String? = withContext(Dispatchers.IO) {
         try {
-            // 1. Защита от запрещенных ников (adm / адм)
             val lowerName = nickname.lowercase()
             val checkName = lowerName.replace("_", "")
             
-            // Исключение для личного ника автора
             if (lowerName != "admin_viktor") {
                 if (checkName.contains("adm") || checkName.contains("адм")) {
                     return@withContext "Никнейм содержит запрещенные буквы (adm/адм)"
                 }
             }
 
-            // 2. Ищем игрока по нику
             val filter = "(nickname='$nickname')"
             val encodedFilter = URLEncoder.encode(filter, "UTF-8")
             val checkUrl = "$PLAYERS_URL?filter=$encodedFilter"
@@ -98,16 +105,12 @@ object OnlineNetworkManager {
             }.toString()
 
             if (existingId != null) {
-                // Игрок существует. Проверяем пароль.
                 val dbPassword = existingPlayer?.optString("password") ?: ""
                 
                 if (dbPassword.isNotBlank()) {
-                    // Если в базе пароль есть, он должен совпадать
                     if (dbPassword != password) {
                         return@withContext "Неверный пароль"
                     }
-                } else {
-                    // Если в базе пароля нет (старый игрок), а мы ввели новый — он запишется через PATCH ниже.
                 }
 
                 val updateRequest = Request.Builder().url("$PLAYERS_URL/$existingId").patch(jsonBody.toRequestBody(JSON)).build()
@@ -119,7 +122,6 @@ object OnlineNetworkManager {
                     }
                 }
             } else {
-                // Игрока нет. Создаем нового.
                 val createRequest = Request.Builder().url(PLAYERS_URL).post(jsonBody.toRequestBody(JSON)).build()
                 client.newCall(createRequest).execute().use { response ->
                     if (response.isSuccessful) return@withContext null
