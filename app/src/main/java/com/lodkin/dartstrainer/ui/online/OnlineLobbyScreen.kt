@@ -40,6 +40,7 @@ import kotlinx.coroutines.launch
 import java.util.UUID
 
 private enum class SearchPhase { NONE, SETUP, SEARCHING, RESULT }
+private enum class NicknameCheckStatus { IDLE, CHECKING, FREE, TAKEN, ERROR }
 
 @Composable
 fun OnlineLobbyScreen(
@@ -61,7 +62,7 @@ fun OnlineLobbyScreen(
     // ФУНКЦИЯ ПРОВЕРКИ НИКА С ИСКЛЮЧЕНИЕМ ДЛЯ admin_viktor
     fun isNicknameAllowed(name: String): Boolean {
         val lowerName = name.lowercase()
-        if (lowerName == "admin_viktor") return true // Твое личное исключение
+        if (lowerName == "admin_viktor") return true
         
         val checkName = lowerName.replace("_", "")
         return !checkName.contains("adm") && !checkName.contains("адм")
@@ -70,7 +71,6 @@ fun OnlineLobbyScreen(
     // ПРИНУДИТЕЛЬНО ОТКРЫВАЕМ ОКНО ВВОДА, ЕСЛИ НИК ПУСТОЙ ИЛИ ЗАПРЕЩЕННЫЙ
     var showNicknameDialog by remember { mutableStateOf(nickname.isBlank() || !isNicknameAllowed(nickname)) }
     
-    var showPasswordDialog by remember { mutableStateOf(false) }
     var showLevelDialog by remember { mutableStateOf(false) }
     var showFriendDialog by remember { mutableStateOf(false) }
     var showAddFriendDialog by remember { mutableStateOf(false) }
@@ -145,7 +145,7 @@ fun OnlineLobbyScreen(
                         Text(if (nickname.isBlank()) "Задать ✏️" else nickname, color = if (nickname.isBlank() || !isNicknameAllowed(nickname)) GoldAccent else Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
                     }
                     Spacer(Modifier.height(12.dp))
-                    Row(modifier = Modifier.fillMaxWidth().clickable { showPasswordDialog = true }, verticalAlignment = Alignment.CenterVertically) {
+                    Row(modifier = Modifier.fillMaxWidth().clickable { showNicknameDialog = true }, verticalAlignment = Alignment.CenterVertically) {
                         Text("Пароль:", color = Color.White.copy(alpha = 0.7f), fontSize = 14.sp, modifier = Modifier.weight(1f))
                         Text(if (password.isBlank()) "Не задан ✏️" else "••••••", color = if (password.isBlank()) GoldAccent else Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
                     }
@@ -187,87 +187,153 @@ fun OnlineLobbyScreen(
             Spacer(Modifier.height(24.dp))
         }
 
-        Box(modifier = Modifier.fillMaxWidth().height(60.dp).clip(RoundedCornerShape(16.dp)).background(if (nickname.isNotBlank() && isNicknameAllowed(nickname)) GoldAccent else TileBg).clickable(enabled = nickname.isNotBlank() && isNicknameAllowed(nickname)) { searchLevels = setOf(selectedLevel); searchPhase = SearchPhase.SETUP }, contentAlignment = Alignment.Center) {
-            Text("🔍 НАЙТИ СОПЕРНИКА", color = if (nickname.isNotBlank() && isNicknameAllowed(nickname)) DarkBg else Color.White.copy(alpha = 0.5f), fontSize = 16.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+        Box(modifier = Modifier.fillMaxWidth().height(60.dp).clip(RoundedCornerShape(16.dp)).background(if (nickname.isNotBlank() && isNicknameAllowed(nickname) && password.isNotBlank()) GoldAccent else TileBg).clickable(enabled = nickname.isNotBlank() && isNicknameAllowed(nickname) && password.isNotBlank()) { searchLevels = setOf(selectedLevel); searchPhase = SearchPhase.SETUP }, contentAlignment = Alignment.Center) {
+            Text("🔍 НАЙТИ СОПЕРНИКА", color = if (nickname.isNotBlank() && isNicknameAllowed(nickname) && password.isNotBlank()) DarkBg else Color.White.copy(alpha = 0.5f), fontSize = 16.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
         }
 
         Spacer(Modifier.height(12.dp))
 
         // КНОПКА МОРСКОЙ ВОЛНЫ
-        Box(modifier = Modifier.fillMaxWidth().height(50.dp).clip(RoundedCornerShape(16.dp)).background(Color(0xFF26A69A)).clickable(enabled = nickname.isNotBlank() && isNicknameAllowed(nickname)) { showFriendDialog = true }, contentAlignment = Alignment.Center) {
+        Box(modifier = Modifier.fillMaxWidth().height(50.dp).clip(RoundedCornerShape(16.dp)).background(Color(0xFF26A69A)).clickable(enabled = nickname.isNotBlank() && isNicknameAllowed(nickname) && password.isNotBlank()) { showFriendDialog = true }, contentAlignment = Alignment.Center) {
             Text("👥 Играть с другом", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
         }
         Spacer(Modifier.height(8.dp))
     }
 
-    // --- ДИАЛОГ ВВОДА НИКНЕЙМА С ПРОВЕРКОЙ ---
+    // --- НОВЫЙ 2-ШАГОВЫЙ ДИАЛОГ ВВОДА ПРОФИЛЯ ---
     if (showNicknameDialog) {
-        var input by remember { mutableStateOf(nickname) }
+        var inputNick by remember { mutableStateOf(nickname) }
+        var inputPassword by remember { mutableStateOf(password) }
+        var checkStatus by remember { mutableStateOf(NicknameCheckStatus.IDLE) }
         var errorMsg by remember { mutableStateOf("") }
-        
+        var isProcessing by remember { mutableStateOf(false) }
+
         AlertDialog(
-            onDismissRequest = { if (nickname.isNotBlank() && isNicknameAllowed(nickname)) showNicknameDialog = false },
-            confirmButton = { 
-                TextButton(onClick = { 
-                    val trimmed = input.trim().replace(" ", "_")
-                    if (trimmed.isNotBlank()) {
-                        if (!isNicknameAllowed(trimmed)) {
-                            errorMsg = "Никнейм содержит запрещенные буквы (adm/адм)"
-                        } else {
-                            nickname = trimmed
-                            showNicknameDialog = false 
-                        }
-                    }
-                }) { Text("Сохранить", color = Accent) } 
-            },
-            dismissButton = { 
-                if (nickname.isNotBlank() && isNicknameAllowed(nickname)) {
-                    TextButton(onClick = { showNicknameDialog = false }) { Text("Отмена", color = Color.White.copy(alpha = 0.6f)) } 
+            onDismissRequest = { 
+                if (nickname.isNotBlank() && isNicknameAllowed(nickname) && password.isNotBlank()) {
+                    showNicknameDialog = false 
                 }
             },
-            title = { Text("Ваш никнейм в онлайне", color = Color.White) },
-            text = { 
-                Column { 
-                    Text("Придумайте уникальное имя, по которому вас будут узнавать другие игроки.", color = Color.White.copy(alpha = 0.7f), fontSize = 13.sp)
+            confirmButton = {
+                if (checkStatus == NicknameCheckStatus.IDLE || checkStatus == NicknameCheckStatus.ERROR) {
+                    // ШАГ 1: Проверка ника
+                    TextButton(
+                        enabled = inputNick.isNotBlank() && !isProcessing,
+                        onClick = {
+                            val trimmed = inputNick.trim().replace(" ", "_")
+                            if (!isNicknameAllowed(trimmed)) {
+                                errorMsg = "Никнейм содержит запрещенные буквы (adm/адм)"
+                                checkStatus = NicknameCheckStatus.ERROR
+                            } else {
+                                scope.launch {
+                                    isProcessing = true
+                                    errorMsg = ""
+                                    checkStatus = NicknameCheckStatus.CHECKING
+                                    val exists = OnlineNetworkManager.checkNicknameExists(trimmed)
+                                    checkStatus = if (exists) NicknameCheckStatus.TAKEN else NicknameCheckStatus.FREE
+                                    isProcessing = false
+                                }
+                            }
+                        }
+                    ) {
+                        if (isProcessing || checkStatus == NicknameCheckStatus.CHECKING) {
+                            CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Accent)
+                        } else {
+                            Text("Проверить", color = Accent, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                } else {
+                    // ШАГ 2: Регистрация или Вход
+                    val isTaken = checkStatus == NicknameCheckStatus.TAKEN
+                    val actionLabel = if (isTaken) "Войти" else "Зарегистрироваться"
+                    
+                    TextButton(
+                        enabled = inputPassword.isNotBlank() && !isProcessing,
+                        onClick = {
+                            scope.launch {
+                                isProcessing = true
+                                errorMsg = ""
+                                val trimmed = inputNick.trim().replace(" ", "_")
+                                val regError = OnlineNetworkManager.registerPlayer(trimmed, selectedLevel, inputPassword.trim())
+                                if (regError != null) {
+                                    errorMsg = regError
+                                    isProcessing = false
+                                } else {
+                                    nickname = trimmed
+                                    password = inputPassword.trim()
+                                    showNicknameDialog = false
+                                }
+                            }
+                        }
+                    ) {
+                        if (isProcessing) {
+                            CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Accent)
+                        } else {
+                            Text(actionLabel, color = Accent, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            },
+            dismissButton = {
+                if (nickname.isNotBlank() && isNicknameAllowed(nickname) && password.isNotBlank()) {
+                    TextButton(onClick = { showNicknameDialog = false }) { 
+                        Text("Отмена", color = Color.White.copy(alpha = 0.6f)) 
+                    }
+                }
+            },
+            title = { Text("Ваш профиль в онлайне", color = Color.White) },
+            text = {
+                Column {
+                    Text("Придумайте уникальное имя.", color = Color.White.copy(alpha = 0.7f), fontSize = 13.sp)
                     Spacer(Modifier.height(8.dp))
+                    
                     OutlinedTextField(
-                        value = input, onValueChange = { if (it.length <= 15) { input = it; errorMsg = "" } }, 
-                        singleLine = true, placeholder = { Text("Например: Vitya_501", color = TileBg) }, 
-                        colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Color.White, unfocusedTextColor = Color.White, focusedBorderColor = Accent, unfocusedBorderColor = TileBg, cursorColor = Accent)
-                    ) 
+                        value = inputNick,
+                        onValueChange = { 
+                            if (it.length <= 15) { 
+                                inputNick = it
+                                errorMsg = ""
+                                checkStatus = NicknameCheckStatus.IDLE
+                            } 
+                        },
+                        singleLine = true,
+                        enabled = checkStatus == NicknameCheckStatus.IDLE || checkStatus == NicknameCheckStatus.ERROR,
+                        placeholder = { Text("Например: Vitya_501", color = TileBg) },
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = Color.White, unfocusedTextColor = Color.White,
+                            focusedBorderColor = Accent, unfocusedBorderColor = TileBg, cursorColor = Accent
+                        )
+                    )
+
+                    // СТАТУС ПРОВЕРКИ
+                    if (checkStatus == NicknameCheckStatus.FREE) {
+                        Spacer(Modifier.height(8.dp))
+                        Text("✅ Никнейм свободен. Придумайте пароль.", color = Color(0xFF81C784), fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                    } else if (checkStatus == NicknameCheckStatus.TAKEN) {
+                        Spacer(Modifier.height(8.dp))
+                        Text("❌ Никнейм занят. Введите пароль, чтобы войти.", color = ErrorColor, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                    }
+
+                    // ПОЛЕ ПАРОЛЯ (появляется только после проверки)
+                    if (checkStatus == NicknameCheckStatus.FREE || checkStatus == NicknameCheckStatus.TAKEN) {
+                        Spacer(Modifier.height(12.dp))
+                        OutlinedTextField(
+                            value = inputPassword,
+                            onValueChange = { inputPassword = it; errorMsg = "" },
+                            singleLine = true,
+                            placeholder = { Text("Введите пароль", color = TileBg) },
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedTextColor = Color.White, unfocusedTextColor = Color.White,
+                                focusedBorderColor = Accent, unfocusedBorderColor = TileBg, cursorColor = Accent
+                            )
+                        )
+                    }
+
                     if (errorMsg.isNotBlank()) {
                         Spacer(Modifier.height(8.dp))
                         Text(errorMsg, color = ErrorColor, fontSize = 12.sp)
                     }
-                } 
-            }
-        )
-    }
-
-    // --- ДИАЛОГ ВВОДА ПАРОЛЯ ---
-    if (showPasswordDialog) {
-        var input by remember { mutableStateOf(password) }
-        
-        AlertDialog(
-            onDismissRequest = { showPasswordDialog = false },
-            confirmButton = { 
-                TextButton(onClick = { 
-                    password = input.trim()
-                    showPasswordDialog = false 
-                }) { Text("Сохранить", color = Accent) } 
-            },
-            dismissButton = { TextButton(onClick = { showPasswordDialog = false }) { Text("Отмена", color = Color.White.copy(alpha = 0.6f)) } },
-            title = { Text("Пароль", color = Color.White) },
-            text = { 
-                Column { 
-                    Text("Если забудете пароль или не зададите его, то при сбросе телефона не сможете зайти под своим ником.", color = Color.White.copy(alpha = 0.7f), fontSize = 13.sp)
-                    Spacer(Modifier.height(8.dp))
-                    OutlinedTextField(
-                        value = input, onValueChange = { input = it }, 
-                        singleLine = true, placeholder = { Text("Введите пароль", color = TileBg) }, 
-                        colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Color.White, unfocusedTextColor = Color.White, focusedBorderColor = Accent, unfocusedBorderColor = TileBg, cursorColor = Accent)
-                    ) 
-                } 
+                }
             }
         )
     }
@@ -337,7 +403,6 @@ fun OnlineLobbyScreen(
                         )
                         Spacer(Modifier.width(8.dp))
                         
-                        // КНОПКА СПИСКА ДРУЗЕЙ
                         Box {
                             TextButton(onClick = { isDropdownExpanded = true }) {
                                 Text("Список друзей", color = Accent, fontSize = 12.sp, fontWeight = FontWeight.Bold)
