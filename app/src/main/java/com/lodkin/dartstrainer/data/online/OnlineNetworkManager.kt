@@ -51,7 +51,30 @@ object OnlineNetworkManager {
 
     private val JSON = "application/json; charset=utf-8".toMediaType()
 
-    // НОВЫЙ МЕТОД: Проверка связи с сервером (пинг)
+    // НОВЫЙ МЕТОД: Проверка, занят ли никнейм (без пароля)
+    suspend fun checkNicknameExists(nickname: String): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val filter = "(nickname='$nickname')"
+            val encodedFilter = URLEncoder.encode(filter, "UTF-8")
+            val checkUrl = "$PLAYERS_URL?filter=$encodedFilter"
+            
+            val request = Request.Builder().url(checkUrl).get().build()
+            client.newCall(request).execute().use { response ->
+                if (response.isSuccessful) {
+                    val body = response.body?.string()
+                    if (body != null) {
+                        val items = JSONObject(body).optJSONArray("items")
+                        return@withContext (items != null && items.length() > 0)
+                    }
+                }
+            }
+            false
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    // Проверка связи с сервером (пинг)
     suspend fun checkConnection(): Boolean = withContext(Dispatchers.IO) {
         try {
             val request = Request.Builder().url("$BASE_URL/api/health").get().build()
@@ -61,7 +84,7 @@ object OnlineNetworkManager {
         }
     }
 
-    // УМНАЯ РЕГИСТРАЦИЯ С ПАРОЛЕМ И ЗАЩИТОЙ ОТ "adm"
+    // УМНАЯ РЕГИСТРАЦИЯ (обновленная для работы по 2-шаговой схеме)
     suspend fun registerPlayer(nickname: String, level: Int, password: String): String? = withContext(Dispatchers.IO) {
         try {
             val lowerName = nickname.lowercase()
@@ -105,14 +128,18 @@ object OnlineNetworkManager {
             }.toString()
 
             if (existingId != null) {
+                // Игрок существует. Проверяем пароль.
                 val dbPassword = existingPlayer?.optString("password") ?: ""
                 
                 if (dbPassword.isNotBlank()) {
                     if (dbPassword != password) {
                         return@withContext "Неверный пароль"
                     }
+                } else if (password.isBlank()) {
+                    return@withContext "Этот никнейм уже занят. Введите пароль, чтобы войти."
                 }
 
+                // Обновляем уровень и пароль (если его не было)
                 val updateRequest = Request.Builder().url("$PLAYERS_URL/$existingId").patch(jsonBody.toRequestBody(JSON)).build()
                 client.newCall(updateRequest).execute().use { response ->
                     if (response.isSuccessful) return@withContext null
@@ -122,6 +149,7 @@ object OnlineNetworkManager {
                     }
                 }
             } else {
+                // Игрока нет. Создаем нового.
                 val createRequest = Request.Builder().url(PLAYERS_URL).post(jsonBody.toRequestBody(JSON)).build()
                 client.newCall(createRequest).execute().use { response ->
                     if (response.isSuccessful) return@withContext null
