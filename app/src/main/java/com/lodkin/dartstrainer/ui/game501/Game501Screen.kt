@@ -158,11 +158,11 @@ fun Game501Screen(
     // ЛОГИКА СИНХРОНИЗАЦИИ ПО СЕТИ
     // ────────────────────────────────────────────────────────
     
-    LaunchedEffect(game, isOnlineGame) {
-        if (isOnlineGame && onlineMatchId != null) {
+    LaunchedEffect(game, isOnlineGame, isSendingMove) {
+        if (isOnlineGame && onlineMatchId != null && !isSendingMove) {
             val currentJson = Game501Serializer.toJson(game)
             
-            if (currentJson != lastSyncedJson && !isSendingMove) {
+            if (currentJson != lastSyncedJson) {
                 isSendingMove = true 
                 
                 scope.launch {
@@ -191,7 +191,8 @@ fun Game501Screen(
         if (!isOnlineGame || onlineMatchId == null) return@LaunchedEffect
         while (true) {
             delay(1500L)
-            if (isSendingMove) continue 
+            // ЗАЩИТА: Если идет отправка или открыто окно ввода - НЕ ЧИТАЕМ СЕРВЕР
+            if (isSendingMove || dialogOpen) continue 
             
             val remote = OnlineNetworkManager.getGameState(onlineMatchId)
             if (remote != null) {
@@ -249,7 +250,6 @@ fun Game501Screen(
             if (remoteMsgs.size > lastSeenMessageCount) {
                 val newMsgs = remoteMsgs.drop(lastSeenMessageCount)
                 for (msg in newMsgs) {
-                    // Не добавляем свои же сообщения (они уже добавлены локально)
                     if (msg.fromUser != myName) {
                         chatMessages.add(ChatMessage(msg.id, msg.fromUser, msg.text, isMyMessage = false))
                         if (!isChatExpanded) unreadChatCount++
@@ -384,23 +384,30 @@ fun Game501Screen(
 
         saveHistory()
         val scoreBefore = currentPlayer.score
+        val scoreAfter = scoreBefore - value
+        val requiresDouble = game.outMode == OutMode.DOUBLE_OUT || game.outMode == OutMode.DOUBLE_IN_OUT
 
-        if (value == scoreBefore && value > 0) {
-            chosenDarts = 0
-            showLegQuestionDialog = true
-            return
-        }
-
-        if (value > scoreBefore) {
+        // ПЕРЕБОР
+        if (scoreAfter < 0 || (scoreAfter == 1 && requiresDouble)) {
             val updated = Game501Logic.applyTurnScore(game, value)
             showBustMessage = true
             game = updated
-            if (scoreBefore <= 50) showDoublesOnlyDialog = true
+            if (scoreBefore in 2..50) showDoublesOnlyDialog = true
             else game = Game501Logic.finishTurn(game)
             if (isOnlineGame) addChatSystemMessage("${currentPlayer.name}: Перебор!")
             return
         }
 
+        // ТОЧНОЕ ЗАКРЫТИЕ В 0
+        if (scoreAfter == 0) {
+            val updated = Game501Logic.applyTurnScore(game, value)
+            game = updated
+            chosenDarts = 0
+            showLegQuestionDialog = true
+            return
+        }
+
+        // ОБЫЧНЫЙ ХОД
         val updated = Game501Logic.applyTurnScore(game, value)
         if (!updated.isFinished) {
             recordSum = value
@@ -408,9 +415,14 @@ fun Game501Screen(
         }
         game = updated
 
-        if (isOnlineGame) addChatSystemMessage("${currentPlayer.name} набрал $value. Остаток: ${updated.players[game.currentPlayerIndex].score}")
-        if (scoreBefore <= 50) showDoublesOnlyDialog = true
-        else game = Game501Logic.finishTurn(game)
+        if (isOnlineGame) addChatSystemMessage("${currentPlayer.name} набрал $value. Остаток: $scoreAfter")
+        
+        // ПРОВЕРКА: если остаток попал в зону удвоений (2..50)
+        if (scoreAfter in 2..50) {
+            showDoublesOnlyDialog = true
+        } else {
+            game = Game501Logic.finishTurn(game)
+        }
     }
 
     fun submitSum() {
@@ -437,6 +449,7 @@ fun Game501Screen(
 
         saveHistory()
         val scoreBefore = currentPlayer.score
+        val requiresDouble = game.outMode == OutMode.DOUBLE_OUT || game.outMode == OutMode.DOUBLE_IN_OUT
 
         if (value == 0) {
             chosenDarts = 0
@@ -444,12 +457,11 @@ fun Game501Screen(
             return
         }
 
-        val requiresDouble = game.outMode == OutMode.DOUBLE_OUT || game.outMode == OutMode.DOUBLE_IN_OUT
         if (value == 1 && requiresDouble) {
             val updated = Game501Logic.applyTurnRemaining(game, value)
             showBustMessage = true
             game = updated
-            if (scoreBefore <= 50) showDoublesOnlyDialog = true
+            if (scoreBefore in 2..50) showDoublesOnlyDialog = true
             else game = Game501Logic.finishTurn(game)
             if (isOnlineGame) addChatSystemMessage("${currentPlayer.name}: Перебор!")
             return
@@ -461,8 +473,13 @@ fun Game501Screen(
         game = updated
 
         if (isOnlineGame) addChatSystemMessage("${currentPlayer.name} набрал $gained. Остаток: $value")
-        if (scoreBefore <= 50) showDoublesOnlyDialog = true
-        else game = Game501Logic.finishTurn(game)
+        
+        // ПРОВЕРКА: если новый остаток (value) в зоне удвоений
+        if (value in 2..50) {
+            showDoublesOnlyDialog = true
+        } else {
+            game = Game501Logic.finishTurn(game)
+        }
     }
 
     fun pressLeg() {
@@ -647,7 +664,6 @@ fun Game501Screen(
                             messages = chatMessages,
                             unreadCount = unreadChatCount,
                             onSendMessage = { text ->
-                                // ОТПРАВЛЯЕМ НА СЕРВЕР И ЛОВИМ ОШИБКУ
                                 chatMessages.add(ChatMessage(System.currentTimeMillis().toString(), myName, text, isMyMessage = true))
                                 if (onlineMatchId != null) {
                                     scope.launch {
