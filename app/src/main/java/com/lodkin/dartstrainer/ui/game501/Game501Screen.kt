@@ -108,7 +108,6 @@ fun Game501Screen(
     var lastSeenLegHistorySize by remember { mutableStateOf(game.legHistory.size) }
     var lastSeenSetNumber by remember { mutableStateOf(game.currentSetNumber) }
 
-    // Стейты для чата
     var isChatExpanded by remember { mutableStateOf(true) }
     var unreadChatCount by remember { mutableStateOf(0) }
     val chatMessages = remember { mutableStateListOf<ChatMessage>() }
@@ -119,20 +118,24 @@ fun Game501Screen(
     var showLegRecordCelebration by remember { mutableStateOf(false) }
     var showMatchRecordCelebration by remember { mutableStateOf(false) }
 
-    // Стейт для сетевой синхронизации
+    // === НОВАЯ ЛОГИКА СИНХРОНИЗАЦИИ ===
     var lastSyncedJson by remember { mutableStateOf("") }
     var isSendingMove by remember { mutableStateOf(false) }
+    var pendingMoveToSync by remember { mutableStateOf<String?>(null) }
+    var hasConnectionError by remember { mutableStateOf(false) }
+    var forceSyncTrigger by remember { mutableStateOf(0) }
 
     val allBots = game.players.all { it.isBot }
 
     val isMyTurn = !isOnlineGame || (game.currentPlayerIndex == onlinePlayerIndex)
-    val canInteract = !game.isFinished && game.currentPlayer?.isBot != true && isMyTurn && !isSendingMove
+    // Блокировка: если отправляем, или есть ожидающий ход, или нет связи
+    val canInteract = !game.isFinished && game.currentPlayer?.isBot != true && isMyTurn && !isSendingMove && !hasConnectionError
 
     val history = remember { mutableStateListOf<Game501>() }
 
     fun saveHistory() { history.add(game); if (history.size > 300) history.removeAt(0) }
     fun undo() { 
-        if (history.isNotEmpty() && !isSendingMove) { 
+        if (history.isNotEmpty() && !isSendingMove && !hasConnectionError) { 
             game = history.removeAt(history.lastIndex) 
         } 
     }
@@ -140,7 +143,7 @@ fun Game501Screen(
     val dialogOpen = showLegWonDialog || showSetWonDialog || showWinDialog ||
         showLegQuestionDialog || showDoublesQuestionDialog || showDoublesOnlyDialog
     
-    val canUndo = history.isNotEmpty() && !dialogOpen && !isSendingMove
+    val canUndo = history.isNotEmpty() && !dialogOpen && !isSendingMove && !hasConnectionError
 
     LaunchedEffect(isOnlineGame) {
         if (isOnlineGame) {
@@ -155,44 +158,61 @@ fun Game501Screen(
     }
 
     // ────────────────────────────────────────────────────────
-    // ЛОГИКА СИНХРОНИЗАЦИИ ПО СЕТИ
+    // ЛОГИКА СИНХРОНИЗАЦИИ (Отправка с повтором и блокировкой)
     // ────────────────────────────────────────────────────────
     
-    LaunchedEffect(game, isOnlineGame, isSendingMove) {
-        if (isOnlineGame && onlineMatchId != null && !isSendingMove) {
+    // Функция, которая ставит ход в очередь на отправку
+    fun prepareAndSendMove() {
+        if (isOnlineGame && onlineMatchId != null) {
             val currentJson = Game501Serializer.toJson(game)
-            
             if (currentJson != lastSyncedJson) {
-                isSendingMove = true 
-                
-                scope.launch {
-                    val success = withContext(Dispatchers.IO) {
-                        OnlineNetworkManager.upsertGameState(
-                            onlineMatchId,
-                            "501",
-                            currentJson,
-                            game.players[0].name,
-                            game.players[1].name
-                        )
-                    }
-                    
-                    if (success) {
-                        lastSyncedJson = currentJson
-                    }
-                    
-                    delay(800L) 
-                    isSendingMove = false 
+                pendingMoveToSync = currentJson
+                hasConnectionError = false
+                forceSyncTrigger++ 
+            }
+        }
+    }
+
+    LaunchedEffect(forceSyncTrigger, pendingMoveToSync) {
+        val jsonToSend = pendingMoveToSync
+        if (isOnlineGame && onlineMatchId != null && jsonToSend != null) {
+            isSendingMove = true
+            
+            while (true) {
+                val success = withContext(Dispatchers.IO) {
+                    OnlineNetworkManager.upsertGameState(
+                        onlineMatchId,
+                        "501",
+                        jsonToSend,
+                        game.players[0].name,
+                        game.players[1].name
+                    )
+                }
+
+                if (success) {
+                    lastSyncedJson = jsonToSend
+                    pendingMoveToSync = null
+                    hasConnectionError = false
+                    isSendingMove = false
+                    break
+                } else {
+                    // Ошибка связи
+                    hasConnectionError = true
+                    isSendingMove = false
+                    delay(3000L) // Ждем 3 секунды и пробуем снова
+                    isSendingMove = true
                 }
             }
         }
     }
 
+    // Чтение сервера
     LaunchedEffect(isOnlineGame, onlineMatchId) {
         if (!isOnlineGame || onlineMatchId == null) return@LaunchedEffect
         while (true) {
             delay(1500L)
-            // ЗАЩИТА: Если идет отправка или открыто окно ввода - НЕ ЧИТАЕМ СЕРВЕР
-            if (isSendingMove || dialogOpen) continue 
+            // Блокируем чтение, если идет отправка или ждем сеть или открыт диалог
+            if (isSendingMove || pendingMoveToSync != null || dialogOpen || hasConnectionError) continue 
             
             val remote = OnlineNetworkManager.getGameState(onlineMatchId)
             if (remote != null) {
@@ -217,7 +237,6 @@ fun Game501Screen(
 
                     if (remoteJson != localJson) {
                         if (isRemoteMyTurn || remoteGame.isFinished) {
-                            // СНАЧАЛА ВЫЧИСЛЯЕМ ПРЕДЫДУЩИЙ НАБОР
                             val remoteP1Score = remoteGame.players[0].matchScoreGained
                             val remoteP2Score = remoteGame.players[1].matchScoreGained
                             val localP1Score = game.players[0].matchScoreGained
@@ -226,7 +245,6 @@ fun Game501Screen(
                             if (remoteP1Score > localP1Score) lastScoreA = remoteP1Score - localP1Score
                             if (remoteP2Score > localP2Score) lastScoreB = remoteP2Score - localP2Score
 
-                            // ПОТОМ ОБНОВЛЯЕМ ИГРУ
                             game = remoteGame
                             lastSyncedJson = remoteJson
                         } else {
@@ -241,7 +259,6 @@ fun Game501Screen(
         }
     }
 
-    // СЛУШАЕМ ЧАТ
     LaunchedEffect(isOnlineGame, onlineMatchId) {
         if (!isOnlineGame || onlineMatchId == null) return@LaunchedEffect
         while (true) {
@@ -259,8 +276,6 @@ fun Game501Screen(
             }
         }
     }
-
-    // ────────────────────────────────────────────────────────
 
     fun syncFinishGame() {
         if (isOnlineGame && onlineMatchId != null) {
@@ -387,18 +402,19 @@ fun Game501Screen(
         val scoreAfter = scoreBefore - value
         val requiresDouble = game.outMode == OutMode.DOUBLE_OUT || game.outMode == OutMode.DOUBLE_IN_OUT
 
-        // ПЕРЕБОР
         if (scoreAfter < 0 || (scoreAfter == 1 && requiresDouble)) {
             val updated = Game501Logic.applyTurnScore(game, value)
             showBustMessage = true
             game = updated
             if (scoreBefore in 2..50) showDoublesOnlyDialog = true
-            else game = Game501Logic.finishTurn(game)
+            else { 
+                game = Game501Logic.finishTurn(game)
+                prepareAndSendMove()
+            }
             if (isOnlineGame) addChatSystemMessage("${currentPlayer.name}: Перебор!")
             return
         }
 
-        // ТОЧНОЕ ЗАКРЫТИЕ В 0
         if (scoreAfter == 0) {
             val updated = Game501Logic.applyTurnScore(game, value)
             game = updated
@@ -407,7 +423,6 @@ fun Game501Screen(
             return
         }
 
-        // ОБЫЧНЫЙ ХОД
         val updated = Game501Logic.applyTurnScore(game, value)
         if (!updated.isFinished) {
             recordSum = value
@@ -417,11 +432,11 @@ fun Game501Screen(
 
         if (isOnlineGame) addChatSystemMessage("${currentPlayer.name} набрал $value. Остаток: $scoreAfter")
         
-        // ПРОВЕРКА: если остаток попал в зону удвоений (2..50)
         if (scoreAfter in 2..50) {
             showDoublesOnlyDialog = true
         } else {
             game = Game501Logic.finishTurn(game)
+            prepareAndSendMove()
         }
     }
 
@@ -462,7 +477,10 @@ fun Game501Screen(
             showBustMessage = true
             game = updated
             if (scoreBefore in 2..50) showDoublesOnlyDialog = true
-            else game = Game501Logic.finishTurn(game)
+            else { 
+                game = Game501Logic.finishTurn(game)
+                prepareAndSendMove()
+            }
             if (isOnlineGame) addChatSystemMessage("${currentPlayer.name}: Перебор!")
             return
         }
@@ -474,11 +492,11 @@ fun Game501Screen(
 
         if (isOnlineGame) addChatSystemMessage("${currentPlayer.name} набрал $gained. Остаток: $value")
         
-        // ПРОВЕРКА: если новый остаток (value) в зоне удвоений
         if (value in 2..50) {
             showDoublesOnlyDialog = true
         } else {
             game = Game501Logic.finishTurn(game)
+            prepareAndSendMove()
         }
     }
 
@@ -580,9 +598,11 @@ fun Game501Screen(
                             bullThrowP1 = if (onlinePlayerIndex == 0) score else game.bullThrowP1,
                             bullThrowP2 = if (onlinePlayerIndex == 1) score else game.bullThrowP2
                         )
+                        prepareAndSendMove()
                     },
                     onReThrow = {
                         game = game.copy(bullThrowP1 = null, bullThrowP2 = null)
+                        prepareAndSendMove()
                     },
                     onStartGame = { winner ->
                         game = game.copy(
@@ -590,10 +610,10 @@ fun Game501Screen(
                             currentPlayerIndex = winner,
                             lastLegStartingTeam = winner
                         )
+                        prepareAndSendMove()
                     }
                 )
             } else {
-                // СТАНДАРТНЫЙ ЭКРАН ИГРЫ
                 PlayersHeader501(game = game, onlinePlayerIndex = onlinePlayerIndex)
 
                 Row(
@@ -622,9 +642,11 @@ fun Game501Screen(
                             Text("ОЖИДАНИЕ ХОДА СОПЕРНИКА...", color = GoldAccent, fontSize = 14.sp, fontWeight = FontWeight.Bold)
                         }
                     }
-                    if (isOnlineGame && isSendingMove) {
-                        Box(modifier = Modifier.fillMaxWidth().background(Accent.copy(alpha = 0.15f)).padding(vertical = 8.dp), contentAlignment = Alignment.Center) {
-                            Text("ОТПРАВКА ХОДА...", color = Accent, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                    if (isOnlineGame && (isSendingMove || pendingMoveToSync != null || hasConnectionError)) {
+                        val msg = if (hasConnectionError) "НЕТ СВЯЗИ. ЖДЕМ ВОССТАНОВЛЕНИЯ..." else "ОТПРАВКА ХОДА..."
+                        val col = if (hasConnectionError) ErrorColor else Accent
+                        Box(modifier = Modifier.fillMaxWidth().background(col.copy(alpha = 0.15f)).padding(vertical = 8.dp), contentAlignment = Alignment.Center) {
+                            Text(msg, color = col, fontSize = 14.sp, fontWeight = FontWeight.Bold)
                         }
                     }
 
@@ -747,6 +769,7 @@ fun Game501Screen(
                                         game = Game501Logic.closeLegManually(game, chosenDarts, n)
                                         showDoublesQuestionDialog = false
                                         chosenDarts = 0
+                                        prepareAndSendMove()
                                     }.padding(vertical = 14.dp),
                                 contentAlignment = Alignment.Center
                             ) { Text("$n", color = if (btnEnabled) Color(0xFF121212) else Color(0xFF121212).copy(alpha = 0.4f), fontSize = 20.sp, fontWeight = FontWeight.Bold) }
@@ -775,6 +798,7 @@ fun Game501Screen(
                                         game = Game501Logic.recordDoublesAttempts(game, n)
                                         game = Game501Logic.finishTurn(game)
                                         showDoublesOnlyDialog = false
+                                        prepareAndSendMove()
                                     }.padding(vertical = 14.dp),
                                 contentAlignment = Alignment.Center
                             ) { Text("$n", color = Color(0xFF121212), fontSize = 20.sp, fontWeight = FontWeight.Bold) }
@@ -935,13 +959,11 @@ private fun BullThrowScreen(
     val bothThrown = p1Throw != null && p2Throw != null
     val isTie = bothThrown && p1Throw == p2Throw
 
-    // Вычисляем победителя
     var winnerIndex: Int? = null
     if (bothThrown && !isTie) {
         winnerIndex = if ((p1Throw ?: 0) > (p2Throw ?: 0)) 0 else 1
     }
 
-    // АВТОСТАРТ ЧЕРЕЗ 2 СЕКУНДЫ
     LaunchedEffect(winnerIndex) {
         if (winnerIndex != null) {
             delay(2000L)
@@ -955,7 +977,6 @@ private fun BullThrowScreen(
     ) {
         Text("РОЗЫГРЫШ БУЛЛА", color = GoldAccent, fontSize = 28.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 24.dp))
 
-        // Табло
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             BullPlayerBox(p1Name, p1Throw, isMyIndex = myIndex == 0)
             BullPlayerBox(p2Name, p2Throw, isMyIndex = myIndex == 1)
@@ -963,12 +984,10 @@ private fun BullThrowScreen(
 
         Spacer(Modifier.weight(1f))
 
-        // Зона действий
         if (!bothThrown) {
             if (myThrow == null) {
                 Text("ВАШ БРОСОК", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 16.dp))
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    // СЕРАЯ КНОПКА "МИМО"
                     BullButton("МИМО", Color.Gray, Modifier.weight(1f)) { onThrow(0) }
                     BullButton("ЗЕЛЁНЫЙ\n(25)", Color(0xFF4CAF50), Modifier.weight(1f)) { onThrow(25) }
                     BullButton("КРАСНЫЙ\n(50)", Color(0xFFF44336), Modifier.weight(1f)) { onThrow(50) }
