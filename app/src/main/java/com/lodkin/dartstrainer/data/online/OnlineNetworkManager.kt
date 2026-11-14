@@ -19,7 +19,7 @@ data class OnlineInvite(
     val id: String,
     val fromUser: String,
     val matchId: String,
-    val inviteType: String // "global" или "private"
+    val inviteType: String
 )
 
 data class GameStateRecord(
@@ -83,7 +83,8 @@ object OnlineNetworkManager {
         }
     }
 
-    suspend fun registerPlayer(nickname: String, level: Int, password: String): String? = withContext(Dispatchers.IO) {
+    // Обновленная регистрация (сохраняем настройки приглашений)
+    suspend fun registerPlayer(nickname: String, level: Int, password: String, allowGlobal: Boolean, allowPrivate: Boolean): String? = withContext(Dispatchers.IO) {
         try {
             val lowerName = nickname.lowercase()
             val checkName = lowerName.replace("_", "")
@@ -120,6 +121,8 @@ object OnlineNetworkManager {
             val jsonBody = JSONObject().apply {
                 put("nickname", nickname)
                 put("level", level)
+                put("allow_global", allowGlobal)
+                put("allow_private", allowPrivate)
                 if (password.isNotBlank()) {
                     put("password", password)
                 }
@@ -159,10 +162,12 @@ object OnlineNetworkManager {
         }
     }
 
-    suspend fun findMatchingOpponents(myNickname: String, levels: List<Int>): List<String> = withContext(Dispatchers.IO) {
+    // Обновленная функция поиска (учитываем, кто хочет получать приглашения)
+    suspend fun findMatchingOpponents(myNickname: String, levels: List<Int>, isGlobal: Boolean): List<String> = withContext(Dispatchers.IO) {
         try {
             val levelsFilter = levels.joinToString(" || ") { "level=$it" }
-            val filter = "(nickname!='$myNickname' && ($levelsFilter))"
+            val settingFilter = if (isGlobal) "&& allow_global = true" else "&& allow_private = true"
+            val filter = "(nickname!='$myNickname' && ($levelsFilter) $settingFilter)"
             val encodedFilter = URLEncoder.encode(filter, "UTF-8")
             val url = "$PLAYERS_URL?filter=$encodedFilter"
             
@@ -193,7 +198,7 @@ object OnlineNetworkManager {
                     put("to_user", toUser)
                     put("status", "pending")
                     put("match_id", matchId)
-                    put("invite_type", "global") // Ставим метку
+                    put("invite_type", "global")
                 }.toString()
 
                 val request = Request.Builder().url(INVITES_URL).post(jsonBody.toRequestBody(JSON)).build()
@@ -207,13 +212,32 @@ object OnlineNetworkManager {
 
     suspend fun sendSingleInvite(fromUser: String, toUser: String): String? = withContext(Dispatchers.IO) {
         try {
+            // ПЕРЕД ОТПРАВКОЙ ЛИЧНОГО ПРИГЛАШЕНИЯ ПРОВЕРЯЕМ, РАЗРЕШИЛ ЛИ ИГРОК ИХ
+            val filter = "(nickname='$toUser'%26%26allow_private=true)"
+            val encodedFilter = URLEncoder.encode(filter, "UTF-8")
+            val checkUrl = "$PLAYERS_URL?filter=$encodedFilter"
+            
+            val checkReq = Request.Builder().url(checkUrl).get().build()
+            var allowed = false
+            client.newCall(checkReq).execute().use { response ->
+                if (response.isSuccessful) {
+                    val body = response.body?.string()
+                    if (body != null) {
+                        val items = JSONObject(body).optJSONArray("items")
+                        allowed = items != null && items.length() > 0
+                    }
+                }
+            }
+            
+            if (!allowed) return@withContext null // Игрок выключил личные приглашения
+
             val matchId = UUID.randomUUID().toString()
             val jsonBody = JSONObject().apply {
                 put("from_user", fromUser)
                 put("to_user", toUser)
                 put("status", "pending")
                 put("match_id", matchId)
-                put("invite_type", "private") // Ставим метку
+                put("invite_type", "private")
             }.toString()
 
             val request = Request.Builder().url(INVITES_URL).post(jsonBody.toRequestBody(JSON)).build()
@@ -236,7 +260,7 @@ object OnlineNetworkManager {
                     val items = JSONObject(body).optJSONArray("items")
                     if (items != null && items.length() > 0) {
                         val inv = items.getJSONObject(0)
-                        val type = inv.optString("invite_type", "global") // Если пусто, считаем общим
+                        val type = inv.optString("invite_type", "global")
                         return@withContext OnlineInvite(inv.getString("id"), inv.getString("from_user"), inv.getString("match_id"), type)
                     }
                 }
