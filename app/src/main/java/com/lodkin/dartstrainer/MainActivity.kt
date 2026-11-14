@@ -305,12 +305,30 @@ fun DartsTrainerApp() {
     // ГЛОБАЛЬНЫЙ РАДАР (Проверяет приглашения везде, кроме лобби и самой онлайн-игры)
     LaunchedEffect(screen, myOnlineNickname, isOnlineGame) {
         if (myOnlineNickname.isBlank() || screen == "online_lobby" || (isOnlineGame && screen == "game501_game")) return@LaunchedEffect
+        
+        val allowGlobal = onlinePrefs.getBoolean("allow_global_invites", true)
+        val allowPrivate = onlinePrefs.getBoolean("allow_private_invites", true)
+        if (!allowGlobal && !allowPrivate) return@LaunchedEffect
+        
         while (true) {
             delay(3000L)
             val inv = OnlineNetworkManager.checkIncomingInvite(myOnlineNickname)
             if (inv != null) {
-                globalIncomingInvite = inv
-                break
+                if (inv.inviteType == "global" && !allowGlobal) {
+                    OnlineNetworkManager.deleteInvite(inv.id)
+                    continue
+                }
+                if (inv.inviteType == "private" && !allowPrivate) {
+                    OnlineNetworkManager.deleteInvite(inv.id)
+                    continue
+                }
+                
+                if (globalIncomingInvite != null) {
+                    OnlineNetworkManager.deleteInvite(inv.id)
+                } else {
+                    globalIncomingInvite = inv
+                    break
+                }
             }
         }
     }
