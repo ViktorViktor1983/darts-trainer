@@ -59,6 +59,11 @@ fun OnlineLobbyScreen(
     var sets by remember { mutableStateOf(prefs.getInt("sets", 1)) }
     var saveToTraining by remember { mutableStateOf(prefs.getBoolean("save_to_training", false)) }
 
+    // НАСТРОЙКИ ПРИГЛАШЕНИЙ
+    var allowGlobalInvites by remember { mutableStateOf(prefs.getBoolean("allow_global_invites", true)) }
+    var allowPrivateInvites by remember { mutableStateOf(prefs.getBoolean("allow_private_invites", true)) }
+    var showInviteSettingsDialog by remember { mutableStateOf(false) }
+
     // ФУНКЦИЯ ПРОВЕРКИ НИКА С ИСКЛЮЧЕНИЕМ ДЛЯ admin_viktor
     fun isNicknameAllowed(name: String): Boolean {
         val lowerName = name.lowercase()
@@ -87,7 +92,7 @@ fun OnlineLobbyScreen(
     // Список друзей
     var friendsList by remember { mutableStateOf(FriendsStorage.getFriends(context)) }
 
-    LaunchedEffect(nickname, password, selectedLevel, is501, legs, sets, saveToTraining) {
+    LaunchedEffect(nickname, password, selectedLevel, is501, legs, sets, saveToTraining, allowGlobalInvites, allowPrivateInvites) {
         prefs.edit()
             .putString("nickname", nickname)
             .putString("password", password)
@@ -96,17 +101,26 @@ fun OnlineLobbyScreen(
             .putInt("legs", legs)
             .putInt("sets", sets)
             .putBoolean("save_to_training", saveToTraining)
+            .putBoolean("allow_global_invites", allowGlobalInvites)
+            .putBoolean("allow_private_invites", allowPrivateInvites)
             .apply()
     }
 
-    LaunchedEffect(nickname, searchPhase) {
+    LaunchedEffect(nickname, searchPhase, allowGlobalInvites, allowPrivateInvites) {
         if (nickname.isBlank() || searchPhase != SearchPhase.NONE) return@LaunchedEffect
+        if (!allowGlobalInvites && !allowPrivateInvites) return@LaunchedEffect
+        
         while (true) {
             delay(3000L)
             val invite = OnlineNetworkManager.checkIncomingInvite(nickname)
             if (invite != null) {
-                incomingInvite = invite
-                break
+                if (incomingInvite != null) {
+                    // Если уже есть одно приглашение, просто игнорируем это (или удаляем)
+                    OnlineNetworkManager.deleteInvite(invite.id)
+                } else {
+                    incomingInvite = invite
+                    break
+                }
             }
         }
     }
@@ -129,6 +143,26 @@ fun OnlineLobbyScreen(
     Column(modifier = Modifier.fillMaxSize().background(DarkBg).padding(16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(modifier = Modifier.clip(RoundedCornerShape(12.dp)).background(TileBgDark).clickable { onBack() }.padding(horizontal = 16.dp, vertical = 10.dp)) { Text("← Назад", color = Accent, fontSize = 15.sp) }
+            Spacer(Modifier.weight(1f))
+            
+            // КНОПКА НАСТРОЙКИ ПРИГЛАШЕНИЙ
+            val inviteBtnColor = when {
+                allowGlobalInvites && allowPrivateInvites -> Color(0xFF4CAF50) // Зеленый
+                allowGlobalInvites || allowPrivateInvites -> Color(0xFFFFC107) // Желтый
+                else -> Color(0xFFF44336) // Красный
+            }
+            
+            Box(
+                modifier = Modifier.clip(RoundedCornerShape(12.dp)).background(inviteBtnColor).clickable { showInviteSettingsDialog = true }.padding(horizontal = 12.dp, vertical = 8.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("🔔", fontSize = 16.sp)
+                    Spacer(Modifier.width(6.dp))
+                    Text("Настройка приглашений", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+            
             Spacer(Modifier.width(12.dp))
             Text("Онлайн-игра", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = GoldAccent)
         }
@@ -200,6 +234,43 @@ fun OnlineLobbyScreen(
         Spacer(Modifier.height(8.dp))
     }
 
+    // --- ОКНО НАСТРОЕК ПРИГЛАШЕНИЙ ---
+    if (showInviteSettingsDialog) {
+        AlertDialog(
+            onDismissRequest = { showInviteSettingsDialog = false },
+            confirmButton = {
+                TextButton(onClick = { showInviteSettingsDialog = false }) {
+                    Text("Готово", color = Accent, fontWeight = FontWeight.Bold)
+                }
+            },
+            title = { Text("Настройки приглашений", color = Color.White, fontWeight = FontWeight.Bold) },
+            text = {
+                Column {
+                    Text("Эти настройки влияют только на приглашения, пока приложение открыто. Это не Push-уведомления.", color = Color.White.copy(alpha = 0.5f), fontSize = 11.sp)
+                    Spacer(Modifier.height(16.dp))
+                    
+                    Row(modifier = Modifier.fillMaxWidth().clickable { allowGlobalInvites = !allowGlobalInvites }.padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Общий поиск", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                            Text("Приглашения от всех игроков через кнопку «Найти соперника»", color = Color.White.copy(alpha = 0.6f), fontSize = 11.sp)
+                        }
+                        Switch(checked = allowGlobalInvites, onCheckedChange = { allowGlobalInvites = it }, colors = SwitchDefaults.colors(checkedThumbColor = Accent, checkedTrackColor = Accent.copy(alpha = 0.5f)))
+                    }
+                    
+                    Spacer(Modifier.height(8.dp))
+                    
+                    Row(modifier = Modifier.fillMaxWidth().clickable { allowPrivateInvites = !allowPrivateInvites }.padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Личные приглашения", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                            Text("Приглашения от игроков, которые ввели ваш ник вручную", color = Color.White.copy(alpha = 0.6f), fontSize = 11.sp)
+                        }
+                        Switch(checked = allowPrivateInvites, onCheckedChange = { allowPrivateInvites = it }, colors = SwitchDefaults.colors(checkedThumbColor = Accent, checkedTrackColor = Accent.copy(alpha = 0.5f)))
+                    }
+                }
+            }
+        )
+    }
+
     // --- НОВЫЙ 2-ШАГОВЫЙ ДИАЛОГ ВВОДА ПРОФИЛЯ ---
     if (showNicknameDialog) {
         var inputNick by remember { mutableStateOf(nickname) }
@@ -216,7 +287,6 @@ fun OnlineLobbyScreen(
             },
             confirmButton = {
                 if (checkStatus == NicknameCheckStatus.IDLE || checkStatus == NicknameCheckStatus.ERROR) {
-                    // ШАГ 1: Проверка ника
                     TextButton(
                         enabled = inputNick.isNotBlank() && !isProcessing,
                         onClick = {
@@ -243,7 +313,6 @@ fun OnlineLobbyScreen(
                         }
                     }
                 } else {
-                    // ШАГ 2: Регистрация или Вход
                     val isTaken = checkStatus == NicknameCheckStatus.TAKEN
                     val actionLabel = if (isTaken) "Войти" else "Зарегистрироваться"
                     
@@ -305,7 +374,6 @@ fun OnlineLobbyScreen(
                         )
                     )
 
-                    // СТАТУС ПРОВЕРКИ
                     if (checkStatus == NicknameCheckStatus.FREE) {
                         Spacer(Modifier.height(8.dp))
                         Text("✅ Никнейм свободен. Придумайте пароль.", color = Color(0xFF81C784), fontSize = 13.sp, fontWeight = FontWeight.Bold)
@@ -314,7 +382,6 @@ fun OnlineLobbyScreen(
                         Text("❌ Никнейм занят. Введите пароль, чтобы войти.", color = ErrorColor, fontSize = 13.sp, fontWeight = FontWeight.Bold)
                     }
 
-                    // ПОЛЕ ПАРОЛЯ (появляется только после проверки)
                     if (checkStatus == NicknameCheckStatus.FREE || checkStatus == NicknameCheckStatus.TAKEN) {
                         Spacer(Modifier.height(12.dp))
                         OutlinedTextField(
@@ -345,7 +412,7 @@ fun OnlineLobbyScreen(
         )
     }
 
-    // --- ДИАЛОГ ИГРЫ С ДРУГОМ (С ВЫПАДАЮЩИМ СПИСКОМ) ---
+    // --- ДИАЛОГ ИГРЫ С ДРУГОМ ---
     if (showFriendDialog) {
         var friendInput by remember { mutableStateOf("") }
         var isConnecting by remember { mutableStateOf(false) }
@@ -619,10 +686,18 @@ fun OnlineLobbyScreen(
                     }) { Text("ПРИНЯТЬ", color = GoldAccent, fontWeight = FontWeight.Bold, fontSize = 18.sp) }
                 },
                 dismissButton = {
-                    TextButton(onClick = { 
-                        scope.launch { OnlineNetworkManager.deleteInvite(inv.id) }
-                        incomingInvite = null 
-                    }) { Text("ОТКЛОНИТЬ", color = Color.White.copy(alpha = 0.6f)) }
+                    Column {
+                        TextButton(onClick = { 
+                            scope.launch { OnlineNetworkManager.deleteInvite(inv.id) }
+                            incomingInvite = null 
+                        }) { Text("ОТКЛОНИТЬ", color = Color.White.copy(alpha = 0.6f)) }
+                        
+                        TextButton(onClick = { 
+                            scope.launch { OnlineNetworkManager.deleteInvite(inv.id) }
+                            incomingInvite = null 
+                            showInviteSettingsDialog = true
+                        }) { Text("Отключить приглашения", color = ErrorColor, fontSize = 12.sp) }
+                    }
                 },
                 title = { Text("Вас приглашают!", color = Accent, fontSize = 22.sp, fontWeight = FontWeight.Bold) },
                 text = {
