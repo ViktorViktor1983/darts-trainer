@@ -314,6 +314,12 @@ fun DartsTrainerApp() {
             delay(3000L)
             val inv = OnlineNetworkManager.checkIncomingInvite(myOnlineNickname)
             if (inv != null) {
+                // ЖЕЛЕЗНАЯ ПРОВЕРКА: Если тип пустой или неизвестный - удаляем
+                if (inv.inviteType != "global" && inv.inviteType != "private") {
+                    OnlineNetworkManager.deleteInvite(inv.id)
+                    continue
+                }
+                
                 if (inv.inviteType == "global" && !allowGlobal) {
                     OnlineNetworkManager.deleteInvite(inv.id)
                     continue
