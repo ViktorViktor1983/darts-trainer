@@ -2,6 +2,7 @@ package com.lodkin.dartstrainer
 
 import android.content.Context
 import android.os.Bundle
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
@@ -314,24 +315,31 @@ fun DartsTrainerApp() {
             delay(3000L)
             val inv = OnlineNetworkManager.checkIncomingInvite(myOnlineNickname)
             if (inv != null) {
-                // ЖЕЛЕЗНАЯ ПРОВЕРКА: Если тип пустой или неизвестный - удаляем
+                Log.d("GlobalRadar", "Пришло приглашение: ${inv.fromUser}, type='${inv.inviteType}', allowGlobal=$allowGlobal, allowPrivate=$allowPrivate")
+                
+                // Если тип пустой или неизвестный - удаляем
                 if (inv.inviteType != "global" && inv.inviteType != "private") {
+                    Log.d("GlobalRadar", "Неизвестный тип. Удаляем.")
                     OnlineNetworkManager.deleteInvite(inv.id)
                     continue
                 }
                 
                 if (inv.inviteType == "global" && !allowGlobal) {
+                    Log.d("GlobalRadar", "Глобальное, но запрещено. Удаляем.")
                     OnlineNetworkManager.deleteInvite(inv.id)
                     continue
                 }
                 if (inv.inviteType == "private" && !allowPrivate) {
+                    Log.d("GlobalRadar", "Личное, но запрещено. Удаляем.")
                     OnlineNetworkManager.deleteInvite(inv.id)
                     continue
                 }
                 
                 if (globalIncomingInvite != null) {
+                    Log.d("GlobalRadar", "Уже есть одно приглашение. Удаляем это.")
                     OnlineNetworkManager.deleteInvite(inv.id)
                 } else {
+                    Log.d("GlobalRadar", "Показываем приглашение.")
                     globalIncomingInvite = inv
                     break
                 }
