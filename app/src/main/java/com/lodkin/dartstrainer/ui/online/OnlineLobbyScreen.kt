@@ -104,6 +104,13 @@ fun OnlineLobbyScreen(
             .putBoolean("allow_global_invites", allowGlobalInvites)
             .putBoolean("allow_private_invites", allowPrivateInvites)
             .apply()
+            
+        // Обновляем настройки на сервере, если ник и пароль уже заданы
+        if (nickname.isNotBlank() && password.isNotBlank()) {
+            scope.launch {
+                OnlineNetworkManager.registerPlayer(nickname, selectedLevel, password, allowGlobalInvites, allowPrivateInvites)
+            }
+        }
     }
 
     LaunchedEffect(nickname, searchPhase, allowGlobalInvites, allowPrivateInvites) {
@@ -114,8 +121,18 @@ fun OnlineLobbyScreen(
             delay(3000L)
             val invite = OnlineNetworkManager.checkIncomingInvite(nickname)
             if (invite != null) {
+                // Проверка: если пришло глобальное, а мы их выключили - удаляем
+                if (invite.inviteType == "global" && !allowGlobalInvites) {
+                    OnlineNetworkManager.deleteInvite(invite.id)
+                    continue
+                }
+                // Проверка: если пришло личное, а мы их выключили - удаляем
+                if (invite.inviteType == "private" && !allowPrivateInvites) {
+                    OnlineNetworkManager.deleteInvite(invite.id)
+                    continue
+                }
+                
                 if (incomingInvite != null) {
-                    // Если уже есть одно приглашение, просто игнорируем это (или удаляем)
                     OnlineNetworkManager.deleteInvite(invite.id)
                 } else {
                     incomingInvite = invite
@@ -227,7 +244,6 @@ fun OnlineLobbyScreen(
 
         Spacer(Modifier.height(12.dp))
 
-        // КНОПКА МОРСКОЙ ВОЛНЫ
         Box(modifier = Modifier.fillMaxWidth().height(50.dp).clip(RoundedCornerShape(16.dp)).background(Color(0xFF26A69A)).clickable(enabled = nickname.isNotBlank() && isNicknameAllowed(nickname) && password.isNotBlank()) { showFriendDialog = true }, contentAlignment = Alignment.Center) {
             Text("👥 Играть с другом", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
         }
@@ -323,7 +339,7 @@ fun OnlineLobbyScreen(
                                 isProcessing = true
                                 errorMsg = ""
                                 val trimmed = inputNick.trim().replace(" ", "_")
-                                val regError = OnlineNetworkManager.registerPlayer(trimmed, selectedLevel, inputPassword.trim())
+                                val regError = OnlineNetworkManager.registerPlayer(trimmed, selectedLevel, inputPassword.trim(), allowGlobalInvites, allowPrivateInvites)
                                 if (regError != null) {
                                     errorMsg = regError
                                     isProcessing = false
@@ -424,7 +440,7 @@ fun OnlineLobbyScreen(
                 scope.launch {
                     isConnecting = true
                     errorMsg = ""
-                    val regError = OnlineNetworkManager.registerPlayer(nickname, selectedLevel, password)
+                    val regError = OnlineNetworkManager.registerPlayer(nickname, selectedLevel, password, allowGlobalInvites, allowPrivateInvites)
                     if (regError != null) { errorMsg = regError; isConnecting = false; return@launch }
                     
                     val mId = OnlineNetworkManager.sendSingleInvite(nickname, target.trim())
@@ -437,7 +453,7 @@ fun OnlineLobbyScreen(
                         showFriendDialog = false
                         searchPhase = SearchPhase.SEARCHING
                     } else {
-                        errorMsg = "Игрок не найден или ошибка сети"
+                        errorMsg = "Игрок выключил личные приглашения или не найден"
                     }
                 }
             }
@@ -606,11 +622,12 @@ fun OnlineLobbyScreen(
                                     connectionError = false
                                     errorMsg = ""
                                     
-                                    val regError = OnlineNetworkManager.registerPlayer(nickname, selectedLevel, password)
+                                    val regError = OnlineNetworkManager.registerPlayer(nickname, selectedLevel, password, allowGlobalInvites, allowPrivateInvites)
                                     if (regError != null) { isConnecting = false; connectionError = true; errorMsg = regError; return@launch }
                                     
-                                    val opponents = OnlineNetworkManager.findMatchingOpponents(nickname, searchLevels.toList())
-                                    if (opponents.isEmpty()) { isConnecting = false; connectionError = true; errorMsg = "Никого не найдено"; return@launch }
+                                    // Ищем только тех, кто разрешил общие приглашения
+                                    val opponents = OnlineNetworkManager.findMatchingOpponents(nickname, searchLevels.toList(), isGlobal = true)
+                                    if (opponents.isEmpty()) { isConnecting = false; connectionError = true; errorMsg = "Никого не найдено (или все выключили приглашения)"; return@launch }
                                     
                                     val mId = UUID.randomUUID().toString()
                                     val success = OnlineNetworkManager.sendBroadcastInvites(nickname, opponents, mId)
