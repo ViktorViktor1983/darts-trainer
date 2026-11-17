@@ -307,7 +307,6 @@ object OnlineNetworkManager {
             val filter = "(match_id='$matchId'%26%26status='accepted')"
             val url = "$INVITES_URL?filter=$filter"
             val request = Request.Builder().url(url).get().build()
-            
             client.newCall(request).execute().use { response ->
                 if (response.isSuccessful) {
                     val body = response.body?.string()
@@ -486,5 +485,35 @@ object OnlineNetworkManager {
             "Исключение: ${e.message}" 
         }
     }
+        suspend fun getChatMessages(matchId: String): List<ChatMessageRecord> = withContext(Dispatchers.IO) {
+        try {
+            val filter = "(match_id='$matchId')"
+            val encodedFilter = URLEncoder.encode(filter, "UTF-8")
+            val url = "$MESSAGES_URL?filter=$encodedFilter&sort=created"
+            
+            val request = Request.Builder().url(url).get().build()
+            val result = mutableListOf<ChatMessageRecord>()
 
-    suspend fun getChatMessages(matchId: String): List<Chat
+            client.newCall(request).execute().use { response ->
+                if (response.isSuccessful) {
+                    val body = response.body?.string() ?: return@withContext emptyList()
+                    val items = JSONObject(body).optJSONArray("items")
+                    if (items != null) {
+                        for (i in 0 until items.length()) {
+                            val obj = items.getJSONObject(i)
+                            result.add(
+                                ChatMessageRecord(
+                                    id = obj.getString("id"),
+                                    fromUser = obj.getString("from_user"),
+                                    text = obj.getString("text"),
+                                    created = obj.getString("created")
+                                )
+                            )
+                        }
+                    }
+                }
+            }
+            result
+        } catch (e: Exception) { emptyList() }
+    }
+}
