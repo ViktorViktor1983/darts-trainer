@@ -213,7 +213,7 @@ object OnlineNetworkManager {
     suspend fun sendSingleInvite(fromUser: String, toUser: String): String? = withContext(Dispatchers.IO) {
         try {
             // ПЕРЕД ОТПРАВКОЙ ЛИЧНОГО ПРИГЛАШЕНИЯ ПРОВЕРЯЕМ, РАЗРЕШИЛ ЛИ ИГРОК ИХ
-            val filter = "(nickname='$toUser'%26%26allow_private=true)"
+            val filter = "nickname='$toUser' && allow_private = true" // Исправлено: убран двойной амперсанд
             val encodedFilter = URLEncoder.encode(filter, "UTF-8")
             val checkUrl = "$PLAYERS_URL?filter=$encodedFilter"
             
@@ -487,35 +487,4 @@ object OnlineNetworkManager {
         }
     }
 
-    suspend fun getChatMessages(matchId: String): List<ChatMessageRecord> = withContext(Dispatchers.IO) {
-        try {
-            val filter = "(match_id='$matchId')"
-            val encodedFilter = URLEncoder.encode(filter, "UTF-8")
-            val url = "$MESSAGES_URL?filter=$encodedFilter&sort=created"
-            
-            val request = Request.Builder().url(url).get().build()
-            val result = mutableListOf<ChatMessageRecord>()
-
-            client.newCall(request).execute().use { response ->
-                if (response.isSuccessful) {
-                    val body = response.body?.string() ?: return@withContext emptyList()
-                    val items = JSONObject(body).optJSONArray("items")
-                    if (items != null) {
-                        for (i in 0 until items.length()) {
-                            val obj = items.getJSONObject(i)
-                            result.add(
-                                ChatMessageRecord(
-                                    id = obj.getString("id"),
-                                    fromUser = obj.getString("from_user"),
-                                    text = obj.getString("text"),
-                                    created = obj.getString("created")
-                                )
-                            )
-                        }
-                    }
-                }
-            }
-            result
-        } catch (e: Exception) { emptyList() }
-    }
-}
+    suspend fun getChatMessages(matchId: String): List<Chat
