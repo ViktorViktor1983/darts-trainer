@@ -128,7 +128,6 @@ fun Game501Screen(
     val allBots = game.players.all { it.isBot }
 
     val isMyTurn = !isOnlineGame || (game.currentPlayerIndex == onlinePlayerIndex)
-    // Блокировка: если отправляем, или есть ожидающий ход, или нет связи
     val canInteract = !game.isFinished && game.currentPlayer?.isBot != true && isMyTurn && !isSendingMove && !hasConnectionError
 
     val history = remember { mutableStateListOf<Game501>() }
@@ -158,10 +157,9 @@ fun Game501Screen(
     }
 
     // ────────────────────────────────────────────────────────
-    // ЛОГИКА СИНХРОНИЗАЦИИ (Отправка с повтором и блокировкой)
+    // ЛОГИКА СИНХРОНИЗАЦИИ
     // ────────────────────────────────────────────────────────
     
-    // Функция, которая ставит ход в очередь на отправку
     fun prepareAndSendMove() {
         if (isOnlineGame && onlineMatchId != null) {
             val currentJson = Game501Serializer.toJson(game)
@@ -196,26 +194,26 @@ fun Game501Screen(
                     isSendingMove = false
                     break
                 } else {
-                    // Ошибка связи
                     hasConnectionError = true
                     isSendingMove = false
-                    delay(3000L) // Ждем 3 секунды и пробуем снова
+                    delay(3000L)
                     isSendingMove = true
                 }
             }
         }
     }
 
-    // Чтение сервера
     LaunchedEffect(isOnlineGame, onlineMatchId) {
         if (!isOnlineGame || onlineMatchId == null) return@LaunchedEffect
         while (true) {
             delay(1500L)
-            // Блокируем чтение, если идет отправка или ждем сеть или открыт диалог
             if (isSendingMove || pendingMoveToSync != null || dialogOpen || hasConnectionError) continue 
             
             val remote = OnlineNetworkManager.getGameState(onlineMatchId)
             if (remote != null) {
+                // ДОПОЛНИТЕЛЬНАЯ ПРОВЕРКА: если мы только что открыли диалог или начали отправку, не перезаписываем
+                if (isSendingMove || pendingMoveToSync != null || dialogOpen || hasConnectionError) continue
+
                 val remoteGame = Game501Serializer.fromJson(remote.stateJson)
                 if (remoteGame != null) {
                     val remoteJson = Game501Serializer.toJson(remoteGame)
@@ -237,16 +235,19 @@ fun Game501Screen(
 
                     if (remoteJson != localJson) {
                         if (isRemoteMyTurn || remoteGame.isFinished) {
-                            val remoteP1Score = remoteGame.players[0].matchScoreGained
-                            val remoteP2Score = remoteGame.players[1].matchScoreGained
-                            val localP1Score = game.players[0].matchScoreGained
-                            val localP2Score = game.players[1].matchScoreGained
-                            
-                            if (remoteP1Score > localP1Score) lastScoreA = remoteP1Score - localP1Score
-                            if (remoteP2Score > localP2Score) lastScoreB = remoteP2Score - localP2Score
+                            // ИСПРАВЛЕНО: не перезаписываем, если сервер прислал устаревшее состояние (race condition)
+                            if (!isRemoteBehind) {
+                                val remoteP1Score = remoteGame.players[0].matchScoreGained
+                                val remoteP2Score = remoteGame.players[1].matchScoreGained
+                                val localP1Score = game.players[0].matchScoreGained
+                                val localP2Score = game.players[1].matchScoreGained
+                                
+                                if (remoteP1Score > localP1Score) lastScoreA = remoteP1Score - localP1Score
+                                if (remoteP2Score > localP2Score) lastScoreB = remoteP2Score - localP2Score
 
-                            game = remoteGame
-                            lastSyncedJson = remoteJson
+                                game = remoteGame
+                                lastSyncedJson = remoteJson
+                            }
                         } else {
                             if (!isRemoteBehind) {
                                 game = remoteGame
