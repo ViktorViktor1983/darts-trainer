@@ -132,8 +132,9 @@ fun GameRoutes(
                     trainingRepository = trainingRepository,
                     onGameFinish = { f: CricketGame, id: Long ->
                         if (isTrainingCricket) {
-                            val playerWon = f.winnerIndex == 0
-                            val player = f.players.getOrNull(0)
+                            val localPlayerIndex = if (isOnlineGame) onlinePlayerIndex else 0
+                            val playerWon = f.winnerIndex == localPlayerIndex
+                            val player = f.players.getOrNull(localPlayerIndex)
                             val mpr = player?.let { p ->
                                 if (p.matchDartsThrown > 0) {
                                     val marks = p.matchHits.values.sum().toFloat()
@@ -245,8 +246,9 @@ fun GameRoutes(
                     trainingRepository = trainingRepository,
                     onGameFinish = { f: Game501, id: Long ->
                         if (isTraining501) {
-                            val playerWon = f.winnerIndex == 0
-                            val player = f.players.getOrNull(0)
+                            val localPlayerIndex = if (isOnlineGame) onlinePlayerIndex else 0
+                            val playerWon = f.winnerIndex == localPlayerIndex
+                            val player = f.players.getOrNull(localPlayerIndex)
                             val ppr = player?.let { p -> Game501Logic.matchPpr(p) } ?: 0.0
                             val dbl = player?.let { p -> Game501Logic.doublesAccuracy(p) } ?: 0.0
                             val pprStr = String.format(Locale.US, "%.1f", ppr)
