@@ -267,10 +267,11 @@ fun GameRoutes(
                             val c57p = player?.matchCount57plus ?: 0
                             val c57m = player?.matchCount57minus ?: 0
                             val first9 = player?.listOfFirst9Ppr?.average() ?: 0.0
+                            val legsPlayed = f.legHistory.size
 
                             val details = "won=$playerWon;ppr=$pprStr;dbl=$dblStr" +
                                     ";c180=$c180;c170=$c170;c130=$c130;c90=$c90;c57p=$c57p;c57m=$c57m" +
-                                    ";first9=${String.format(Locale.US, "%.2f", first9)}"
+                                    ";first9=${String.format(Locale.US, "%.2f", first9)};legs=$legsPlayed"
 
                             scope.launch {
                                 trainingRepository.insertExerciseResult(

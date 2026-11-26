@@ -57,6 +57,8 @@ fun DisciplineStatsScreen(
     var avgPpr by remember { mutableStateOf(0f) }
     var avgDbl by remember { mutableStateOf(0f) }
     var avgFirst9 by remember { mutableStateOf(0f) }
+    var total501Legs by remember { mutableStateOf(0) }
+    var hasComplete501LegCounts by remember { mutableStateOf(false) }
     var count180 by remember { mutableStateOf(0) }
     var count170 by remember { mutableStateOf(0) }
     var count130 by remember { mutableStateOf(0) }
@@ -120,6 +122,8 @@ fun DisciplineStatsScreen(
                 "game501" -> {
                     var sumPpr = 0f; var sumDbl = 0f; var sumFirst9 = 0f; var totalMatches = 0
                     var c180 = 0; var c170 = 0; var c130 = 0; var c90 = 0; var c57p = 0; var c57m = 0
+                    var legsPlayed = 0
+                    var matchesWithLegCount = 0
                     val pprs = mutableListOf<Double>(); val dbls = mutableListOf<Double>(); val f9s = mutableListOf<Double>(); val c57ms = mutableListOf<Double>()
 
                     filtered.forEach { r ->
@@ -132,6 +136,10 @@ fun DisciplineStatsScreen(
                         if (ppr > 0f) {
                             sumPpr += ppr; sumDbl += dbl; sumFirst9 += f9; totalMatches++
                             pprs.add(ppr.toDouble()); dbls.add(dbl.toDouble()); f9s.add(f9.toDouble()); c57ms.add(c57.toDouble())
+                            details["legs"]?.toIntOrNull()?.let {
+                                legsPlayed += it
+                                matchesWithLegCount++
+                            }
                         }
                         c180 += details["c180"]?.toIntOrNull() ?: 0
                         c170 += details["c170"]?.toIntOrNull() ?: 0
@@ -147,10 +155,11 @@ fun DisciplineStatsScreen(
                         avgFirst9 = sumFirst9 / totalMatches
                         currentLevel = DartsNorms.levelByPpr(avgPpr)
                     }
-                    val divisor = if (totalMatches > 0) totalMatches.toFloat() else 1f
-                    count180 = (c180 / divisor).toInt(); count170 = (c170 / divisor).toInt()
-                    count130 = (c130 / divisor).toInt(); count90 = (c90 / divisor).toInt()
-                    count57p = (c57p / divisor).toInt(); count57m = (c57m / divisor).toInt()
+                    total501Legs = legsPlayed
+                    hasComplete501LegCounts = totalMatches > 0 && matchesWithLegCount == totalMatches
+                    count180 = c180; count170 = c170
+                    count130 = c130; count90 = c90
+                    count57p = c57p; count57m = c57m
 
                     pprChartData = pprs; dblChartData = dbls; first9ChartData = f9s; c57mChartData = c57ms
                 }
@@ -344,19 +353,19 @@ fun DisciplineStatsScreen(
                     Spacer(Modifier.height(6.dp))
                     StatRowCard("Средний набор за 9 дротиков", String.format(Locale.US, "%.2f", avgFirst9))
                     Spacer(Modifier.height(20.dp))
-                    Text("КАТЕГОРИИ (в среднем за матч)", color = Accent, fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
+                    Text("КАТЕГОРИИ (попадания / леги)", color = Accent, fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
                     Spacer(Modifier.height(8.dp))
-                    StatRowCard("180", "$count180")
+                    StatRowCard("180", "$count180 / ${if (hasComplete501LegCounts) total501Legs else "—"}")
                     Spacer(Modifier.height(6.dp))
-                    StatRowCard("170+", "$count170")
+                    StatRowCard("170+", "$count170 / ${if (hasComplete501LegCounts) total501Legs else "—"}")
                     Spacer(Modifier.height(6.dp))
-                    StatRowCard("130+", "$count130")
+                    StatRowCard("130+", "$count130 / ${if (hasComplete501LegCounts) total501Legs else "—"}")
                     Spacer(Modifier.height(6.dp))
-                    StatRowCard("90+", "$count90")
+                    StatRowCard("90+", "$count90 / ${if (hasComplete501LegCounts) total501Legs else "—"}")
                     Spacer(Modifier.height(6.dp))
-                    StatRowCard("57+", "$count57p")
+                    StatRowCard("57+", "$count57p / ${if (hasComplete501LegCounts) total501Legs else "—"}")
                     Spacer(Modifier.height(6.dp))
-                    StatRowCard("57-", "$count57m")
+                    StatRowCard("57-", "$count57m / ${if (hasComplete501LegCounts) total501Legs else "—"}")
 
                 } else if (disciplineId == "cricket") {
                     Text("ОСНОВНЫЕ", color = Accent, fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
