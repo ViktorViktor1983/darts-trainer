@@ -502,7 +502,8 @@ fun Game501Screen(
     }
 
     fun pressLeg() {
-        if (!canInteract) return
+        val currentPlayer = game.players.getOrNull(game.currentPlayerIndex) ?: return
+        if (!canInteract || currentPlayer.score > 170) return
         chosenDarts = 0
         showLegQuestionDialog = true
     }
@@ -654,6 +655,7 @@ fun Game501Screen(
                     QuickButtonsWithLeg(
                         sums = quickSums,
                         enabled = canInteract,
+                        legEnabled = canInteract && (game.currentPlayer?.score ?: 0) <= 170,
                         onQuick = { pressQuickButton(it) },
                         onLeg = { pressLeg() }
                     )
@@ -1149,7 +1151,7 @@ private fun TopBar501(
 }
 
 @Composable
-private fun QuickButtonsWithLeg(sums: List<Int>, enabled: Boolean, onQuick: (Int) -> Unit, onLeg: () -> Unit) {
+private fun QuickButtonsWithLeg(sums: List<Int>, enabled: Boolean, legEnabled: Boolean, onQuick: (Int) -> Unit, onLeg: () -> Unit) {
     val rows = sums.chunked(6)
     Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 3.dp)) {
         rows.forEachIndexed { rowIdx, row ->
@@ -1160,7 +1162,7 @@ private fun QuickButtonsWithLeg(sums: List<Int>, enabled: Boolean, onQuick: (Int
                 if (rowIdx == rows.lastIndex) {
                     val freeSlots = 6 - row.size
                     if (freeSlots > 1) repeat(freeSlots - 1) { Spacer(Modifier.weight(1f)) }
-                    Box(modifier = Modifier.weight(1f).height(44.dp).clip(RoundedCornerShape(8.dp)).background(if (enabled) ErrorColor else ErrorColor.copy(alpha = 0.4f)).clickable(enabled = enabled) { onLeg() }, contentAlignment = Alignment.Center) { Text("ЛЕГ", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold) }
+                    Box(modifier = Modifier.weight(1f).height(44.dp).clip(RoundedCornerShape(8.dp)).background(if (legEnabled) ErrorColor else ErrorColor.copy(alpha = 0.4f)).clickable(enabled = legEnabled) { onLeg() }, contentAlignment = Alignment.Center) { Text("ЛЕГ", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold) }
                 }
             }
         }

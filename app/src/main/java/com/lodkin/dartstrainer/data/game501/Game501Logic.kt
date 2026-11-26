@@ -230,7 +230,8 @@ object Game501Logic {
     fun closeLegManually(game: Game501, dartsUsed: Int, doublesAttempted: Int): Game501 {
         if (game.isFinished) return game
         val playerIndex = game.currentPlayerIndex
-        val player = game.players[playerIndex]
+        val player = game.players.getOrNull(playerIndex) ?: return game
+        if (player.score > 170) return game
         val gained = player.score
         val scoreBefore = player.score
         val attempts = if (doublesAttempted < 1) 1 else doublesAttempted
