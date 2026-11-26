@@ -128,6 +128,7 @@ fun Game501Screen(
     var isSendingMove by remember { mutableStateOf(false) }
     var pendingMoveToSync by remember { mutableStateOf<String?>(null) }
     var hasConnectionError by remember { mutableStateOf(false) }
+    var connectionErrorMessage by remember { mutableStateOf("") }
     var forceSyncTrigger by remember { mutableStateOf(0) }
 
     val allBots = game.players.all { it.isBot }
@@ -205,6 +206,7 @@ fun Game501Screen(
             if (currentJson != lastSyncedJson) {
                 pendingMoveToSync = currentJson
                 hasConnectionError = false
+                connectionErrorMessage = ""
                 forceSyncTrigger++ 
             }
         }
@@ -260,8 +262,8 @@ fun Game501Screen(
             isSendingMove = true
             
             while (true) {
-                val success = withContext(Dispatchers.IO) {
-                    OnlineNetworkManager.upsertGameState(
+                val result = withContext(Dispatchers.IO) {
+                    OnlineNetworkManager.upsertGameStateWithResult(
                         onlineMatchId,
                         "501",
                         jsonToSend,
@@ -270,14 +272,16 @@ fun Game501Screen(
                     )
                 }
 
-                if (success) {
+                if (result.success) {
                     lastSyncedJson = jsonToSend
                     pendingMoveToSync = null
                     hasConnectionError = false
+                    connectionErrorMessage = ""
                     isSendingMove = false
                     break
                 } else {
                     hasConnectionError = true
+                    connectionErrorMessage = result.errorMessage ?: "Причина не указана сервером"
                     isSendingMove = false
                     delay(3000L)
                     isSendingMove = true
@@ -737,10 +741,12 @@ fun Game501Screen(
                         }
                     }
                     if (isOnlineGame && (isSendingMove || pendingMoveToSync != null || hasConnectionError)) {
-                        val msg = if (hasConnectionError) "НЕТ СВЯЗИ. ЖДЕМ ВОССТАНОВЛЕНИЯ..." else "ОТПРАВКА ХОДА..."
+                        val msg = if (hasConnectionError) {
+                            "ОШИБКА СИНХРОНИЗАЦИИ\n$connectionErrorMessage\nПовторяем отправку..."
+                        } else "ОТПРАВКА ХОДА..."
                         val col = if (hasConnectionError) ErrorColor else Accent
                         Box(modifier = Modifier.fillMaxWidth().background(col.copy(alpha = 0.15f)).padding(vertical = 8.dp), contentAlignment = Alignment.Center) {
-                            Text(msg, color = col, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                            Text(msg, color = col, fontSize = 12.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
                         }
                     }
 

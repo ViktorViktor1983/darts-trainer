@@ -2,11 +2,15 @@ package com.lodkin.dartstrainer.data.online
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import okhttp3.Response
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
+import java.io.IOException
+import java.net.SocketTimeoutException
+import java.net.UnknownHostException
 import java.net.URLEncoder
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -29,6 +33,11 @@ data class GameStateRecord(
     val stateJson: String,
     val player1Id: String,
     val player2Id: String
+)
+
+data class GameStateSyncResult(
+    val success: Boolean,
+    val errorMessage: String? = null
 )
 
 data class ChatMessageRecord(
@@ -358,28 +367,43 @@ object OnlineNetworkManager {
         }
     }
 
-    suspend fun upsertGameState(matchId: String, gameType: String, newJson: String, p1Name: String, p2Name: String): Boolean = withContext(Dispatchers.IO) {
+    suspend fun upsertGameState(matchId: String, gameType: String, newJson: String, p1Name: String, p2Name: String): Boolean =
+        upsertGameStateWithResult(matchId, gameType, newJson, p1Name, p2Name).success
+
+    suspend fun upsertGameStateWithResult(
+        matchId: String,
+        gameType: String,
+        newJson: String,
+        p1Name: String,
+        p2Name: String
+    ): GameStateSyncResult = withContext(Dispatchers.IO) {
         try {
             val filter = "(match_id='$matchId')"
             val encodedFilter = URLEncoder.encode(filter, "UTF-8")
             val url = "$GAME_STATES_URL?filter=$encodedFilter"
             
-            var existingId: String? = null
             val getRequest = Request.Builder().url(url).get().build()
-            client.newCall(getRequest).execute().use { response ->
-                if (response.isSuccessful) {
-                    val body = response.body?.string()
-                    val items = JSONObject(body ?: "").optJSONArray("items")
-                    if (items != null && items.length() > 0) {
-                        existingId = items.getJSONObject(0).optString("id")
-                    }
+            val lookupBody = client.newCall(getRequest).execute().use { response ->
+                if (!response.isSuccessful) {
+                    return@withContext GameStateSyncResult(
+                        success = false,
+                        errorMessage = formatGameStateHttpError("Поиск матча", response)
+                    )
                 }
+                response.body?.string().orEmpty()
             }
+            val items = JSONObject(lookupBody).optJSONArray("items")
+            val existingId = if (items != null && items.length() > 0) {
+                items.getJSONObject(0).optString("id")
+            } else null
 
             if (existingId != null) {
                 val jsonBody = JSONObject().apply { put("state_json", newJson) }.toString()
                 val patchRequest = Request.Builder().url("$GAME_STATES_URL/$existingId").patch(jsonBody.toRequestBody(JSON)).build()
-                client.newCall(patchRequest).execute().use { response -> return@withContext response.isSuccessful }
+                client.newCall(patchRequest).execute().use { response ->
+                    if (response.isSuccessful) GameStateSyncResult(success = true)
+                    else GameStateSyncResult(false, formatGameStateHttpError("Обновление матча", response))
+                }
             } else {
                 val jsonBody = JSONObject().apply {
                     put("match_id", matchId)
@@ -389,11 +413,28 @@ object OnlineNetworkManager {
                     put("player2_id", p2Name)
                 }.toString()
                 val postRequest = Request.Builder().url(GAME_STATES_URL).post(jsonBody.toRequestBody(JSON)).build()
-                client.newCall(postRequest).execute().use { response -> return@withContext response.isSuccessful }
+                client.newCall(postRequest).execute().use { response ->
+                    if (response.isSuccessful) GameStateSyncResult(success = true)
+                    else GameStateSyncResult(false, formatGameStateHttpError("Создание матча", response))
+                }
             }
+        } catch (_: UnknownHostException) {
+            GameStateSyncResult(false, "Не удалось найти сервер (ошибка DNS)")
+        } catch (_: SocketTimeoutException) {
+            GameStateSyncResult(false, "Сервер не ответил вовремя (тайм-аут)")
+        } catch (_: IOException) {
+            GameStateSyncResult(false, "Сетевая ошибка при связи с сервером")
         } catch (e: Exception) {
-            false
+            GameStateSyncResult(false, "Ошибка синхронизации (${e.javaClass.simpleName})")
         }
+    }
+
+    private fun formatGameStateHttpError(operation: String, response: Response): String {
+        val serverMessage = response.body?.string()?.let { body ->
+            runCatching { JSONObject(body).optString("message").takeIf { it.isNotBlank() } }.getOrNull()
+        }
+        val status = "HTTP ${response.code}"
+        return if (serverMessage == null) "$operation: $status" else "$operation: $status — $serverMessage"
     }
 
     suspend fun getGameState(matchId: String): GameStateRecord? = withContext(Dispatchers.IO) {
