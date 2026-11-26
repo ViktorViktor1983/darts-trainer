@@ -46,7 +46,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.Locale
-import java.util.UUID
 import kotlin.random.Random
 
 private val PaleYellow = Color(0xFFFFE082)
@@ -88,7 +87,7 @@ fun Game501Screen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val myName = SettingsStorage.getPlayerName(context).ifBlank { "Игрок" }
-
+    
     var game by remember { mutableStateOf(initialGame) }
     var inputText by remember { mutableStateOf("") }
 
@@ -137,25 +136,23 @@ fun Game501Screen(
         .getBoolean("show_checkout_hints", false)
     val localPlayer = game.players.getOrNull(onlinePlayerIndex)
     val localCheckoutPaths = localPlayer?.let { CheckoutTable.pathsFor(it.score) }
-    val undoSnapshot = remember(game.previousStateJson) {
-        game.previousStateJson?.let { Game501Serializer.fromJson(it) }
-    }
-    val undoRequestPending = game.undoRequestStatus == "pending"
 
     val isMyTurn = !isOnlineGame || (game.currentPlayerIndex == onlinePlayerIndex)
-    val canInteract = !game.isFinished && game.currentPlayer?.isBot != true && isMyTurn && !isSendingMove && !hasConnectionError && !undoRequestPending
-    val canRequestUndo = isOnlineGame && isMyTurn && !game.isFinished && !undoRequestPending &&
-        !isSendingMove && !hasConnectionError && undoSnapshot != null &&
-        undoSnapshot.currentPlayerIndex != onlinePlayerIndex
+    val canInteract = !game.isFinished && game.currentPlayer?.isBot != true && isMyTurn && !isSendingMove && !hasConnectionError
 
     val history = remember { mutableStateListOf<Game501>() }
 
     fun saveHistory() { history.add(game); if (history.size > 300) history.removeAt(0) }
+    fun undo() { 
+        if (history.isNotEmpty() && !isSendingMove && !hasConnectionError) { 
+            game = history.removeAt(history.lastIndex) 
+        } 
+    }
 
     val dialogOpen = showLegWonDialog || showSetWonDialog || showWinDialog ||
         showLegQuestionDialog || showDoublesQuestionDialog || showDoublesOnlyDialog
     
-    val canUndo = if (isOnlineGame) canRequestUndo && !dialogOpen else history.isNotEmpty() && !dialogOpen && !isSendingMove && !hasConnectionError
+    val canUndo = history.isNotEmpty() && !dialogOpen && !isSendingMove && !hasConnectionError
 
     LaunchedEffect(isOnlineGame) {
         if (isOnlineGame) {
@@ -175,33 +172,6 @@ fun Game501Screen(
     
     fun prepareAndSendMove() {
         if (isOnlineGame && onlineMatchId != null) {
-            val previousTurn = history.lastOrNull()
-            val completedTurn = previousTurn != null && !game.isBullPhase &&
-                (previousTurn.currentPlayerIndex != game.currentPlayerIndex || previousTurn.legHistory.size != game.legHistory.size)
-            val previousState = if (completedTurn) {
-                val compactPrevious = previousTurn!!.previousStateJson?.let { previousJson ->
-                    Game501Serializer.fromJson(previousJson)?.copy(
-                        previousStateJson = null,
-                        undoRequestId = null,
-                        undoRequestedByIndex = null,
-                        undoRequestStatus = null
-                    )?.let { Game501Serializer.toJson(it) }
-                }
-                Game501Serializer.toJson(
-                    previousTurn.copy(
-                        previousStateJson = compactPrevious,
-                        undoRequestId = null,
-                        undoRequestedByIndex = null,
-                        undoRequestStatus = null
-                    )
-                )
-            } else {
-                game.previousStateJson
-            }
-            game = game.copy(
-                previousStateJson = previousState,
-                stateRevision = game.stateRevision + 1L
-            )
             val currentJson = Game501Serializer.toJson(game)
             if (currentJson != lastSyncedJson) {
                 pendingMoveToSync = currentJson
@@ -210,50 +180,6 @@ fun Game501Screen(
                 forceSyncTrigger++ 
             }
         }
-    }
-
-    fun undo() {
-        if (isOnlineGame) {
-            if (game.isFinished && history.isNotEmpty() && !isSendingMove && !hasConnectionError) {
-                val revision = game.stateRevision
-                game = history.removeAt(history.lastIndex).copy(stateRevision = revision)
-                history.clear()
-                prepareAndSendMove()
-                return
-            }
-            if (!canRequestUndo) return
-            game = game.copy(
-                undoRequestId = UUID.randomUUID().toString(),
-                undoRequestedByIndex = onlinePlayerIndex,
-                undoRequestStatus = "pending"
-            )
-            prepareAndSendMove()
-            addChatSystemMessage("Запрошена отмена последнего хода")
-        } else if (history.isNotEmpty() && !isSendingMove && !hasConnectionError) {
-            game = history.removeAt(history.lastIndex)
-        }
-    }
-
-    fun answerUndoRequest(accept: Boolean) {
-        if (!undoRequestPending) return
-        val isRequestOwner = game.undoRequestedByIndex == onlinePlayerIndex
-        if (isRequestOwner && accept) return
-        val requestId = game.undoRequestId ?: return
-        if (accept && !isRequestOwner) {
-            val previous = undoSnapshot ?: return
-            game = previous.copy(
-                stateRevision = game.stateRevision,
-                undoRequestId = requestId,
-                undoRequestedByIndex = game.undoRequestedByIndex,
-                undoRequestStatus = "accepted"
-            )
-            history.clear()
-            lastScoreA = null
-            lastScoreB = null
-        } else {
-            game = game.copy(undoRequestStatus = if (isRequestOwner) "cancelled" else "rejected")
-        }
-        prepareAndSendMove()
     }
 
     LaunchedEffect(forceSyncTrigger, pendingMoveToSync) {
@@ -319,18 +245,9 @@ fun Game501Screen(
                                          (remoteSets == localSets && remoteLegs == localLegs && remoteDarts < localDarts)
 
                     val isRemoteMyTurn = remoteGame.currentPlayerIndex == onlinePlayerIndex
-                    val hasNewerRevision = remoteGame.stateRevision > game.stateRevision
 
                     if (remoteJson != localJson) {
-                        if (hasNewerRevision) {
-                            game = remoteGame
-                            if (remoteGame.undoRequestStatus == "accepted") {
-                                history.clear()
-                                lastScoreA = null
-                                lastScoreB = null
-                            }
-                            lastSyncedJson = remoteJson
-                        } else if (isRemoteMyTurn || remoteGame.isFinished) {
+                        if (isRemoteMyTurn || remoteGame.isFinished) {
                             // ИСПРАВЛЕНО: не перезаписываем, если сервер прислал устаревшее состояние (race condition)
                             if (!isRemoteBehind) {
                                 val remoteP1Score = remoteGame.players[0].matchScoreGained
@@ -836,53 +753,6 @@ fun Game501Screen(
                     Text("ПЕРЕБОР", color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Bold)
                 }
             }
-        }
-    }
-
-    if (isOnlineGame && undoRequestPending) {
-        val requestedBy = game.undoRequestedByIndex
-        if (requestedBy == onlinePlayerIndex) {
-            AlertDialog(
-                onDismissRequest = {},
-                confirmButton = {
-                    TextButton(onClick = { answerUndoRequest(false) }) {
-                        Text("Отменить запрос", color = ErrorColor)
-                    }
-                },
-                title = { Text("Запрос отправлен", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold) },
-                text = {
-                    Text(
-                        "Ожидаем ответа соперника. До ответа ввод очков заблокирован.",
-                        color = Color.White.copy(alpha = 0.75f)
-                    )
-                }
-            )
-        } else {
-            val snapshot = undoSnapshot
-            val playerBeforeIndex = snapshot?.currentPlayerIndex
-            val playerBefore = snapshot?.let { it.players.getOrNull(it.currentPlayerIndex) }
-            val currentScore = playerBeforeIndex?.let { game.players.getOrNull(it)?.score }
-            AlertDialog(
-                onDismissRequest = { answerUndoRequest(false) },
-                confirmButton = {
-                    TextButton(onClick = { answerUndoRequest(true) }) {
-                        Text("Отменить ход", color = Accent, fontWeight = FontWeight.Bold)
-                    }
-                },
-                dismissButton = {
-                    TextButton(onClick = { answerUndoRequest(false) }) {
-                        Text("Отклонить", color = ErrorColor)
-                    }
-                },
-                title = { Text("Запрос на отмену хода", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold) },
-                text = {
-                    Text(
-                        "Соперник просит вернуть ход игрока ${playerBefore?.name ?: "—"}. " +
-                            "Остаток изменится с ${currentScore ?: "—"} на ${playerBefore?.score ?: "—"}.",
-                        color = Color.White.copy(alpha = 0.8f)
-                    )
-                }
-            )
         }
     }
 

@@ -44,10 +44,6 @@ object Game501Serializer {
 
         // МАШИНА ВРЕМЕНИ
         root.put("previousStateJson", game.previousStateJson ?: JSONObject.NULL)
-        root.put("stateRevision", game.stateRevision)
-        root.put("undoRequestId", game.undoRequestId ?: JSONObject.NULL)
-        root.put("undoRequestedByIndex", game.undoRequestedByIndex ?: JSONObject.NULL)
-        root.put("undoRequestStatus", game.undoRequestStatus ?: JSONObject.NULL)
 
         // Игроки
         val playersArr = JSONArray()
@@ -100,10 +96,6 @@ object Game501Serializer {
 
             // МАШИНА ВРЕМЕНИ
             val previousStateJson = if (root.isNull("previousStateJson")) null else root.getString("previousStateJson")
-            val stateRevision = root.optLong("stateRevision", 0L)
-            val undoRequestId = if (root.isNull("undoRequestId")) null else root.optString("undoRequestId")
-            val undoRequestedByIndex = if (root.isNull("undoRequestedByIndex")) null else root.optInt("undoRequestedByIndex", 0)
-            val undoRequestStatus = if (root.isNull("undoRequestStatus")) null else root.optString("undoRequestStatus")
 
             // Игроки
             val playersArr = root.getJSONArray("players")
@@ -144,11 +136,7 @@ object Game501Serializer {
                 bullThrowP1 = bullThrowP1,
                 bullThrowP2 = bullThrowP2,
                 bullWinnerIndex = bullWinnerIndex,
-                previousStateJson = previousStateJson,
-                stateRevision = stateRevision,
-                undoRequestId = undoRequestId,
-                undoRequestedByIndex = undoRequestedByIndex,
-                undoRequestStatus = undoRequestStatus
+                previousStateJson = previousStateJson
             )
         } catch (e: Exception) {
             null

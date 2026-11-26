@@ -156,11 +156,8 @@ data class Game501(
     val bullThrowP2: Int? = null,
     val bullWinnerIndex: Int? = null,
 
-    val previousStateJson: String? = null,
-    val stateRevision: Long = 0L,
-    val undoRequestId: String? = null,
-    val undoRequestedByIndex: Int? = null,
-    val undoRequestStatus: String? = null
+    // МАШИНА ВРЕМЕНИ (для отмены хода соперником)
+    val previousStateJson: String? = null 
 ) {
     val currentPlayer: Player501?
         get() = players.getOrNull(currentPlayerIndex)
