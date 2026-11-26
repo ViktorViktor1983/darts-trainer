@@ -3,6 +3,7 @@ package com.lodkin.dartstrainer.ui.game501
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -643,10 +644,6 @@ fun Game501Screen(
                     PrevScoreBlock("Пред.", rightLastScore, activeTeam == rightIdx, Alignment.End)
                 }
 
-                if (showCheckoutHints && isOnlineGame && !isMyTurn && !game.isFinished && !localCheckoutPaths.isNullOrEmpty()) {
-                    CheckoutHintPanel(localPlayer?.score ?: 0, localCheckoutPaths)
-                }
-
                 if (showGameControls) {
                     if (isOnlineGame && !isMyTurn && !game.isFinished) {
                         Box(modifier = Modifier.fillMaxWidth().background(GoldAccent.copy(alpha = 0.15f)).padding(vertical = 8.dp), contentAlignment = Alignment.Center) {
@@ -727,6 +724,17 @@ fun Game501Screen(
                 }
             } else {
                 Spacer(Modifier.weight(1f))
+            }
+        }
+
+        if (showCheckoutHints && isOnlineGame && !isMyTurn && !game.isFinished && !localCheckoutPaths.isNullOrEmpty()) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .padding(start = 8.dp, end = 8.dp, bottom = 66.dp)
+            ) {
+                CheckoutHintOverlay(localPlayer?.score ?: 0, localCheckoutPaths)
             }
         }
 
@@ -1160,14 +1168,16 @@ private fun TopBar501(
 }
 
 @Composable
-private fun CheckoutHintPanel(score: Int, paths: List<CheckoutPath>) {
+private fun CheckoutHintOverlay(score: Int, paths: List<CheckoutPath>) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 6.dp, vertical = 4.dp)
-            .clip(RoundedCornerShape(10.dp))
-            .background(TileBg)
-            .padding(horizontal = 12.dp, vertical = 8.dp)
+            .heightIn(max = 340.dp)
+            .clip(RoundedCornerShape(14.dp))
+            .background(DarkBg)
+            .border(1.dp, Accent, RoundedCornerShape(14.dp))
+            .padding(horizontal = 14.dp, vertical = 12.dp)
+            .verticalScroll(rememberScrollState())
     ) {
         Text(
             "ПОДСКАЗКА: ОСТАТОК $score",
@@ -1176,7 +1186,7 @@ private fun CheckoutHintPanel(score: Int, paths: List<CheckoutPath>) {
             fontWeight = FontWeight.Bold
         )
         Spacer(Modifier.height(4.dp))
-        paths.take(2).forEachIndexed { index, path ->
+        paths.forEachIndexed { index, path ->
             val throwsText = path.throws.joinToString("  •  ") { throwItem ->
                 val prefix = if (throwItem.multiplier == 2) "D" else if (throwItem.multiplier == 3) "T" else "S"
                 if (throwItem.sector == 25 && throwItem.multiplier == 2) "BULL" else "$prefix${throwItem.sector}"

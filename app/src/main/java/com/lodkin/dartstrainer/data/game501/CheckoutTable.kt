@@ -84,7 +84,10 @@ object CheckoutTable {
         45 to listOf(path("Основной", "S13", "D16")),
         46 to listOf(path("Основной", "S6", "D20")),
         47 to listOf(path("Основной", "S15", "D16")),
-        48 to listOf(path("Основной", "S8", "D20")),
+        48 to listOf(
+            path("Основной", "S8", "D20"),
+            path("Альтернативный", "S16", "D16")
+        ),
         49 to listOf(path("Основной", "S9", "D20")),
         50 to listOf(path("Основной", "BULL")),
         51 to listOf(path("Основной", "S11", "D20")),
