@@ -33,6 +33,7 @@ import com.lodkin.dartstrainer.data.online.OnlineNetworkManager
 import com.lodkin.dartstrainer.data.training.TrainingRepository
 import com.lodkin.dartstrainer.data.training.TrainingUnfinishedStorage
 import com.lodkin.dartstrainer.theme.Accent
+import com.lodkin.dartstrainer.theme.DarkBg
 import com.lodkin.dartstrainer.theme.ErrorColor
 import com.lodkin.dartstrainer.theme.GoldAccent
 import com.lodkin.dartstrainer.theme.TileBg
