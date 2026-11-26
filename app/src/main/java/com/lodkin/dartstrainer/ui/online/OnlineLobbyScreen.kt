@@ -58,6 +58,7 @@ fun OnlineLobbyScreen(
     var legs by remember { mutableStateOf(prefs.getInt("legs", 3)) }
     var sets by remember { mutableStateOf(prefs.getInt("sets", 1)) }
     var saveToTraining by remember { mutableStateOf(prefs.getBoolean("save_to_training", false)) }
+    var showCheckoutHints by remember { mutableStateOf(prefs.getBoolean("show_checkout_hints", false)) }
 
     // НАСТРОЙКИ ПРИГЛАШЕНИЙ
     var allowGlobalInvites by remember { mutableStateOf(prefs.getBoolean("allow_global_invites", true)) }
@@ -92,7 +93,7 @@ fun OnlineLobbyScreen(
     // Список друзей
     var friendsList by remember { mutableStateOf(FriendsStorage.getFriends(context)) }
 
-    LaunchedEffect(nickname, password, selectedLevel, is501, legs, sets, saveToTraining, allowGlobalInvites, allowPrivateInvites) {
+    LaunchedEffect(nickname, password, selectedLevel, is501, legs, sets, saveToTraining, showCheckoutHints, allowGlobalInvites, allowPrivateInvites) {
         prefs.edit()
             .putString("nickname", nickname)
             .putString("password", password)
@@ -101,6 +102,7 @@ fun OnlineLobbyScreen(
             .putInt("legs", legs)
             .putInt("sets", sets)
             .putBoolean("save_to_training", saveToTraining)
+            .putBoolean("show_checkout_hints", showCheckoutHints)
             .putBoolean("allow_global_invites", allowGlobalInvites)
             .putBoolean("allow_private_invites", allowPrivateInvites)
             .apply()
@@ -232,6 +234,14 @@ fun OnlineLobbyScreen(
                             Text("Если выключено — пойдет в обычную статистику", color = Color.White.copy(alpha = 0.5f), fontSize = 11.sp)
                         }
                         Switch(checked = saveToTraining, onCheckedChange = { saveToTraining = it }, colors = SwitchDefaults.colors(checkedThumbColor = Accent, checkedTrackColor = Accent.copy(alpha = 0.5f)))
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    Row(modifier = Modifier.fillMaxWidth().clickable { showCheckoutHints = !showCheckoutHints }.padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Показывать подсказки", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                            Text("Показывать способы закрытия чекаута в онлайн-игре", color = Color.White.copy(alpha = 0.5f), fontSize = 11.sp)
+                        }
+                        Switch(checked = showCheckoutHints, onCheckedChange = { showCheckoutHints = it }, colors = SwitchDefaults.colors(checkedThumbColor = Accent, checkedTrackColor = Accent.copy(alpha = 0.5f)))
                     }
                 }
             }

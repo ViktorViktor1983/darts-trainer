@@ -127,6 +127,11 @@ fun Game501Screen(
 
     val allBots = game.players.all { it.isBot }
 
+    val showCheckoutHints = isOnlineGame && context.getSharedPreferences("online_prefs", android.content.Context.MODE_PRIVATE)
+        .getBoolean("show_checkout_hints", false)
+    val localPlayer = game.players.getOrNull(onlinePlayerIndex)
+    val localCheckoutPaths = localPlayer?.let { CheckoutTable.pathsFor(it.score) }
+
     val isMyTurn = !isOnlineGame || (game.currentPlayerIndex == onlinePlayerIndex)
     val canInteract = !game.isFinished && game.currentPlayer?.isBot != true && isMyTurn && !isSendingMove && !hasConnectionError
 
@@ -638,6 +643,10 @@ fun Game501Screen(
                     PrevScoreBlock("Пред.", rightLastScore, activeTeam == rightIdx, Alignment.End)
                 }
 
+                if (showCheckoutHints && isOnlineGame && !isMyTurn && !game.isFinished && !localCheckoutPaths.isNullOrEmpty()) {
+                    CheckoutHintPanel(localPlayer?.score ?: 0, localCheckoutPaths)
+                }
+
                 if (showGameControls) {
                     if (isOnlineGame && !isMyTurn && !game.isFinished) {
                         Box(modifier = Modifier.fillMaxWidth().background(GoldAccent.copy(alpha = 0.15f)).padding(vertical = 8.dp), contentAlignment = Alignment.Center) {
@@ -1147,6 +1156,39 @@ private fun TopBar501(
             modifier = Modifier.clip(RoundedCornerShape(10.dp)).background(TileBg).clickable { onBack() }.padding(horizontal = 16.dp, vertical = 10.dp),
             contentAlignment = Alignment.Center
         ) { Text("← Назад", color = Accent, fontSize = 16.sp, fontWeight = FontWeight.Bold) }
+    }
+}
+
+@Composable
+private fun CheckoutHintPanel(score: Int, paths: List<CheckoutPath>) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 6.dp, vertical = 4.dp)
+            .clip(RoundedCornerShape(10.dp))
+            .background(TileBg)
+            .padding(horizontal = 12.dp, vertical = 8.dp)
+    ) {
+        Text(
+            "ПОДСКАЗКА: ОСТАТОК $score",
+            color = Accent,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Bold
+        )
+        Spacer(Modifier.height(4.dp))
+        paths.take(2).forEachIndexed { index, path ->
+            val throwsText = path.throws.joinToString("  •  ") { throwItem ->
+                val prefix = if (throwItem.multiplier == 2) "D" else if (throwItem.multiplier == 3) "T" else "S"
+                if (throwItem.sector == 25 && throwItem.multiplier == 2) "BULL" else "$prefix${throwItem.sector}"
+            }
+            Text(
+                if (paths.size > 1) "${if (index == 0) "Основной" else path.label}: $throwsText" else throwsText,
+                color = Color.White,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Medium,
+                modifier = Modifier.padding(vertical = 1.dp)
+            )
+        }
     }
 }
 
