@@ -227,21 +227,49 @@ fun OnlineLobbyScreen(
                         NumberPicker("СЕТЫ", sets, { sets = it }, Modifier.weight(1f))
                         NumberPicker("ЛЕГИ", legs, { legs = it }, Modifier.weight(1f))
                     }
-                    Spacer(Modifier.height(16.dp))
-                    Row(modifier = Modifier.fillMaxWidth().clickable { saveToTraining = !saveToTraining }.padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text("Сохранять в тренировку", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                            Text("Если выключено — пойдет в обычную статистику", color = Color.White.copy(alpha = 0.5f), fontSize = 11.sp)
+                    Spacer(Modifier.height(12.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(56.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(if (saveToTraining) Accent else TileBgDark)
+                                .clickable { saveToTraining = !saveToTraining },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                "Сохранять в тренировку",
+                                color = if (saveToTraining) DarkBg else Color.White,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                textAlign = TextAlign.Center,
+                                lineHeight = 16.sp,
+                                modifier = Modifier.padding(horizontal = 8.dp)
+                            )
                         }
-                        Switch(checked = saveToTraining, onCheckedChange = { saveToTraining = it }, colors = SwitchDefaults.colors(checkedThumbColor = Accent, checkedTrackColor = Accent.copy(alpha = 0.5f)))
-                    }
-                    Spacer(Modifier.height(8.dp))
-                    Row(modifier = Modifier.fillMaxWidth().clickable { showCheckoutHints = !showCheckoutHints }.padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text("Показывать подсказки", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                            Text("Показывать способы закрытия чекаута в онлайн-игре", color = Color.White.copy(alpha = 0.5f), fontSize = 11.sp)
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(56.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(if (showCheckoutHints) Accent else TileBgDark)
+                                .clickable { showCheckoutHints = !showCheckoutHints },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                "Показывать подсказки",
+                                color = if (showCheckoutHints) DarkBg else Color.White,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                textAlign = TextAlign.Center,
+                                lineHeight = 16.sp,
+                                modifier = Modifier.padding(horizontal = 8.dp)
+                            )
                         }
-                        Switch(checked = showCheckoutHints, onCheckedChange = { showCheckoutHints = it }, colors = SwitchDefaults.colors(checkedThumbColor = Accent, checkedTrackColor = Accent.copy(alpha = 0.5f)))
                     }
                 }
             }

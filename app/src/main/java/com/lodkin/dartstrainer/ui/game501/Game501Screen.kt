@@ -1185,7 +1185,7 @@ private fun CheckoutHintOverlay(score: Int, paths: List<CheckoutPath>) {
         Text(
             "ПОДСКАЗКА: ОСТАТОК $score",
             color = Accent,
-            fontSize = 11.sp,
+            fontSize = 13.sp,
             fontWeight = FontWeight.Bold
         )
         Spacer(Modifier.height(4.dp))
@@ -1197,7 +1197,7 @@ private fun CheckoutHintOverlay(score: Int, paths: List<CheckoutPath>) {
             Text(
                 if (paths.size > 1) "${if (index == 0) "Основной" else path.label}: $throwsText" else throwsText,
                 color = Color.White,
-                fontSize = 14.sp,
+                fontSize = 16.sp,
                 fontWeight = FontWeight.Medium,
                 modifier = Modifier.padding(vertical = 1.dp)
             )
